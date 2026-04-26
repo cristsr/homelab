@@ -13,7 +13,7 @@ spec:
           - "/*"
       backends:
         - serviceName: flow
-          servicePort: 8000
+          servicePort: 80
           resolveGranularity: service
           namespace: apps
       plugin_config_name: internal-dashboard
@@ -34,7 +34,7 @@ spec:
           - "/webhooks/notion/*"
       backends:
         - serviceName: flow
-          servicePort: 8000
+          servicePort: 80
           resolveGranularity: service
           namespace: apps
       plugins:

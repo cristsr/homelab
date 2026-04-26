@@ -14,7 +14,7 @@ spec:
           - "/flow/*"
       backends:
         - serviceName: flow
-          servicePort: 8000
+          servicePort: 80
           resolveGranularity: service
           namespace: apps
       plugin_config_name: public-api
@@ -28,7 +28,7 @@ spec:
           - "/webhooks/*"
       backends:
         - serviceName: flow
-          servicePort: 8000
+          servicePort: 80
           resolveGranularity: service
           namespace: apps
       plugins:

@@ -15,27 +15,16 @@ spec:
     spec:
       containers:
         - name: flow
-          image: ghcr.io/cristsr/flow:latest
+          image: traefik/whoami:latest
           ports:
-            - containerPort: 8000
-          env:
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: flow-secrets
-                  key: database-url
-            - name: REDIS_URL
-              valueFrom:
-                secretKeyRef:
-                  name: flow-secrets
-                  key: redis-url
+            - containerPort: 80
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
+              cpu: 10m
+              memory: 16Mi
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: 100m
+              memory: 32Mi
 ---
 apiVersion: v1
 kind: Service
@@ -46,6 +35,6 @@ spec:
   selector:
     app: flow
   ports:
-    - port: 8000
-      targetPort: 8000
+    - port: 80
+      targetPort: 80
   type: ClusterIP
