@@ -1,0 +1,35 @@
+# MongoDB 7.x (Bitnami) — solo ClusterIP
+architecture: standalone
+
+auth:
+  rootPassword: "REEMPLAZAR_CON_PASSWORD"
+  databases:
+    - homelab
+  usernames:
+    - homelab
+  passwords:
+    - "REEMPLAZAR_CON_PASSWORD_USER"
+
+persistence:
+  enabled: true
+  storageClass: longhorn
+  size: 10Gi
+
+service:
+  type: ClusterIP
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    labels:
+      release: kube-prometheus-stack

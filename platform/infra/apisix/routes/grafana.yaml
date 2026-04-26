@@ -1,0 +1,19 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: grafana
+  namespace: infra
+spec:
+  http:
+    - name: grafana
+      match:
+        hosts:
+          - grafana.cristianpuenguenan.online
+        paths:
+          - "/*"
+      backends:
+        - serviceName: kube-prometheus-stack-grafana
+          servicePort: 80
+          resolveGranularity: service
+          namespace: monitoring
+      plugin_config_name: internal-dashboard

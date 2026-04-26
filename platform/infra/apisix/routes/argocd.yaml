@@ -1,0 +1,17 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: argocd
+  namespace: infra
+spec:
+  http:
+    - name: argocd
+      match:
+        hosts:
+          - argocd.cristianpuenguenan.online
+        paths:
+          - "/*"
+      backends:
+        - serviceName: argocd-server
+          servicePort: 80
+      plugin_config_name: internal-dashboard

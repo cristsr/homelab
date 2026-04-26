@@ -1,0 +1,39 @@
+# kube-prometheus-stack 67.x
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
+    # Descubrir ServiceMonitors de todos los namespaces
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    serviceMonitorSelector: {}
+
+grafana:
+  enabled: true
+  persistence:
+    enabled: true
+    storageClassName: longhorn
+    size: 5Gi
+  adminPassword: "REEMPLAZAR_CON_PASSWORD"
+  ingress:
+    enabled: false
+  grafana.ini:
+    server:
+      root_url: "https://grafana.cristianpuenguenan.online"
+
+alertmanager:
+  enabled: true
+
+# No usar ingress propio — ApisixRoutes gestionan el acceso
+prometheus-node-exporter:
+  enabled: true
+
+kube-state-metrics:
+  enabled: true

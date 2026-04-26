@@ -1,0 +1,11 @@
+# cert-manager 1.16.x
+installCRDs: true
+
+replicaCount: 1
+
+# Webhook y cainjector requeridos para ClusterIssuer
+webhook:
+  replicaCount: 1
+
+cainjector:
+  replicaCount: 1

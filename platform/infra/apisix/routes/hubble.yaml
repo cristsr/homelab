@@ -1,0 +1,19 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: hubble-ui
+  namespace: infra
+spec:
+  http:
+    - name: hubble-ui
+      match:
+        hosts:
+          - hubble.cristianpuenguenan.online
+        paths:
+          - "/*"
+      backends:
+        - serviceName: hubble-ui
+          servicePort: 80
+          resolveGranularity: service
+          namespace: kube-system
+      plugin_config_name: internal-dashboard

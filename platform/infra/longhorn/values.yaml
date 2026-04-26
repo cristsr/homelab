@@ -1,0 +1,21 @@
+# Longhorn 1.7.x — workaround obligatorio para MicroK8s
+defaultSettings:
+  defaultDataPath: /var/lib/longhorn
+  # Réplica única en nodo único
+  defaultReplicaCount: 1
+  # Evita falsos alertas de espacio
+  storageMinimalAvailablePercentage: 10
+
+# Path ajustado a snap MicroK8s — crítico para CSI
+csi:
+  kubeletRootDir: /var/snap/microk8s/common/var/lib/kubelet
+
+persistence:
+  defaultClass: true
+  defaultClassReplicaCount: 1
+
+longhornUI:
+  replicas: 1
+
+ingress:
+  enabled: false

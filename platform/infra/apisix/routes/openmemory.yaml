@@ -1,0 +1,19 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: openmemory
+  namespace: infra
+spec:
+  http:
+    - name: openmemory
+      match:
+        hosts:
+          - openmemory.cristianpuenguenan.online
+        paths:
+          - "/*"
+      backends:
+        - serviceName: openmemory
+          servicePort: 8080
+          resolveGranularity: service
+          namespace: dev-tools
+      plugin_config_name: internal-dashboard

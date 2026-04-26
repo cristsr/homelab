@@ -1,0 +1,48 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: flow-internal
+  namespace: infra
+spec:
+  http:
+    - name: flow-internal
+      match:
+        hosts:
+          - flow.cristianpuenguenan.online
+        paths:
+          - "/*"
+      backends:
+        - serviceName: flow
+          servicePort: 8000
+          resolveGranularity: service
+          namespace: apps
+      plugin_config_name: internal-dashboard
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: flow-webhooks-public
+  namespace: infra
+spec:
+  http:
+    - name: flow-webhooks
+      match:
+        hosts:
+          - api.cristianpuenguenan.online
+        paths:
+          - "/webhooks/notion"
+          - "/webhooks/notion/*"
+      backends:
+        - serviceName: flow
+          servicePort: 8000
+          resolveGranularity: service
+          namespace: apps
+      plugins:
+        - name: limit-req
+          enable: true
+          config:
+            rate: 20
+            burst: 10
+            rejected_code: 429
+            key_type: var
+            key: remote_addr

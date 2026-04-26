@@ -1,0 +1,42 @@
+# Cilium 1.16.x — MicroK8s 1.32
+# Aplicar manualmente: helm install cilium cilium/cilium -n kube-system -f bootstrap/cilium/values.yaml
+
+kubeProxyReplacement: "true"
+
+# API server de MicroK8s (puerto no estándar)
+k8sServiceHost: "127.0.0.1"
+k8sServicePort: "16443"
+
+ipam:
+  mode: kubernetes
+
+# Gateway API deshabilitado — APISIX es el ingress único
+gatewayAPI:
+  enabled: false
+
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+
+# Paths ajustados a snap MicroK8s
+cni:
+  binPath: /var/snap/microk8s/common/opt/cni/bin
+  confPath: /var/snap/microk8s/common/run/cni
+
+# eBPF reemplaza iptables MASQUERADE
+bpf:
+  masquerade: true
+
+operator:
+  replicas: 1
+
+# Necesario para que Cilium encuentre el runtime de MicroK8s
+containerRuntime:
+  integration: auto
+
+# Directorio de estado en snap
+daemon:
+  runPath: /var/snap/microk8s/common/var/run/cilium

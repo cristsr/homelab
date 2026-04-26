@@ -1,0 +1,17 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: apisix-dashboard
+  namespace: infra
+spec:
+  http:
+    - name: apisix-dashboard
+      match:
+        hosts:
+          - apisix.cristianpuenguenan.online
+        paths:
+          - "/*"
+      backends:
+        - serviceName: apisix-dashboard
+          servicePort: 9000
+      plugin_config_name: internal-dashboard

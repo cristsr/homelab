@@ -1,0 +1,42 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: api-flow
+  namespace: infra
+spec:
+  http:
+    # APIs internas con jwt-auth + rate-limit
+    - name: api-flow-internal
+      match:
+        hosts:
+          - api.cristianpuenguenan.online
+        paths:
+          - "/flow/*"
+      backends:
+        - serviceName: flow
+          servicePort: 8000
+          resolveGranularity: service
+          namespace: apps
+      plugin_config_name: public-api
+
+    # Webhooks públicos (sin jwt-auth) — solo desde Cloudflare Tunnel
+    - name: api-flow-webhooks
+      match:
+        hosts:
+          - api.cristianpuenguenan.online
+        paths:
+          - "/webhooks/*"
+      backends:
+        - serviceName: flow
+          servicePort: 8000
+          resolveGranularity: service
+          namespace: apps
+      plugins:
+        - name: limit-req
+          enable: true
+          config:
+            rate: 20
+            burst: 10
+            rejected_code: 429
+            key_type: var
+            key: remote_addr

@@ -1,0 +1,13 @@
+# Headlamp — UI de gestión del cluster
+replicaCount: 1
+
+config:
+  # Sin ingress propio — gestionado por ApisixRoute
+  inCluster: true
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false

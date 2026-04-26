@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openmemory
+  namespace: dev-tools
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openmemory
+  template:
+    metadata:
+      labels:
+        app: openmemory
+    spec:
+      containers:
+        - name: openmemory
+          image: mem0ai/openmemory-mcp:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: QDRANT_HOST
+              value: "qdrant.databases.svc.cluster.local"
+            - name: QDRANT_PORT
+              value: "6333"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openmemory-secrets
+                  key: openai-api-key
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openmemory
+  namespace: dev-tools
+spec:
+  selector:
+    app: openmemory
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP

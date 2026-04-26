@@ -1,0 +1,30 @@
+# PostgreSQL 16.x (Bitnami) — solo ClusterIP, sin exposición externa
+architecture: standalone
+
+auth:
+  postgresPassword: "REEMPLAZAR_CON_PASSWORD"
+  database: homelab
+
+primary:
+  persistence:
+    enabled: true
+    storageClass: longhorn
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+service:
+  type: ClusterIP
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    labels:
+      release: kube-prometheus-stack

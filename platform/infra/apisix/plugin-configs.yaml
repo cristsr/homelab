@@ -1,0 +1,40 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixPluginConfig
+metadata:
+  name: internal-dashboard
+  namespace: infra
+spec:
+  plugins:
+    - name: ip-restriction
+      enable: true
+      config:
+        whitelist:
+          - "192.168.80.0/24"     # LAN doméstica
+---
+apiVersion: apisix.apache.org/v2
+kind: ApisixPluginConfig
+metadata:
+  name: public-api
+  namespace: infra
+spec:
+  plugins:
+    - name: jwt-auth
+      enable: true
+      config: {}
+
+    - name: limit-req
+      enable: true
+      config:
+        rate: 100
+        burst: 50
+        rejected_code: 429
+        key_type: var
+        key: remote_addr
+
+    - name: cors
+      enable: true
+      config:
+        allow_origins: "*"
+        allow_methods: "GET,POST,PUT,DELETE,PATCH,OPTIONS"
+        allow_headers: "Authorization,Content-Type"
+        max_age: 3600

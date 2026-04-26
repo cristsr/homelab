@@ -1,0 +1,19 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: sonarqube
+  namespace: infra
+spec:
+  http:
+    - name: sonarqube
+      match:
+        hosts:
+          - sonarqube.cristianpuenguenan.online
+        paths:
+          - "/*"
+      backends:
+        - serviceName: sonarqube-sonarqube
+          servicePort: 9000
+          resolveGranularity: service
+          namespace: dev-tools
+      plugin_config_name: internal-dashboard

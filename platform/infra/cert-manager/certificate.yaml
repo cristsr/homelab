@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-home
+  namespace: infra
+spec:
+  secretName: wildcard-home-tls
+  issuerRef:
+    name: letsencrypt-prod-cloudflare-dns01
+    kind: ClusterIssuer
+  dnsNames:
+    - "cristianpuenguenan.online"
+    - "*.cristianpuenguenan.online"
+  duration: 2160h     # 90 días
+  renewBefore: 360h   # Renueva 15 días antes

@@ -1,0 +1,20 @@
+# Argo CD 7.x — Aplicar manualmente antes de activar GitOps
+# helm install argocd argo/argo-cd -n infra -f bootstrap/argocd/values.yaml
+
+global:
+  domain: argocd.cristianpuenguenan.online
+
+server:
+  ingress:
+    enabled: false
+  extraArgs:
+    - --insecure
+
+configs:
+  params:
+    server.insecure: "true"
+  cm:
+    # Permite sync desde repositorio Git privado
+    timeout.reconciliation: 180s
+  rbac:
+    policy.default: role:readonly

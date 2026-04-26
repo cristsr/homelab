@@ -1,0 +1,12 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixTls
+metadata:
+  name: wildcard-home
+  namespace: infra
+spec:
+  hosts:
+    - "cristianpuenguenan.online"
+    - "*.cristianpuenguenan.online"
+  secret:
+    name: wildcard-home-tls
+    namespace: infra

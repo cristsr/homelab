@@ -1,0 +1,21 @@
+# Qdrant — vector database para OpenMemory
+replicaCount: 1
+
+persistence:
+  accessModes: ["ReadWriteOnce"]
+  size: 10Gi
+  storageClassName: longhorn
+
+service:
+  type: ClusterIP
+  ports:
+    rest: 6333
+    grpc: 6334
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi

@@ -1,0 +1,17 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: headlamp
+  namespace: infra
+spec:
+  http:
+    - name: headlamp
+      match:
+        hosts:
+          - headlamp.cristianpuenguenan.online
+        paths:
+          - "/*"
+      backends:
+        - serviceName: headlamp
+          servicePort: 80
+      plugin_config_name: internal-dashboard
