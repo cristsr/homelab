@@ -12,11 +12,11 @@ Punto de partida: MicroK8s 1.32 instalado y limpio. El cluster debe estar en est
 4. [Crear namespaces](#4-crear-namespaces)
 5. [Instalar Cilium (CNI)](#5-instalar-cilium-cni)
 6. [Instalar Argo CD](#6-instalar-argo-cd)
-7. [Crear secrets manuales en Kubernetes](#7-crear-secrets-manuales-en-kubernetes)
-8. [Configurar DNS](#8-configurar-dns)
-9. [Activar GitOps](#9-activar-gitops)
-10. [Verificar el despliegue](#10-verificar-el-despliegue)
-11. [Acceder a los servicios](#11-acceder-a-los-servicios)
+7. [Crear secrets de aplicaciones](#7-crear-secrets-de-aplicaciones)
+8. [Activar GitOps](#8-activar-gitops)
+9. [Verificar el despliegue](#9-verificar-el-despliegue)
+10. [Acceder a los servicios](#10-acceder-a-los-servicios)
+11. [Configurar Cloudflare](#11-configurar-cloudflare)
 
 ---
 
@@ -193,33 +193,9 @@ microk8s kubectl -n infra get secret argocd-initial-admin-secret \
 
 ---
 
-## 7. Crear secrets manuales en Kubernetes
+## 7. Crear secrets de aplicaciones
 
 Estos secrets **nunca se commitean** al repositorio. Se crean directamente en el cluster.
-
-### Cloudflare API Token (para cert-manager)
-
-Crear el token en https://dash.cloudflare.com → My Profile → API Tokens.  
-Permisos necesarios: `Zone:DNS:Edit` para el dominio `cristianpuenguenan.online`.
-
-```bash
-microk8s kubectl create secret generic cloudflare-api-token \
-  --from-literal=api-token=TU_CLOUDFLARE_API_TOKEN \
-  -n cert-manager
-```
-
-### Cloudflare Tunnel Token (para cloudflared)
-
-Crear el túnel en https://one.dash.cloudflare.com → Networks → Tunnels → Create Tunnel.  
-Copiar el token que aparece al crear el túnel.
-
-```bash
-microk8s kubectl create secret generic cloudflared-token \
-  --from-literal=token=TU_CLOUDFLARE_TUNNEL_TOKEN \
-  -n infra
-```
-
-### Secrets de aplicaciones
 
 ```bash
 # Flow API
@@ -241,20 +217,7 @@ microk8s kubectl create secret generic sonarqube-db-secret \
 
 ---
 
-## 8. Configurar DNS
-
-Agregar registros A en Cloudflare apuntando a la IP del nodo (`192.168.80.20`).
-
-| Registro | Tipo | Valor | Proxy |
-|----------|------|-------|-------|
-| `cristianpuenguenan.online` | A | `192.168.80.20` | DNS only |
-| `*.cristianpuenguenan.online` | A | `192.168.80.20` | DNS only |
-
-> Usar **DNS only** (nube gris) para los subdominios internos. Solo activar proxy de Cloudflare para los que se expongan públicamente vía Cloudflare Tunnel.
-
----
-
-## 9. Activar GitOps
+## 8. Activar GitOps
 
 Con Argo CD corriendo y los secrets en su lugar, aplicar la root-app. A partir de aquí Argo CD despliega todo el stack automáticamente siguiendo los sync-waves.
 
@@ -284,7 +247,7 @@ microk8s kubectl -n infra get applications -w
 
 ---
 
-## 10. Verificar el despliegue
+## 9. Verificar el despliegue
 
 Comprobar que todas las Applications están en `Synced` / `Healthy`:
 
@@ -303,18 +266,11 @@ microk8s kubectl get pods -n dev-tools
 microk8s kubectl get pods -n apps
 ```
 
-Verificar que el certificado wildcard fue emitido correctamente:
-
-```bash
-microk8s kubectl get certificate -n infra
-# wildcard-home-tls   True   ...
-```
-
-> El certificado puede tardar 5-10 minutos en emitirse la primera vez (desafío DNS-01 con Cloudflare).
+> cert-manager y cloudflared estarán en reintento hasta que se complete el paso 11. El resto del stack debe estar `Healthy`.
 
 ---
 
-## 11. Acceder a los servicios
+## 10. Acceder a los servicios
 
 Todos los servicios son accesibles en `https://<subdominio>.cristianpuenguenan.online` desde la LAN.
 
@@ -332,6 +288,60 @@ Todos los servicios son accesibles en `https://<subdominio>.cristianpuenguenan.o
 
 ```bash
 microk8s kubectl create token headlamp -n infra
+```
+
+---
+
+## 11. Configurar Cloudflare
+
+Este paso habilita los certificados TLS y el túnel público. cert-manager y cloudflared reintentarán automáticamente en cuanto los secrets y el DNS estén en su lugar.
+
+### 11.1 Secret para cert-manager
+
+Crear el token en Cloudflare → My Profile → API Tokens.  
+Permisos necesarios: `Zone:DNS:Edit` para el dominio `cristianpuenguenan.online`.
+
+```bash
+microk8s kubectl create secret generic cloudflare-api-token \
+  --from-literal=api-token=TU_CLOUDFLARE_API_TOKEN \
+  -n cert-manager
+```
+
+### 11.2 Secret para cloudflared (Tunnel)
+
+Crear el túnel en Cloudflare → Zero Trust → Networks → Tunnels → Create Tunnel.  
+Copiar el token que aparece al crearlo.
+
+```bash
+microk8s kubectl create secret generic cloudflared-token \
+  --from-literal=token=TU_CLOUDFLARE_TUNNEL_TOKEN \
+  -n infra
+```
+
+### 11.3 Configurar DNS
+
+Agregar registros A en Cloudflare apuntando a la IP del nodo (`192.168.80.20`).
+
+| Registro | Tipo | Valor | Proxy |
+|---|---|---|---|
+| `cristianpuenguenan.online` | A | `192.168.80.20` | DNS only |
+| `*.cristianpuenguenan.online` | A | `192.168.80.20` | DNS only |
+
+> Usar **DNS only** (nube gris) para los subdominios internos. Solo activar proxy para los que se expongan públicamente vía Cloudflare Tunnel.
+
+### 11.4 Verificar el certificado
+
+El certificado wildcard debería emitirse en 5-10 minutos tras crear el secret y los registros DNS:
+
+```bash
+microk8s kubectl get certificate -n infra
+# wildcard-home-tls   True   ...
+```
+
+Si sigue en `False`, revisar el estado del `CertificateRequest`:
+
+```bash
+microk8s kubectl describe certificaterequest -n infra
 ```
 
 ---
