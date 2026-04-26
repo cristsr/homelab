@@ -33,10 +33,6 @@ bpf:
 operator:
   replicas: 1
 
-# Necesario para que Cilium encuentre el runtime de MicroK8s
-containerRuntime:
-  integration: auto
-
 # Directorio de estado en snap
 daemon:
   runPath: /var/snap/microk8s/common/var/run/cilium
