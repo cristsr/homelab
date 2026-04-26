@@ -137,7 +137,7 @@ Cilium reemplaza el CNI por defecto de MicroK8s. Debe instalarse **antes** que c
 microk8s helm repo add cilium https://helm.cilium.io
 microk8s helm repo update
 
-microk8s helm install cilium cilium/cilium \
+microk8s helm upgrade --install cilium cilium/cilium \
   --namespace kube-system \
   --version 1.16.6 \
   -f bootstrap/cilium/values.yaml
@@ -169,7 +169,7 @@ Argo CD se instala manualmente una sola vez. A partir de aquí gestiona todo lo 
 microk8s helm repo add argo https://argoproj.github.io/argo-helm
 microk8s helm repo update
 
-microk8s helm install argocd argo/argo-cd \
+microk8s helm upgrade --install argocd argo/argo-cd \
   --namespace infra \
   --version 7.8.0 \
   -f bootstrap/argocd/values.yaml
