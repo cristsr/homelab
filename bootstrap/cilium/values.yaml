@@ -14,6 +14,11 @@ ipam:
       - "10.244.0.0/16"
     clusterPoolIPv4MaskSize: 24
 
+# Single-node: routing nativo, sin VXLAN (evita conflicto con Calico)
+routingMode: native
+autoDirectNodeRoutes: true
+ipv4NativeRoutingCIDR: "10.244.0.0/16"
+
 # Gateway API deshabilitado — APISIX es el ingress único
 gatewayAPI:
   enabled: false
