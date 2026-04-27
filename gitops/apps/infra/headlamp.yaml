@@ -25,7 +25,7 @@ spec:
     - group: apps
       kind: Deployment
       managedFieldsManagers:
-        - kube-controller-manager
+        - kubelite
   syncPolicy:
     automated:
       prune: true

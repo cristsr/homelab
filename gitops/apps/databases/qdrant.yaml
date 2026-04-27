@@ -24,9 +24,8 @@ spec:
   ignoreDifferences:
     - group: apps
       kind: StatefulSet
-      jqPathExpressions:
-        - .spec.volumeClaimTemplates[].status
-        - .spec.volumeClaimTemplates[].metadata.resourceVersion
+      managedFieldsManagers:
+        - kubelite
   syncPolicy:
     automated:
       prune: true
