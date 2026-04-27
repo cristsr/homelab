@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: openmemory
-          image: mem0ai/openmemory-mcp:latest
+          image: mem0ai/openmemory:latest
           ports:
             - containerPort: 8080
           env:
