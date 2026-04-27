@@ -45,7 +45,7 @@ ingress-controller:
     apisix:
       serviceName: apisix-admin
       serviceNamespace: infra
-      adminKey: "REEMPLAZAR_CON_ADMIN_KEY"
+      adminKey: "f2b9c16d064272f4ceae0ec08f8f4cb2ff0aade9f216f9f86a9ebac911833465"
 
 # etcd gestionado como StatefulSet independiente (platform/infra/apisix-etcd)
 etcd:

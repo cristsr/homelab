@@ -21,7 +21,7 @@ grafana:
     enabled: true
     storageClassName: longhorn
     size: 5Gi
-  adminPassword: "REEMPLAZAR_CON_PASSWORD"
+  adminPassword: "admin"
   ingress:
     enabled: false
   grafana.ini:
