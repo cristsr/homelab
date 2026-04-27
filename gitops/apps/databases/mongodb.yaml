@@ -7,17 +7,10 @@ metadata:
     argocd.argoproj.io/sync-wave: "6"
 spec:
   project: default
-  sources:
-    - repoURL: registry-1.docker.io/bitnamicharts
-      chart: mongodb
-      targetRevision: "16.5.45"
-      helm:
-        releaseName: mongodb
-        valueFiles:
-          - $values/platform/databases/mongodb/values.yaml
-    - repoURL: https://github.com/cristsr/homelab
-      targetRevision: HEAD
-      ref: values
+  source:
+    repoURL: https://github.com/cristsr/homelab
+    targetRevision: HEAD
+    path: platform/databases/mongodb
   destination:
     server: https://kubernetes.default.svc
     namespace: databases

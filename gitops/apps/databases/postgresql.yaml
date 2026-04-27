@@ -7,17 +7,10 @@ metadata:
     argocd.argoproj.io/sync-wave: "6"
 spec:
   project: default
-  sources:
-    - repoURL: registry-1.docker.io/bitnamicharts
-      chart: postgresql
-      targetRevision: "16.7.27"
-      helm:
-        releaseName: postgresql
-        valueFiles:
-          - $values/platform/databases/postgresql/values.yaml
-    - repoURL: https://github.com/cristsr/homelab
-      targetRevision: HEAD
-      ref: values
+  source:
+    repoURL: https://github.com/cristsr/homelab
+    targetRevision: HEAD
+    path: platform/databases/postgresql
   destination:
     server: https://kubernetes.default.svc
     namespace: databases

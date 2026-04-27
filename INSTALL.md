@@ -13,7 +13,6 @@ Punto de partida: MicroK8s 1.32 instalado y limpio. El cluster debe estar en est
 5. [Instalar Cilium (CNI)](#5-instalar-cilium-cni)
 6. [Instalar Argo CD](#6-instalar-argo-cd)
 7. [Crear secrets de aplicaciones](#7-crear-secrets-de-aplicaciones)
-   - [7.6 Registrar repositorio OCI de Bitnami en ArgoCD](#76-registrar-repositorio-oci-de-bitnami-en-argocd)
 8. [Activar GitOps](#8-activar-gitops)
    - [8.1 Registrar repositorio privado en ArgoCD](#81-registrar-repositorio-privado-en-argocd)
    - [8.2 Aplicar la root-app](#82-aplicar-la-root-app)
@@ -82,28 +81,7 @@ adminKey: "REEMPLAZAR_CON_ADMIN_KEY"
 adminKey: "tu-clave-generada"
 ```
 
-### 3.2 Contraseñas de bases de datos
-
-**PostgreSQL** — `platform/databases/postgresql/values.yaml`:
-```yaml
-auth:
-  postgresPassword: "tu-password-postgres"
-```
-
-**MongoDB** — `platform/databases/mongodb/values.yaml`:
-```yaml
-auth:
-  rootPassword: "tu-password-root"
-  # y el password del usuario si aplica
-```
-
-**Redis** — `platform/databases/redis/values.yaml`:
-```yaml
-auth:
-  password: "tu-password-redis"
-```
-
-### 3.3 Grafana
+### 3.2 Grafana
 
 `platform/monitoring/values.yaml`:
 ```yaml
@@ -111,13 +89,15 @@ grafana:
   adminPassword: "tu-password-grafana"
 ```
 
-### 3.4 Commitear los cambios
+### 3.3 Commitear los cambios
 
 ```bash
-git add platform/
+git add platform/infra/apisix/values.yaml platform/monitoring/values.yaml
 git commit -m "chore: set passwords and secrets"
 git push
 ```
+
+> Las contraseñas de bases de datos (PostgreSQL, MongoDB, Redis) **no se commitean** — se crean como Kubernetes Secrets en el paso 7.
 
 ---
 
@@ -213,6 +193,26 @@ Estos secrets **nunca se commitean** al repositorio. Se crean directamente en el
 Los comandos son idempotentes: crean el secret si no existe o lo actualizan si ya existe.
 
 ```bash
+# PostgreSQL
+microk8s kubectl create secret generic postgresql-secret \
+  --from-literal=postgres-password=TU_PASSWORD_POSTGRES \
+  -n databases \
+  --dry-run=client -o yaml | microk8s kubectl apply -f -
+
+# MongoDB
+microk8s kubectl create secret generic mongodb-secret \
+  --from-literal=root-password=TU_PASSWORD_MONGO \
+  -n databases \
+  --dry-run=client -o yaml | microk8s kubectl apply -f -
+
+# Redis
+microk8s kubectl create secret generic redis-secret \
+  --from-literal=redis-password=TU_PASSWORD_REDIS \
+  -n databases \
+  --dry-run=client -o yaml | microk8s kubectl apply -f -
+```
+
+```bash
 # Flow API
 microk8s kubectl create secret generic flow-secrets \
   --from-literal=database-url="postgresql://postgres:TU_PASSWORD@postgresql.databases.svc.cluster.local:5432/homelab" \
@@ -258,29 +258,6 @@ microk8s kubectl create secret generic cloudflared-token \
 ```
 
 > Estos dos secrets deben existir **antes** de aplicar la root-app. ArgoCD no los gestiona (están excluidos del sync) — son responsabilidad del operador.
-
-### 7.6 Registrar repositorio OCI de Bitnami en ArgoCD
-
-Los charts de bases de datos (PostgreSQL, MongoDB, Redis) se sirven desde el registro OCI de Bitnami (`registry-1.docker.io/bitnamicharts`). El repositorio HTTP `https://charts.bitnami.com/bitnami` fue deprecado por Bitnami y ya no contiene todas las versiones.
-
-ArgoCD necesita que el registro OCI esté registrado explícitamente con `enableOCI=true` para generar el comando `helm pull` correcto:
-
-```bash
-microk8s kubectl -n infra create secret generic bitnami-oci \
-  --from-literal=type=helm \
-  --from-literal=url=registry-1.docker.io/bitnamicharts \
-  --from-literal=enableOCI=true \
-  --dry-run=client -o yaml | microk8s kubectl apply -f -
-
-microk8s kubectl -n infra label secret bitnami-oci \
-  argocd.argoproj.io/secret-type=repository --overwrite
-```
-
-Verificar que ArgoCD reconoció el repositorio:
-
-```bash
-microk8s kubectl -n infra get secrets -l argocd.argoproj.io/secret-type=repository
-```
 
 ---
 
@@ -489,15 +466,16 @@ microk8s kubectl get apisixroute -n infra
 # Si están vacías, verificar que apisix-config está en Synced
 ```
 
-**Bases de datos en `Unknown` / ComparisonError: chart not found**
+**Bases de datos en `Unknown` / pods en `ImagePullBackOff`**
 ```bash
-# Diagnóstico:
+# Diagnóstico del Application:
 microk8s kubectl -n infra get application postgresql \
   -o jsonpath='{.status.conditions}' | python3 -m json.tool
 
-# Causa: el repositorio HTTP de Bitnami fue deprecado y no contiene
-# todas las versiones. Solución: registrar el OCI registry (paso 7.6)
-# y hacer hard refresh de las apps:
+# Diagnóstico del pod:
+microk8s kubectl describe pod -n databases <pod> | grep -A10 Events
+
+# Hard refresh para forzar re-evaluación:
 for app in postgresql mongodb redis; do
   microk8s kubectl -n infra annotate application $app \
     argocd.argoproj.io/refresh=hard --overwrite
