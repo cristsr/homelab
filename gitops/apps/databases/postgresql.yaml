@@ -10,7 +10,7 @@ spec:
   sources:
     - repoURL: registry-1.docker.io/bitnamicharts
       chart: postgresql
-      targetRevision: "16.4.0"
+      targetRevision: "16.7.27"
       helm:
         releaseName: postgresql
         valueFiles:
