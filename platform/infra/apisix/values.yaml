@@ -47,14 +47,15 @@ ingress-controller:
       serviceNamespace: infra
       adminKey: "REEMPLAZAR_CON_ADMIN_KEY"
 
-# etcd dedicado para APISIX con PVC en Longhorn
+# etcd gestionado como StatefulSet independiente (platform/infra/apisix-etcd)
 etcd:
-  enabled: true
-  replicaCount: 1
-  persistence:
-    enabled: true
-    storageClass: longhorn
-    size: 2Gi
+  enabled: false
+
+externalEtcd:
+  host:
+    - http://apisix-etcd.infra.svc.cluster.local:2379
+  user: ""
+  password: ""
 
 # Dashboard APISIX — acceso solo via ApisixRoute con ip-restriction
 dashboard:

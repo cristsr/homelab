@@ -192,30 +192,31 @@ Estos secrets **nunca se commitean** al repositorio. Se crean directamente en el
 
 Los comandos son idempotentes: crean el secret si no existe o lo actualizan si ya existe.
 
+### 7.1 Bases de datos
+
 ```bash
-# PostgreSQL
 microk8s kubectl create secret generic postgresql-secret \
   --from-literal=postgres-password=TU_PASSWORD_POSTGRES \
   -n databases \
   --dry-run=client -o yaml | microk8s kubectl apply -f -
 
-# MongoDB
 microk8s kubectl create secret generic mongodb-secret \
   --from-literal=root-password=TU_PASSWORD_MONGO \
   -n databases \
   --dry-run=client -o yaml | microk8s kubectl apply -f -
 
-# Redis
 microk8s kubectl create secret generic redis-secret \
   --from-literal=redis-password=TU_PASSWORD_REDIS \
   -n databases \
   --dry-run=client -o yaml | microk8s kubectl apply -f -
 ```
 
+### 7.2 Aplicaciones
+
 ```bash
 # Flow API
 microk8s kubectl create secret generic flow-secrets \
-  --from-literal=database-url="postgresql://postgres:TU_PASSWORD@postgresql.databases.svc.cluster.local:5432/homelab" \
+  --from-literal=database-url="postgresql://postgres:TU_PASSWORD_POSTGRES@postgresql.databases.svc.cluster.local:5432/homelab" \
   --from-literal=redis-url="redis://:TU_PASSWORD_REDIS@redis-master.databases.svc.cluster.local:6379" \
   -n apps \
   --dry-run=client -o yaml | microk8s kubectl apply -f -
@@ -233,7 +234,7 @@ microk8s kubectl create secret generic sonarqube-db-secret \
   --dry-run=client -o yaml | microk8s kubectl apply -f -
 ```
 
-### 7.4 Cloudflare — cert-manager (DNS01 challenge)
+### 7.3 Cloudflare — cert-manager (DNS01 challenge)
 
 Crear el token en Cloudflare → My Profile → API Tokens.  
 Permisos necesarios: `Zone:DNS:Edit` para el dominio `cristianpuenguenan.online`.
@@ -245,7 +246,7 @@ microk8s kubectl create secret generic cloudflare-api-token \
   --dry-run=client -o yaml | microk8s kubectl apply -f -
 ```
 
-### 7.5 Cloudflare — cloudflared (Tunnel)
+### 7.4 Cloudflare — cloudflared (Tunnel)
 
 Crear el túnel en Cloudflare → Zero Trust → Networks → Tunnels → Create Tunnel.  
 Copiar el token que aparece al crearlo.

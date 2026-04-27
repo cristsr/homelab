@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: apisix-etcd
+  namespace: infra
+  annotations:
+    # Debe estar Healthy antes de que APISIX sincronice (wave 3)
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/cristsr/homelab
+    targetRevision: HEAD
+    path: platform/infra/apisix-etcd
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: infra
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
