@@ -8,9 +8,6 @@ persistence:
 
 service:
   type: ClusterIP
-  ports:
-    rest: 6333
-    grpc: 6334
 
 resources:
   requests:
