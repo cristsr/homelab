@@ -14,9 +14,13 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: apps
+  ignoreDifferences:
+    - group: apisix.apache.org
+      kind: ApisixRoute
+      jqPathExpressions:
+        - .spec.http[].backends[].namespace
+        - .spec.http[].backends[].resolveGranularity
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-    syncOptions:
-      - ServerSideApply=true
