@@ -21,6 +21,12 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: databases
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jqPathExpressions:
+        - .spec.volumeClaimTemplates[].status
+        - .spec.volumeClaimTemplates[].metadata.resourceVersion
   syncPolicy:
     automated:
       prune: true

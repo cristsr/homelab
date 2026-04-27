@@ -21,6 +21,11 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: infra
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      managedFieldsManagers:
+        - kube-controller-manager
   syncPolicy:
     automated:
       prune: true
