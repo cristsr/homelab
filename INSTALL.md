@@ -16,6 +16,7 @@ Punto de partida: MicroK8s 1.32 instalado y limpio. El cluster debe estar en est
 8. [Activar GitOps](#8-activar-gitops)
    - [8.1 Registrar repositorio privado en ArgoCD](#81-registrar-repositorio-privado-en-argocd)
    - [8.2 Aplicar la root-app](#82-aplicar-la-root-app)
+   - [8.3 Desbloquear el sync inicial de Longhorn](#83-desbloquear-el-sync-inicial-de-longhorn)
 9. [Verificar el despliegue](#9-verificar-el-despliegue)
 10. [Acceder a los servicios](#10-acceder-a-los-servicios)
 11. [Configurar DNS y certificados](#11-configurar-dns-y-certificados)
@@ -318,6 +319,30 @@ Si la root-app queda en `Unknown` o hay que forzar un re-sync (por ejemplo tras 
 
 ```bash
 microk8s kubectl -n infra patch application root --type merge -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{"revision":"HEAD"}}}'
+```
+
+### 8.3 Desbloquear el sync inicial de Longhorn
+
+El chart de Longhorn incluye un hook de pre-upgrade que necesita `longhorn-service-account` para crear su pod, pero esa ServiceAccount la crea el propio chart durante el sync principal. En una instalación nueva esto genera un círculo vicioso: el hook falla → el sync nunca avanza → la ServiceAccount nunca se crea.
+
+Romper el bloqueo manualmente:
+
+```bash
+microk8s kubectl create serviceaccount longhorn-service-account -n infra
+
+microk8s kubectl create clusterrolebinding longhorn-pre-upgrade-temp \
+  --clusterrole=cluster-admin \
+  --serviceaccount=infra:longhorn-service-account
+
+microk8s kubectl delete job -n infra longhorn-pre-upgrade 2>/dev/null || true
+```
+
+> El ClusterRoleBinding temporal `longhorn-pre-upgrade-temp` queda huérfano tras el sync — ArgoCD crea el definitivo (`longhorn-bind`). Se puede borrar después con `microk8s kubectl delete clusterrolebinding longhorn-pre-upgrade-temp`.
+
+Esperar a que Longhorn sincronice antes de continuar (puede tardar 2-3 minutos):
+
+```bash
+microk8s kubectl get pods -n infra -l app=longhorn-manager -w
 ```
 
 ---
