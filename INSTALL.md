@@ -13,6 +13,7 @@ Punto de partida: MicroK8s 1.32 instalado y limpio. El cluster debe estar en est
 5. [Instalar Cilium (CNI)](#5-instalar-cilium-cni)
 6. [Instalar Argo CD](#6-instalar-argo-cd)
 7. [Crear secrets de aplicaciones](#7-crear-secrets-de-aplicaciones)
+   - [7.6 Registrar repositorio OCI de Bitnami en ArgoCD](#76-registrar-repositorio-oci-de-bitnami-en-argocd)
 8. [Activar GitOps](#8-activar-gitops)
    - [8.1 Registrar repositorio privado en ArgoCD](#81-registrar-repositorio-privado-en-argocd)
    - [8.2 Aplicar la root-app](#82-aplicar-la-root-app)
@@ -258,6 +259,29 @@ microk8s kubectl create secret generic cloudflared-token \
 
 > Estos dos secrets deben existir **antes** de aplicar la root-app. ArgoCD no los gestiona (están excluidos del sync) — son responsabilidad del operador.
 
+### 7.6 Registrar repositorio OCI de Bitnami en ArgoCD
+
+Los charts de bases de datos (PostgreSQL, MongoDB, Redis) se sirven desde el registro OCI de Bitnami (`registry-1.docker.io/bitnamicharts`). El repositorio HTTP `https://charts.bitnami.com/bitnami` fue deprecado por Bitnami y ya no contiene todas las versiones.
+
+ArgoCD necesita que el registro OCI esté registrado explícitamente con `enableOCI=true` para generar el comando `helm pull` correcto:
+
+```bash
+microk8s kubectl -n infra create secret generic bitnami-oci \
+  --from-literal=type=helm \
+  --from-literal=url=registry-1.docker.io/bitnamicharts \
+  --from-literal=enableOCI=true \
+  --dry-run=client -o yaml | microk8s kubectl apply -f -
+
+microk8s kubectl -n infra label secret bitnami-oci \
+  argocd.argoproj.io/secret-type=repository --overwrite
+```
+
+Verificar que ArgoCD reconoció el repositorio:
+
+```bash
+microk8s kubectl -n infra get secrets -l argocd.argoproj.io/secret-type=repository
+```
+
 ---
 
 ## 8. Activar GitOps
@@ -463,4 +487,32 @@ microk8s kubectl -n infra get application <nombre> -o yaml
 ```bash
 microk8s kubectl get apisixroute -n infra
 # Si están vacías, verificar que apisix-config está en Synced
+```
+
+**Bases de datos en `Unknown` / ComparisonError: chart not found**
+```bash
+# Diagnóstico:
+microk8s kubectl -n infra get application postgresql \
+  -o jsonpath='{.status.conditions}' | python3 -m json.tool
+
+# Causa: el repositorio HTTP de Bitnami fue deprecado y no contiene
+# todas las versiones. Solución: registrar el OCI registry (paso 7.6)
+# y hacer hard refresh de las apps:
+for app in postgresql mongodb redis; do
+  microk8s kubectl -n infra annotate application $app \
+    argocd.argoproj.io/refresh=hard --overwrite
+done
+```
+
+**ArgoCD Application atascada en operación `Running` (hook Job que no existe)**
+```bash
+# Síntoma: operationState.message = "waiting for completion of hook batch/Job/..."
+# pero el Job no existe en el namespace.
+microk8s kubectl -n infra get application <nombre> \
+  -o jsonpath='{.status.operationState.phase}{"\n"}{.status.operationState.message}{"\n"}'
+
+# Solución: eliminar la Application y dejar que root-app la recree limpia.
+microk8s kubectl delete application -n infra <nombre>
+microk8s kubectl -n infra patch application root --type merge \
+  -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{"revision":"HEAD"}}}'
 ```
