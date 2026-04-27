@@ -28,6 +28,10 @@ spec:
       jsonPointers:
         - /status
         - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
+        - /spec/conversion
+        - /spec/names/listKind
+      jqPathExpressions:
+        - '.spec.versions[].additionalPrinterColumns[]? | .priority'
   syncPolicy:
     automated:
       prune: true

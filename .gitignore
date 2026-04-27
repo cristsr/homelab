@@ -1,4 +1,1 @@
-# Secretos — nunca commitear con valores reales
-.claude
-platform/infra/cert-manager/cloudflare-secret.yaml
-platform/infra/cloudflared/secret.yaml
+credentials.txt
