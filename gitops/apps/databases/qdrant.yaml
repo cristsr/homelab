@@ -24,8 +24,17 @@ spec:
   ignoreDifferences:
     - group: apps
       kind: StatefulSet
-      managedFieldsManagers:
-        - kubelite
+      jqPathExpressions:
+        - .spec.volumeClaimTemplates[].status
+        - .spec.podManagementPolicy
+        - .spec.updateStrategy
+        - .spec.template.spec.serviceAccount
+        - .spec.template.spec.dnsPolicy
+        - .spec.template.spec.restartPolicy
+        - .spec.template.spec.schedulerName
+        - .spec.template.spec.terminationGracePeriodSeconds
+        - .spec.template.spec.containers[].terminationMessagePath
+        - .spec.template.spec.containers[].terminationMessagePolicy
   syncPolicy:
     automated:
       prune: true
@@ -33,3 +42,4 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true
