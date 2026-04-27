@@ -11,6 +11,8 @@ spec:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
     path: platform/infra/cloudflared
+    directory:
+      exclude: "secret.yaml"
   destination:
     server: https://kubernetes.default.svc
     namespace: infra

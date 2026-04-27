@@ -11,6 +11,8 @@ spec:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
     path: gitops/apps
+    directory:
+      recurse: true
   destination:
     server: https://kubernetes.default.svc
     namespace: infra

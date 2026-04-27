@@ -14,9 +14,11 @@ Punto de partida: MicroK8s 1.32 instalado y limpio. El cluster debe estar en est
 6. [Instalar Argo CD](#6-instalar-argo-cd)
 7. [Crear secrets de aplicaciones](#7-crear-secrets-de-aplicaciones)
 8. [Activar GitOps](#8-activar-gitops)
+   - [8.1 Registrar repositorio privado en ArgoCD](#81-registrar-repositorio-privado-en-argocd)
+   - [8.2 Aplicar la root-app](#82-aplicar-la-root-app)
 9. [Verificar el despliegue](#9-verificar-el-despliegue)
 10. [Acceder a los servicios](#10-acceder-a-los-servicios)
-11. [Configurar Cloudflare](#11-configurar-cloudflare)
+11. [Configurar DNS y certificados](#11-configurar-dns-y-certificados)
 
 ---
 
@@ -29,6 +31,8 @@ microk8s disable dns
 microk8s disable ingress
 microk8s disable ha-cluster
 ```
+
+> `dns` se deshabilita para evitar conflictos durante la inicialización del CNI. Se vuelve a habilitar en el paso 5 después de instalar Cilium.
 
 Verificar que el nodo está listo:
 
@@ -159,6 +163,13 @@ microk8s kubectl get nodes
 > Si el nodo queda en `NotReady` después de instalar Cilium, reiniciar MicroK8s:
 > `sudo snap restart microk8s`
 
+Volver a habilitar CoreDNS (se deshabilitó en el paso 1 para evitar conflictos durante la instalación del CNI):
+
+```bash
+microk8s enable dns
+microk8s kubectl -n kube-system rollout status deployment/coredns
+```
+
 ---
 
 ## 6. Instalar Argo CD
@@ -197,35 +208,93 @@ microk8s kubectl -n infra get secret argocd-initial-admin-secret \
 
 Estos secrets **nunca se commitean** al repositorio. Se crean directamente en el cluster.
 
+Los comandos son idempotentes: crean el secret si no existe o lo actualizan si ya existe.
+
 ```bash
 # Flow API
 microk8s kubectl create secret generic flow-secrets \
   --from-literal=database-url="postgresql://postgres:TU_PASSWORD@postgresql.databases.svc.cluster.local:5432/homelab" \
   --from-literal=redis-url="redis://:TU_PASSWORD_REDIS@redis-master.databases.svc.cluster.local:6379" \
-  -n apps
+  -n apps \
+  --dry-run=client -o yaml | microk8s kubectl apply -f -
 
 # OpenMemory
 microk8s kubectl create secret generic openmemory-secrets \
   --from-literal=OPENAI_API_KEY=sk-... \
-  -n dev-tools
+  -n dev-tools \
+  --dry-run=client -o yaml | microk8s kubectl apply -f -
 
 # SonarQube (password de PostgreSQL)
 microk8s kubectl create secret generic sonarqube-db-secret \
   --from-literal=password=TU_PASSWORD_POSTGRES \
-  -n dev-tools
+  -n dev-tools \
+  --dry-run=client -o yaml | microk8s kubectl apply -f -
 ```
+
+### 7.4 Cloudflare — cert-manager (DNS01 challenge)
+
+Crear el token en Cloudflare → My Profile → API Tokens.  
+Permisos necesarios: `Zone:DNS:Edit` para el dominio `cristianpuenguenan.online`.
+
+```bash
+microk8s kubectl create secret generic cloudflare-api-token \
+  --from-literal=api-token=TU_CLOUDFLARE_API_TOKEN \
+  -n cert-manager \
+  --dry-run=client -o yaml | microk8s kubectl apply -f -
+```
+
+### 7.5 Cloudflare — cloudflared (Tunnel)
+
+Crear el túnel en Cloudflare → Zero Trust → Networks → Tunnels → Create Tunnel.  
+Copiar el token que aparece al crearlo.
+
+```bash
+microk8s kubectl create secret generic cloudflared-token \
+  --from-literal=token=TU_CLOUDFLARE_TUNNEL_TOKEN \
+  -n infra \
+  --dry-run=client -o yaml | microk8s kubectl apply -f -
+```
+
+> Estos dos secrets deben existir **antes** de aplicar la root-app. ArgoCD no los gestiona (están excluidos del sync) — son responsabilidad del operador.
 
 ---
 
 ## 8. Activar GitOps
 
-Con Argo CD corriendo y los secrets en su lugar, aplicar la root-app. A partir de aquí Argo CD despliega todo el stack automáticamente siguiendo los sync-waves.
+### 8.1 Registrar repositorio privado en ArgoCD
+
+Como el repositorio es privado, ArgoCD necesita credenciales para clonar el código. Crear un [Personal Access Token (PAT)](https://github.com/settings/tokens) en GitHub con scope `repo` (solo lectura es suficiente).
+
+```bash
+microk8s kubectl -n infra create secret generic homelab-repo \
+  --from-literal=type=git \
+  --from-literal=url=https://github.com/cristsr/homelab \
+  --from-literal=username=cristsr \
+  --from-literal=password=TU_GITHUB_PAT \
+  --dry-run=client -o yaml | microk8s kubectl apply -f -
+
+microk8s kubectl -n infra label secret homelab-repo \
+  argocd.argoproj.io/secret-type=repository \
+  --overwrite
+```
+
+Verificar que ArgoCD reconoció el repositorio:
+
+```bash
+microk8s kubectl -n infra get secrets -l argocd.argoproj.io/secret-type=repository
+```
+
+### 8.2 Aplicar la root-app
+
+Con ArgoCD corriendo, los secrets de aplicaciones en su lugar y el repositorio registrado, aplicar la root-app. A partir de aquí ArgoCD despliega todo el stack automáticamente siguiendo los sync-waves.
 
 ```bash
 microk8s kubectl apply -f gitops/root-app.yaml
 ```
 
-Argo CD comenzará a sincronizar en este orden:
+> La advertencia `metadata.finalizers: prefer a domain-qualified finalizer name` es un falso positivo de kubectl — no afecta el funcionamiento.
+
+ArgoCD comenzará a sincronizar en este orden:
 
 | Wave | Componentes |
 |------|-------------|
@@ -243,6 +312,12 @@ Seguir el progreso en tiempo real:
 
 ```bash
 microk8s kubectl -n infra get applications -w
+```
+
+Si la root-app queda en `Unknown` o hay que forzar un re-sync (por ejemplo tras corregir un secret o cambiar configuración):
+
+```bash
+microk8s kubectl -n infra patch application root --type merge -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{"revision":"HEAD"}}}'
 ```
 
 ---
@@ -266,7 +341,7 @@ microk8s kubectl get pods -n dev-tools
 microk8s kubectl get pods -n apps
 ```
 
-> cert-manager y cloudflared estarán en reintento hasta que se complete el paso 11. El resto del stack debe estar `Healthy`.
+> cloudflared estará `Degraded` hasta que se configuren los registros DNS en el paso 11. El resto del stack debe estar `Healthy`.
 
 ---
 
@@ -292,33 +367,11 @@ microk8s kubectl create token headlamp -n infra
 
 ---
 
-## 11. Configurar Cloudflare
+## 11. Configurar DNS y certificados
 
-Este paso habilita los certificados TLS y el túnel público. cert-manager y cloudflared reintentarán automáticamente en cuanto los secrets y el DNS estén en su lugar.
+Los secrets de Cloudflare ya fueron creados en el paso 7. Este paso configura los registros DNS y verifica que el certificado wildcard se haya emitido correctamente.
 
-### 11.1 Secret para cert-manager
-
-Crear el token en Cloudflare → My Profile → API Tokens.  
-Permisos necesarios: `Zone:DNS:Edit` para el dominio `cristianpuenguenan.online`.
-
-```bash
-microk8s kubectl create secret generic cloudflare-api-token \
-  --from-literal=api-token=TU_CLOUDFLARE_API_TOKEN \
-  -n cert-manager
-```
-
-### 11.2 Secret para cloudflared (Tunnel)
-
-Crear el túnel en Cloudflare → Zero Trust → Networks → Tunnels → Create Tunnel.  
-Copiar el token que aparece al crearlo.
-
-```bash
-microk8s kubectl create secret generic cloudflared-token \
-  --from-literal=token=TU_CLOUDFLARE_TUNNEL_TOKEN \
-  -n infra
-```
-
-### 11.3 Configurar DNS
+### 11.1 Configurar DNS
 
 Agregar registros A en Cloudflare apuntando a la IP del nodo (`192.168.80.20`).
 
@@ -329,9 +382,9 @@ Agregar registros A en Cloudflare apuntando a la IP del nodo (`192.168.80.20`).
 
 > Usar **DNS only** (nube gris) para los subdominios internos. Solo activar proxy para los que se expongan públicamente vía Cloudflare Tunnel.
 
-### 11.4 Verificar el certificado
+### 11.2 Verificar el certificado
 
-El certificado wildcard debería emitirse en 5-10 minutos tras crear el secret y los registros DNS:
+El certificado wildcard debería emitirse en 5-10 minutos tras configurar el DNS:
 
 ```bash
 microk8s kubectl get certificate -n infra
@@ -360,6 +413,18 @@ sudo snap restart microk8s
 microk8s kubectl describe certificaterequest -n infra
 # Verificar que el secret cloudflare-api-token existe y tiene el token correcto
 microk8s kubectl get secret cloudflare-api-token -n cert-manager
+```
+
+**Application de ArgoCD en `Unknown` sync status**
+```bash
+# Causa más común: repositorio privado sin credenciales registradas.
+# Verificar que el secret del repo existe:
+microk8s kubectl -n infra get secrets -l argocd.argoproj.io/secret-type=repository
+# Si no existe, seguir el paso 8.1.
+# Forzar re-sync tras crear las credenciales:
+microk8s kubectl -n infra patch application root \
+  --type merge \
+  -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{"revision":"HEAD"}}}'
 ```
 
 **Application de ArgoCD en `OutOfSync`**
