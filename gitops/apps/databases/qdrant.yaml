@@ -24,8 +24,9 @@ spec:
   ignoreDifferences:
     - group: apps
       kind: StatefulSet
+      jsonPointers:
+        - /spec/volumeClaimTemplates
       jqPathExpressions:
-        - .spec.volumeClaimTemplates[].status
         - .spec.podManagementPolicy
         - .spec.updateStrategy
         - .spec.template.spec.serviceAccount
@@ -37,7 +38,6 @@ spec:
         - .spec.template.spec.containers[].terminationMessagePolicy
         - .spec.persistentVolumeClaimRetentionPolicy
         - .spec.revisionHistoryLimit
-        - .spec.volumeClaimTemplates[].spec.volumeMode
   syncPolicy:
     automated:
       prune: true
