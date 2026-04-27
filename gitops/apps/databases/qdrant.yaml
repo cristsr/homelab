@@ -35,6 +35,8 @@ spec:
         - .spec.template.spec.terminationGracePeriodSeconds
         - .spec.template.spec.containers[].terminationMessagePath
         - .spec.template.spec.containers[].terminationMessagePolicy
+        - .spec.persistentVolumeClaimRetentionPolicy
+        - .spec.revisionHistoryLimit
   syncPolicy:
     automated:
       prune: true
