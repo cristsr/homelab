@@ -48,6 +48,15 @@ ingress-controller:
       serviceName: apisix-admin
       serviceNamespace: infra
       adminKey: "f2b9c16d064272f4ceae0ec08f8f4cb2ff0aade9f216f9f86a9ebac911833465"
+    kubernetes:
+      namespace_selector:
+        - infra
+        - apps
+        - monitoring
+        - dev-tools
+        - kube-system
+        - databases
+        - cert-manager
 
 # etcd gestionado como StatefulSet independiente (platform/infra/apisix-etcd)
 etcd:

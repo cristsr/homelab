@@ -13,8 +13,10 @@ spec:
         paths:
           - "/flow/*"
       backends:
-        - serviceName: flow-proxy
+        - serviceName: flow
           servicePort: 80
+          resolveGranularity: service
+          namespace: apps
       plugin_config_name: public-api
 
     # Webhooks públicos (sin jwt-auth) — solo desde Cloudflare Tunnel
@@ -25,8 +27,10 @@ spec:
         paths:
           - "/webhooks/*"
       backends:
-        - serviceName: flow-proxy
+        - serviceName: flow
           servicePort: 80
+          resolveGranularity: service
+          namespace: apps
       plugins:
         - name: limit-req
           enable: true
