@@ -14,6 +14,5 @@ spec:
       backends:
         - serviceName: openmemory
           servicePort: 8080
-          resolveGranularity: service
-          namespace: dev-tools
+          resolveGranularity: endpoint
       plugin_config_name: internal-dashboard

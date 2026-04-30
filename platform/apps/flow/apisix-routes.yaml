@@ -14,8 +14,7 @@ spec:
       backends:
         - serviceName: flow
           servicePort: 80
-          resolveGranularity: service
-          namespace: apps
+          resolveGranularity: endpoint
       plugin_config_name: internal-dashboard
 ---
 apiVersion: apisix.apache.org/v2
@@ -35,8 +34,7 @@ spec:
       backends:
         - serviceName: flow
           servicePort: 80
-          resolveGranularity: service
-          namespace: apps
+          resolveGranularity: endpoint
       plugins:
         - name: limit-req
           enable: true

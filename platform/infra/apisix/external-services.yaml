@@ -1,54 +1,109 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: grafana-proxy
+  name: kube-prometheus-stack-grafana
   namespace: infra
 spec:
-  type: ExternalName
-  externalName: kube-prometheus-stack-grafana.monitoring.svc.cluster.local
   ports:
     - port: 80
+      protocol: TCP
+      targetPort: 80
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: kube-prometheus-stack-grafana
+  namespace: infra
+subsets:
+  - addresses:
+      - ip: 10.152.183.187
+    ports:
+      - port: 80
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: hubble-ui-proxy
+  name: hubble-ui
   namespace: infra
 spec:
-  type: ExternalName
-  externalName: hubble-ui.kube-system.svc.cluster.local
   ports:
     - port: 80
+      protocol: TCP
+      targetPort: 80
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: hubble-ui
+  namespace: infra
+subsets:
+  - addresses:
+      - ip: 10.152.183.174
+    ports:
+      - port: 80
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: sonarqube-proxy
+  name: sonarqube-sonarqube
   namespace: infra
 spec:
-  type: ExternalName
-  externalName: sonarqube-sonarqube.dev-tools.svc.cluster.local
   ports:
     - port: 9000
+      protocol: TCP
+      targetPort: 9000
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: sonarqube-sonarqube
+  namespace: infra
+subsets:
+  - addresses:
+      - ip: 10.152.183.209
+    ports:
+      - port: 9000
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: openmemory-proxy
+  name: openmemory
   namespace: infra
 spec:
-  type: ExternalName
-  externalName: openmemory.dev-tools.svc.cluster.local
   ports:
     - port: 8080
+      protocol: TCP
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: openmemory
+  namespace: infra
+subsets:
+  - addresses:
+      - ip: 10.152.183.102
+    ports:
+      - port: 8080
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: flow-proxy
+  name: flow
   namespace: infra
 spec:
-  type: ExternalName
-  externalName: flow.apps.svc.cluster.local
   ports:
     - port: 80
+      protocol: TCP
+      targetPort: 80
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: flow
+  namespace: infra
+subsets:
+  - addresses:
+      - ip: 10.152.183.79
+    ports:
+      - port: 80

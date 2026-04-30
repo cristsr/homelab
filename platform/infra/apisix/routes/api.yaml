@@ -15,8 +15,7 @@ spec:
       backends:
         - serviceName: flow
           servicePort: 80
-          resolveGranularity: service
-          namespace: apps
+          resolveGranularity: endpoint
       plugin_config_name: public-api
 
     # Webhooks públicos (sin jwt-auth) — solo desde Cloudflare Tunnel
@@ -29,8 +28,7 @@ spec:
       backends:
         - serviceName: flow
           servicePort: 80
-          resolveGranularity: service
-          namespace: apps
+          resolveGranularity: endpoint
       plugins:
         - name: limit-req
           enable: true

@@ -14,6 +14,5 @@ spec:
       backends:
         - serviceName: kube-prometheus-stack-grafana
           servicePort: 80
-          resolveGranularity: service
-          namespace: monitoring
+          resolveGranularity: endpoint
       plugin_config_name: internal-dashboard
