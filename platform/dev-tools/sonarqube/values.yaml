@@ -11,7 +11,7 @@ postgresql:
 
 jdbcOverwrite:
   enable: true
-  jdbcUrl: "jdbc:postgresql://postgresql.databases.svc.cluster.local:5432/sonarqube"
+  jdbcUrl: "jdbc:postgresql://postgresql-rw.databases.svc.cluster.local:5432/sonarqube"
   jdbcUsername: sonarqube
   jdbcSecretName: sonarqube-db-secret
   jdbcSecretPasswordKey: password

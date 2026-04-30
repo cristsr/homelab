@@ -4,11 +4,11 @@ metadata:
   name: postgresql-default-deny
   namespace: databases
 spec:
+  # CloudNativePG etiqueta sus pods con cnpg.io/cluster
   endpointSelector:
     matchLabels:
-      app.kubernetes.io/name: postgresql
+      cnpg.io/cluster: postgresql
   ingress:
-    # Solo pods en namespaces autorizados pueden conectarse
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: apps
