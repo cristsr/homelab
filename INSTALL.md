@@ -49,10 +49,19 @@ microk8s kubectl get nodes
 # ...    Ready    <none>   ...   v1.32.x
 ```
 
-Agregar alias para comodidad (opcional):
+Exportar el kubeconfig para usar `kubectl` directamente (sin prefijo `microk8s`):
 
 ```bash
-alias kubectl='microk8s kubectl'
+mkdir -p ~/.kube
+microk8s config > ~/.kube/config
+chmod 600 ~/.kube/config
+```
+
+> Repetir este comando si se regeneran los certificados del cluster. Funciona también con `helm`, `k9s` y otras herramientas sin configuración adicional.
+
+Agregar alias para `helm` (opcional):
+
+```bash
 alias helm='microk8s helm'
 ```
 
