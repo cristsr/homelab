@@ -6,7 +6,7 @@ metadata:
 spec:
   plugins:
     - name: ip-restriction
-      enable: true
+      enable: false
       config:
         whitelist:
           - "192.168.80.0/24"     # LAN doméstica
