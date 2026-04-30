@@ -79,7 +79,7 @@ Generar una clave aleatoria:
 openssl rand -hex 32
 ```
 
-Editar `platform/infra/apisix/values.yaml` y reemplazar:
+Editar `platform/ingress/apisix/values.yaml` y reemplazar:
 
 ```yaml
 adminKey: "REEMPLAZAR_CON_ADMIN_KEY"
@@ -98,7 +98,7 @@ grafana:
 ### 3.3 Commitear los cambios
 
 ```bash
-git add platform/infra/apisix/values.yaml platform/monitoring/values.yaml
+git add platform/ingress/apisix/values.yaml platform/monitoring/values.yaml
 git commit -m "chore: set passwords and secrets"
 git push
 ```
@@ -116,7 +116,7 @@ microk8s kubectl apply -f bootstrap/namespaces.yaml
 Verificar:
 
 ```bash
-microk8s kubectl get namespaces | grep -E 'infra|cert-manager|databases|dev-tools|apps|monitoring'
+microk8s kubectl get namespaces | grep -E 'infra|ingress|argocd|cert-manager|databases|dev-tools|apps|monitoring'
 ```
 
 ---
@@ -169,7 +169,7 @@ microk8s helm repo add argo https://argoproj.github.io/argo-helm
 microk8s helm repo update
 
 microk8s helm upgrade --install argocd argo/argo-cd \
-  --namespace infra \
+  --namespace argocd \
   --version 7.8.0 \
   -f bootstrap/argocd/values.yaml
 ```
@@ -399,6 +399,8 @@ microk8s kubectl -n argocd get applications
 Verificar pods por namespace:
 
 ```bash
+microk8s kubectl get pods -n argocd
+microk8s kubectl get pods -n ingress
 microk8s kubectl get pods -n infra
 microk8s kubectl get pods -n cert-manager
 microk8s kubectl get pods -n databases
@@ -453,14 +455,14 @@ Agregar registros A en Cloudflare apuntando a la IP del nodo (`192.168.80.20`).
 El certificado wildcard debería emitirse en 5-10 minutos tras configurar el DNS:
 
 ```bash
-microk8s kubectl get certificate -n infra
+microk8s kubectl get certificate -n ingress
 # wildcard-home-tls   True   ...
 ```
 
 Si sigue en `False`, revisar el estado del `CertificateRequest`:
 
 ```bash
-microk8s kubectl describe certificaterequest -n infra
+microk8s kubectl describe certificaterequest -n ingress
 ```
 
 ---
@@ -476,7 +478,7 @@ sudo snap restart microk8s
 
 **Certificado en estado `False`**
 ```bash
-microk8s kubectl describe certificaterequest -n infra
+microk8s kubectl describe certificaterequest -n ingress
 # Verificar que el secret cloudflare-api-token existe y tiene el token correcto
 microk8s kubectl get secret cloudflare-api-token -n cert-manager
 ```
@@ -502,7 +504,7 @@ microk8s kubectl -n argocd get application <nombre> -o yaml
 
 **APISIX sin rutas activas**
 ```bash
-microk8s kubectl get apisixroute -n infra
+microk8s kubectl get apisixroute -n ingress
 # Si están vacías, verificar que apisix-config está en Synced
 ```
 

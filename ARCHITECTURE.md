@@ -46,8 +46,15 @@ homelab/
 ├── gitops/                  # Applications de Argo CD
 │   ├── root-app.yaml
 │   └── apps/
+│       ├── infra/           # cert-manager, headlamp, longhorn, cloudflared, operators
+│       ├── ingress/         # APISIX (gateway, etcd, config)
+│       ├── databases/
+│       ├── dev-tools/
+│       ├── apps/
+│       └── monitoring/
 ├── platform/                # Valores Helm y manifiestos de cada servicio
-│   ├── infra/
+│   ├── infra/               # cert-manager, headlamp, longhorn, cloudflared, operators
+│   ├── ingress/             # APISIX (apisix/, apisix-etcd/)
 │   ├── databases/
 │   ├── apps/
 │   ├── dev-tools/
@@ -135,8 +142,8 @@ Capability: NET_BIND_SERVICE
 
 | Subdominio | Path | Backend | Namespace | Plugin |
 |-----------|------|---------|-----------|--------|
-| `apisix.cristianpuenguenan.online` | `/*` | apisix-dashboard:9000 | infra | internal-dashboard |
-| `argocd.cristianpuenguenan.online` | `/*` | argocd-server:80 | infra | internal-dashboard |
+| `apisix.cristianpuenguenan.online` | `/*` | apisix-dashboard:9000 | ingress | internal-dashboard |
+| `argocd.cristianpuenguenan.online` | `/*` | argocd-server:80 | argocd | internal-dashboard |
 | `grafana.cristianpuenguenan.online` | `/*` | kube-prometheus-stack-grafana:80 | monitoring | internal-dashboard |
 | `headlamp.cristianpuenguenan.online` | `/*` | headlamp:80 | infra | internal-dashboard |
 | `hubble.cristianpuenguenan.online` | `/*` | hubble-ui:80 | kube-system | internal-dashboard |
@@ -396,7 +403,7 @@ Prometheus descubre ServiceMonitors de **todos los namespaces** (`serviceMonitor
 
 | Monitor | Target | Path | Intervalo |
 |---------|--------|------|-----------|
-| APISIX | `infra/apisix` puerto `prometheus` | `/apisix/prometheus/metrics` | 30s |
+| APISIX | `ingress/apisix` puerto `prometheus` | `/apisix/prometheus/metrics` | 30s |
 | Longhorn | `infra/longhorn-manager` puerto `manager` | `/metrics` | 30s |
 
 ---
@@ -435,8 +442,8 @@ Tailscale → SSH al host (mantenimiento del servidor, fuera del cluster)
 | Redis | 6379 | databases |
 | Qdrant REST | 6333 | databases |
 | Qdrant gRPC | 6334 | databases |
-| APISIX Admin API | 9180 | infra |
-| etcd (APISIX) | 2379 | infra |
+| APISIX Admin API | 9180 | ingress |
+| etcd (APISIX) | 2379 | ingress |
 | Flow API | 8000 | apps |
 | OpenMemory | 8080 | dev-tools |
 | Prometheus | 9090 | monitoring |
@@ -576,7 +583,7 @@ helm install cilium cilium/cilium -n kube-system -f bootstrap/cilium/values.yaml
 
 # 4. Instalar Argo CD (bootstrap manual, luego se autogestiona)
 helm repo add argo https://argoproj.github.io/argo-helm
-helm install argocd argo/argo-cd -n infra -f bootstrap/argocd/values.yaml
+helm install argocd argo/argo-cd -n argocd -f bootstrap/argocd/values.yaml
 
 # 5. Crear secrets manuales (jamás se commitean)
 # PostgreSQL (CloudNativePG)

@@ -11,7 +11,7 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/infra/apisix-etcd
+    path: platform/ingress/apisix-etcd
   destination:
     server: https://kubernetes.default.svc
     namespace: ingress

@@ -11,7 +11,7 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/infra/apisix
+    path: platform/ingress/apisix
     directory:
       recurse: true
       exclude: "values.yaml"
