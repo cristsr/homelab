@@ -12,8 +12,6 @@ spec:
         paths:
           - "/*"
       backends:
-        - serviceName: hubble-ui
+        - serviceName: hubble-ui-proxy
           servicePort: 80
-          resolveGranularity: service
-          namespace: kube-system
       plugin_config_name: internal-dashboard

@@ -12,8 +12,6 @@ spec:
         paths:
           - "/*"
       backends:
-        - serviceName: sonarqube-sonarqube
+        - serviceName: sonarqube-proxy
           servicePort: 9000
-          resolveGranularity: service
-          namespace: dev-tools
       plugin_config_name: internal-dashboard

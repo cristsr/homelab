@@ -12,10 +12,8 @@ spec:
         paths:
           - "/*"
       backends:
-        - serviceName: flow
+        - serviceName: flow-proxy
           servicePort: 80
-          resolveGranularity: service
-          namespace: apps
       plugin_config_name: internal-dashboard
 ---
 apiVersion: apisix.apache.org/v2
@@ -33,10 +31,8 @@ spec:
           - "/webhooks/notion"
           - "/webhooks/notion/*"
       backends:
-        - serviceName: flow
+        - serviceName: flow-proxy
           servicePort: 80
-          resolveGranularity: service
-          namespace: apps
       plugins:
         - name: limit-req
           enable: true

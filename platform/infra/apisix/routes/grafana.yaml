@@ -12,8 +12,6 @@ spec:
         paths:
           - "/*"
       backends:
-        - serviceName: kube-prometheus-stack-grafana
+        - serviceName: grafana-proxy
           servicePort: 80
-          resolveGranularity: service
-          namespace: monitoring
       plugin_config_name: internal-dashboard

@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-proxy
+  namespace: infra
+spec:
+  type: ExternalName
+  externalName: kube-prometheus-stack-grafana.monitoring.svc.cluster.local
+  ports:
+    - port: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hubble-ui-proxy
+  namespace: infra
+spec:
+  type: ExternalName
+  externalName: hubble-ui.kube-system.svc.cluster.local
+  ports:
+    - port: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sonarqube-proxy
+  namespace: infra
+spec:
+  type: ExternalName
+  externalName: sonarqube-sonarqube.dev-tools.svc.cluster.local
+  ports:
+    - port: 9000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openmemory-proxy
+  namespace: infra
+spec:
+  type: ExternalName
+  externalName: openmemory.dev-tools.svc.cluster.local
+  ports:
+    - port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow-proxy
+  namespace: infra
+spec:
+  type: ExternalName
+  externalName: flow.apps.svc.cluster.local
+  ports:
+    - port: 80
