@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: apisix-config
-  namespace: infra
+  namespace: argocd
   annotations:
     # Depende de APISIX running (wave 3)
     argocd.argoproj.io/sync-wave: "4"
@@ -17,7 +17,7 @@ spec:
       exclude: "values.yaml"
   destination:
     server: https://kubernetes.default.svc
-    namespace: infra
+    namespace: ingress
   ignoreDifferences:
     - group: apisix.apache.org
       kind: ApisixRoute

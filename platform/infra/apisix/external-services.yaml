@@ -1,8 +1,40 @@
+# Servicios espejo en namespace 'ingress' para que APISIX Ingress Controller
+# pueda resolver backends que viven en otros namespaces.
+#
+# - argocd-server y headlamp usan ExternalName (DNS estable, sin IPs hardcodeadas)
+# - Los demás usan ClusterIP + Endpoints con la ClusterIP del servicio real,
+#   necesario para resolveGranularity: endpoint (requerimiento de APISIX IC)
+
+# ── argocd-server (namespace: argocd) ──────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-server
+  namespace: ingress
+spec:
+  type: ExternalName
+  externalName: argocd-server.argocd.svc.cluster.local
+  ports:
+    - port: 80
+---
+# ── headlamp (namespace: infra) ────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: headlamp
+  namespace: ingress
+spec:
+  type: ExternalName
+  externalName: headlamp.infra.svc.cluster.local
+  ports:
+    - port: 80
+---
+# ── kube-prometheus-stack-grafana (namespace: monitoring) ──────────────────
 apiVersion: v1
 kind: Service
 metadata:
   name: kube-prometheus-stack-grafana
-  namespace: infra
+  namespace: ingress
 spec:
   ports:
     - port: 80
@@ -13,18 +45,19 @@ apiVersion: v1
 kind: Endpoints
 metadata:
   name: kube-prometheus-stack-grafana
-  namespace: infra
+  namespace: ingress
 subsets:
   - addresses:
       - ip: 10.152.183.187
     ports:
       - port: 80
 ---
+# ── hubble-ui (namespace: kube-system) ────────────────────────────────────
 apiVersion: v1
 kind: Service
 metadata:
   name: hubble-ui
-  namespace: infra
+  namespace: ingress
 spec:
   ports:
     - port: 80
@@ -35,18 +68,19 @@ apiVersion: v1
 kind: Endpoints
 metadata:
   name: hubble-ui
-  namespace: infra
+  namespace: ingress
 subsets:
   - addresses:
       - ip: 10.152.183.174
     ports:
       - port: 80
 ---
+# ── sonarqube-sonarqube (namespace: dev-tools) ────────────────────────────
 apiVersion: v1
 kind: Service
 metadata:
   name: sonarqube-sonarqube
-  namespace: infra
+  namespace: ingress
 spec:
   ports:
     - port: 9000
@@ -57,18 +91,19 @@ apiVersion: v1
 kind: Endpoints
 metadata:
   name: sonarqube-sonarqube
-  namespace: infra
+  namespace: ingress
 subsets:
   - addresses:
       - ip: 10.152.183.209
     ports:
       - port: 9000
 ---
+# ── openmemory (namespace: dev-tools) ─────────────────────────────────────
 apiVersion: v1
 kind: Service
 metadata:
   name: openmemory
-  namespace: infra
+  namespace: ingress
 spec:
   ports:
     - port: 8080
@@ -79,18 +114,19 @@ apiVersion: v1
 kind: Endpoints
 metadata:
   name: openmemory
-  namespace: infra
+  namespace: ingress
 subsets:
   - addresses:
       - ip: 10.152.183.102
     ports:
       - port: 8080
 ---
+# ── flow (namespace: apps) ────────────────────────────────────────────────
 apiVersion: v1
 kind: Service
 metadata:
   name: flow
-  namespace: infra
+  namespace: ingress
 spec:
   ports:
     - port: 80
@@ -101,7 +137,7 @@ apiVersion: v1
 kind: Endpoints
 metadata:
   name: flow
-  namespace: infra
+  namespace: ingress
 subsets:
   - addresses:
       - ip: 10.152.183.79

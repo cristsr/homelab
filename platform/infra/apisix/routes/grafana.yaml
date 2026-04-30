@@ -2,7 +2,7 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixRoute
 metadata:
   name: grafana
-  namespace: infra
+  namespace: ingress
 spec:
   http:
     - name: grafana

@@ -177,14 +177,14 @@ microk8s helm upgrade --install argocd argo/argo-cd \
 Esperar a que todos los pods estén listos:
 
 ```bash
-microk8s kubectl -n infra rollout status deployment/argocd-server
-microk8s kubectl -n infra get pods -l app.kubernetes.io/name=argocd-server
+microk8s kubectl -n argocd rollout status deployment/argocd-server
+microk8s kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-server
 ```
 
 Obtener la contraseña inicial del admin:
 
 ```bash
-microk8s kubectl -n infra get secret argocd-initial-admin-secret \
+microk8s kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath="{.data.password}" | base64 -d && echo
 ```
 
@@ -308,14 +308,14 @@ microk8s kubectl create secret generic cloudflared-token \
 Como el repositorio es privado, ArgoCD necesita credenciales para clonar el código. Crear un [Personal Access Token (PAT)](https://github.com/settings/tokens) en GitHub con scope `repo` (solo lectura es suficiente).
 
 ```bash
-microk8s kubectl -n infra create secret generic homelab-repo \
+microk8s kubectl -n argocd create secret generic homelab-repo \
   --from-literal=type=git \
   --from-literal=url=https://github.com/cristsr/homelab \
   --from-literal=username=cristsr \
   --from-literal=password=TU_GITHUB_PAT \
   --dry-run=client -o yaml | microk8s kubectl apply -f -
 
-microk8s kubectl -n infra label secret homelab-repo \
+microk8s kubectl -n argocd label secret homelab-repo \
   argocd.argoproj.io/secret-type=repository \
   --overwrite
 ```
@@ -323,7 +323,7 @@ microk8s kubectl -n infra label secret homelab-repo \
 Verificar que ArgoCD reconoció el repositorio:
 
 ```bash
-microk8s kubectl -n infra get secrets -l argocd.argoproj.io/secret-type=repository
+microk8s kubectl -n argocd get secrets -l argocd.argoproj.io/secret-type=repository
 ```
 
 ### 8.2 Aplicar la root-app
@@ -353,13 +353,13 @@ ArgoCD comenzará a sincronizar en este orden:
 Seguir el progreso en tiempo real:
 
 ```bash
-microk8s kubectl -n infra get applications -w
+microk8s kubectl -n argocd get applications -w
 ```
 
 Si la root-app queda en `Unknown` o hay que forzar un re-sync (por ejemplo tras corregir un secret o cambiar configuración):
 
 ```bash
-microk8s kubectl -n infra patch application root --type merge -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{"revision":"HEAD"}}}'
+microk8s kubectl -n argocd patch application root --type merge -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{"revision":"HEAD"}}}'
 ```
 
 ### 8.3 Desbloquear el sync inicial de Longhorn
@@ -369,11 +369,11 @@ El chart de Longhorn incluye un hook de pre-upgrade que necesita `longhorn-servi
 Romper el bloqueo manualmente:
 
 ```bash
-microk8s kubectl create serviceaccount longhorn-service-account -n infra
+microk8s kubectl create serviceaccount longhorn-service-account -n argocd
 
 microk8s kubectl create clusterrolebinding longhorn-pre-upgrade-temp \
   --clusterrole=cluster-admin \
-  --serviceaccount=infra:longhorn-service-account
+  --serviceaccount=argocd:longhorn-service-account
 
 microk8s kubectl delete job -n infra longhorn-pre-upgrade 2>/dev/null || true
 ```
@@ -393,7 +393,7 @@ microk8s kubectl get pods -n infra -l app=longhorn-manager -w
 Comprobar que todas las Applications están en `Synced` / `Healthy`:
 
 ```bash
-microk8s kubectl -n infra get applications
+microk8s kubectl -n argocd get applications
 ```
 
 Verificar pods por namespace:
@@ -485,17 +485,17 @@ microk8s kubectl get secret cloudflare-api-token -n cert-manager
 ```bash
 # Causa más común: repositorio privado sin credenciales registradas.
 # Verificar que el secret del repo existe:
-microk8s kubectl -n infra get secrets -l argocd.argoproj.io/secret-type=repository
+microk8s kubectl -n argocd get secrets -l argocd.argoproj.io/secret-type=repository
 # Si no existe, seguir el paso 8.1.
 # Forzar re-sync tras crear las credenciales:
-microk8s kubectl -n infra patch application root \
+microk8s kubectl -n argocd patch application root \
   --type merge \
   -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{"revision":"HEAD"}}}'
 ```
 
 **Application de ArgoCD en `OutOfSync`**
 ```bash
-microk8s kubectl -n infra get application <nombre> -o yaml
+microk8s kubectl -n argocd get application <nombre> -o yaml
 # Forzar sync manual:
 # Desde la UI de ArgoCD → Sync → Force
 ```
@@ -509,7 +509,7 @@ microk8s kubectl get apisixroute -n infra
 **Bases de datos en `Unknown` / pods en `ImagePullBackOff`**
 ```bash
 # Diagnóstico del Application:
-microk8s kubectl -n infra get application postgresql \
+microk8s kubectl -n argocd get application postgresql \
   -o jsonpath='{.status.conditions}' | python3 -m json.tool
 
 # Diagnóstico del pod:
@@ -517,7 +517,7 @@ microk8s kubectl describe pod -n databases <pod> | grep -A10 Events
 
 # Hard refresh para forzar re-evaluación:
 for app in postgresql mongodb redis; do
-  microk8s kubectl -n infra annotate application $app \
+  microk8s kubectl -n argocd annotate application $app \
     argocd.argoproj.io/refresh=hard --overwrite
 done
 ```
@@ -526,11 +526,11 @@ done
 ```bash
 # Síntoma: operationState.message = "waiting for completion of hook batch/Job/..."
 # pero el Job no existe en el namespace.
-microk8s kubectl -n infra get application <nombre> \
+microk8s kubectl -n argocd get application <nombre> \
   -o jsonpath='{.status.operationState.phase}{"\n"}{.status.operationState.message}{"\n"}'
 
 # Solución: eliminar la Application y dejar que root-app la recree limpia.
-microk8s kubectl delete application -n infra <nombre>
-microk8s kubectl -n infra patch application root --type merge \
+microk8s kubectl delete application -n argocd <nombre>
+microk8s kubectl -n argocd patch application root --type merge \
   -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{"revision":"HEAD"}}}'
 ```

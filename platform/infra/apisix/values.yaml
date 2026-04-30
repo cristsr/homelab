@@ -46,11 +46,11 @@ ingress-controller:
   config:
     apisix:
       serviceName: apisix-admin
-      serviceNamespace: infra
+      serviceNamespace: ingress
       adminKey: "f2b9c16d064272f4ceae0ec08f8f4cb2ff0aade9f216f9f86a9ebac911833465"
     kubernetes:
       namespace_selector:
-        - infra
+        - ingress
         - apps
         - monitoring
         - dev-tools
@@ -64,7 +64,7 @@ etcd:
 
 externalEtcd:
   host:
-    - http://apisix-etcd.infra.svc.cluster.local:2379
+    - http://apisix-etcd.ingress.svc.cluster.local:2379
   user: ""
   password: ""
 

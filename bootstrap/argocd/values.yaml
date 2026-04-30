@@ -1,5 +1,5 @@
 # Argo CD 7.x — Aplicar manualmente antes de activar GitOps
-# helm install argocd argo/argo-cd -n infra -f bootstrap/argocd/values.yaml
+# helm install argocd argo/argo-cd -n argocd -f bootstrap/argocd/values.yaml
 
 global:
   domain: argocd.cristianpuenguenan.online

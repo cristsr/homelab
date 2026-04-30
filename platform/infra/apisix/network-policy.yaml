@@ -2,13 +2,12 @@ apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: apisix-admin-api-isolation
-  namespace: infra
+  namespace: ingress
 spec:
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: apisix
   ingress:
-    # Solo Ingress Controller y Dashboard pueden llamar al Admin API (9180)
     - fromEndpoints:
         - matchLabels:
             app.kubernetes.io/name: apisix-ingress-controller
@@ -23,7 +22,6 @@ spec:
         - ports:
             - port: "9180"
               protocol: TCP
-    # Tráfico HTTP/HTTPS desde cualquier origen (hostPort — llega al nodo primero)
     - toPorts:
         - ports:
             - port: "9080"
@@ -31,6 +29,12 @@ spec:
             - port: "9443"
               protocol: TCP
   egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ingress
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: argocd
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: infra
@@ -46,3 +50,9 @@ spec:
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: monitoring
+    - toEntities:
+        - cluster
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP

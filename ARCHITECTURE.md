@@ -76,7 +76,7 @@ Reemplaza completamente kube-proxy con eBPF. Provee conectividad de pods, Networ
 
 ### 2.2 Argo CD (GitOps)
 
-**Chart**: `argo/argo-cd` — **Namespace**: `infra`
+**Chart**: `argo/argo-cd` — **Namespace**: `argocd`
 
 Controla el ciclo de vida de todas las aplicaciones del cluster. La `root-app` apunta a `gitops/apps/` y crea las sub-aplicaciones que despliegan cada componente.
 
@@ -94,9 +94,11 @@ Declarados en `bootstrap/namespaces.yaml`:
 
 | Namespace | Contenido |
 |-----------|-----------|
-| `infra` | APISIX, Argo CD, cert-manager, Longhorn, Headlamp, Cloudflared |
+| `infra` | Headlamp, Cloudflared, CloudNativePG operator |
+| `ingress` | APISIX (gateway + IC + dashboard + etcd) |
+| `argocd` | Argo CD |
 | `cert-manager` | cert-manager y sus CRDs |
-| `databases` | PostgreSQL, MongoDB, Redis, Qdrant |
+| `databases` | PostgreSQL, MongoDB, Redis, Qdrant, Percona operator |
 | `dev-tools` | SonarQube, OpenMemory |
 | `apps` | Flow API |
 | `monitoring` | Prometheus, Grafana, Alertmanager |
@@ -107,7 +109,7 @@ Declarados en `bootstrap/namespaces.yaml`:
 
 ### 3.1 APISIX (Ingress + Gateway)
 
-**Chart**: `apisix/apisix 2.9.0` — **Namespace**: `infra`
+**Chart**: `apisix/apisix 2.9.0` — **Namespace**: `ingress`
 
 Punto de entrada único al cluster. Escucha en puertos 80 y 443 via `hostPort` directo en la IP del nodo (`192.168.80.20`). Gestiona TLS, autenticación, rate limiting y routing hacia backends internos.
 
@@ -162,7 +164,7 @@ Capability: NET_BIND_SERVICE
 
 #### TLS (`ApisixTls`)
 
-Certificado wildcard `*.cristianpuenguenan.online` en secret `wildcard-home-tls` (namespace `infra`).
+Certificado wildcard `*.cristianpuenguenan.online` en secret `wildcard-home-tls` (namespace `ingress`).
 
 ### 3.2 cert-manager
 
@@ -177,7 +179,7 @@ Automatiza la emisión y renovación de certificados TLS.
 | Certificado | Wildcard `*.cristianpuenguenan.online` + apex `cristianpuenguenan.online` |
 | Duración | 2160h (90 días), renueva 360h antes |
 | Secret del token | `cloudflare-api-token` en namespace `cert-manager` (manual) |
-| Secret del certificado | `wildcard-home-tls` en namespace `infra` |
+| Secret del certificado | `wildcard-home-tls` en namespace `ingress` |
 
 ### 3.3 Longhorn (Storage)
 

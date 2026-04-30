@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: cert-manager-config
-  namespace: infra
+  namespace: argocd
   annotations:
     # Depende de cert-manager (wave 1) — ClusterIssuer y Certificate van después
     argocd.argoproj.io/sync-wave: "2"
