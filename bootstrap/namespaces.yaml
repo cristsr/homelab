@@ -8,6 +8,20 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
+  name: ingress
+  labels:
+    app.kubernetes.io/part-of: homelab
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels:
+    app.kubernetes.io/part-of: homelab
+---
+apiVersion: v1
+kind: Namespace
+metadata:
   name: cert-manager
   labels:
     app.kubernetes.io/part-of: homelab

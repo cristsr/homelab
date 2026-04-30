@@ -2,7 +2,7 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixPluginConfig
 metadata:
   name: internal-dashboard
-  namespace: infra
+  namespace: ingress
 spec:
   plugins:
     - name: ip-restriction
@@ -15,7 +15,7 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixPluginConfig
 metadata:
   name: public-api
-  namespace: infra
+  namespace: ingress
 spec:
   plugins:
     - name: jwt-auth

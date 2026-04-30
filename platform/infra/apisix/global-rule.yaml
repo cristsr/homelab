@@ -2,7 +2,7 @@ apiVersion: apisix.apache.org/v2
 kind: ApisixGlobalRule
 metadata:
   name: global-plugins
-  namespace: infra
+  namespace: ingress
 spec:
   plugins:
     # Detecta IP real del cliente detrás de Cloudflare Tunnel

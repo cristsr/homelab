@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: apisix
-  namespace: infra
+  namespace: argocd
   annotations:
     # Requiere cert wildcard listo (wave 2) y Longhorn (wave 1)
     argocd.argoproj.io/sync-wave: "3"
@@ -21,7 +21,7 @@ spec:
       ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: infra
+    namespace: ingress
   ignoreDifferences:
     - group: apiextensions.k8s.io
       kind: CustomResourceDefinition

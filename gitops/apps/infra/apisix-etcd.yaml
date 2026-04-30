@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: apisix-etcd
-  namespace: infra
+  namespace: argocd
   annotations:
     # Debe estar Healthy antes de que APISIX sincronice (wave 3)
     argocd.argoproj.io/sync-wave: "2"
@@ -14,7 +14,7 @@ spec:
     path: platform/infra/apisix-etcd
   destination:
     server: https://kubernetes.default.svc
-    namespace: infra
+    namespace: ingress
   syncPolicy:
     automated:
       prune: true

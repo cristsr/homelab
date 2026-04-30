@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: apisix-etcd
-  namespace: infra
+  namespace: ingress
   labels:
     app: apisix-etcd
 spec:
@@ -18,7 +18,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: apisix-etcd
-  namespace: infra
+  namespace: ingress
   labels:
     app: apisix-etcd
 spec:

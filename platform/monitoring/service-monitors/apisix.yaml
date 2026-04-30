@@ -8,7 +8,7 @@ metadata:
 spec:
   namespaceSelector:
     matchNames:
-      - infra
+      - ingress
   selector:
     matchLabels:
       app.kubernetes.io/name: apisix
