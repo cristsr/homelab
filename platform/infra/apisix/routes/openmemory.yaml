@@ -12,6 +12,8 @@ spec:
         paths:
           - "/*"
       backends:
-        - serviceName: openmemory-proxy
+        - serviceName: openmemory
           servicePort: 8080
+          resolveGranularity: service
+          namespace: dev-tools
       plugin_config_name: internal-dashboard
