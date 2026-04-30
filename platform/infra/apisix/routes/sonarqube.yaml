@@ -14,6 +14,5 @@ spec:
       backends:
         - serviceName: sonarqube-sonarqube
           servicePort: 9000
-          resolveGranularity: service
-          namespace: dev-tools
+          resolveGranularity: endpoint
       plugin_config_name: internal-dashboard
