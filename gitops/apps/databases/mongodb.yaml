@@ -14,7 +14,15 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: databases
+  ignoreDifferences:
+    - group: psmdb.percona.com
+      kind: PerconaServerMongoDB
+      jsonPointers:
+        - /status
+        - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+      - RespectIgnoreDifferences=true

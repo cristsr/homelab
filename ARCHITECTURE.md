@@ -32,6 +32,8 @@ Homelab de un solo nodo construido sobre MicroK8s con GitOps completo. ArgoCD ge
 | Storage | Longhorn 1.7.2 |
 | Túnel Internet | Cloudflare Tunnel (cloudflared) |
 | Monitoreo | kube-prometheus-stack 67.9.0 (Prometheus + Grafana) |
+| Operador PostgreSQL | CloudNativePG 0.22.x (CNCF) |
+| Operador MongoDB | Percona Server for MongoDB Operator 1.17.x |
 
 ### Estructura del repositorio
 
@@ -265,44 +267,83 @@ Port:     9000
 Requests: CPU 200m / RAM 1Gi
 Limits:   CPU 1000m / RAM 2Gi
 Storage:  10Gi (longhorn)
-DB:       postgresql.databases.svc.cluster.local:5432/sonarqube
-Secret:   sonarqube-db-secret (password)
+DB:       postgresql-rw.databases.svc.cluster.local:5432/sonarqube
+Usuario:  sonarqube (gestionado por CloudNativePG managed.roles)
+Secret:   sonarqube-db-secret (clave: password)
 ```
 
 ---
 
 ## 5. Bases de Datos
 
-Todas en namespace `databases`. Acceso restringido por CiliumNetworkPolicy.
+Todas en namespace `databases`. Acceso restringido por CiliumNetworkPolicy.  
+PostgreSQL y MongoDB son gestionados por operadores Kubernetes que proveen backup, PITR y gestión declarativa de usuarios.
 
-### 5.1 PostgreSQL
+### 5.1 PostgreSQL — CloudNativePG
 
-**Chart**: `bitnami/postgresql 16.4.0`
+**Operador**: `cloudnative-pg/cloudnative-pg 0.22.0` — **CRD**: `kind: Cluster`
+
+El operador gestiona el ciclo de vida completo: bootstrapping, backups, upgrades y roles de base de datos.
 
 | Parámetro | Valor |
 |-----------|-------|
-| Arquitectura | standalone |
+| Imagen | `ghcr.io/cloudnative-pg/postgresql:17` |
 | Database | homelab |
+| Usuario propietario | admin |
 | Puerto | 5432 |
 | Storage | 10Gi (longhorn) |
 | Requests | CPU 100m / RAM 256Mi |
 | Limits | CPU 500m / RAM 512Mi |
 | Acceso desde | `apps`, `dev-tools` |
-| Métricas | ServiceMonitor habilitado |
+| Métricas | PodMonitor integrado |
 
-### 5.2 MongoDB
+#### Servicios generados por el operador
 
-**Chart**: `bitnami/mongodb 16.4.0`
+| Servicio | Descripción |
+|---------|-------------|
+| `postgresql-rw.databases` | Primario — lectura/escritura |
+| `postgresql-r.databases` | Cualquier instancia (round-robin) |
+| `postgresql-ro.databases` | Réplicas de solo lectura |
+
+#### Bases de datos y roles
+
+| DB | Owner | Notas |
+|----|-------|-------|
+| `homelab` | `admin` | DB principal de aplicaciones |
+| `sonarqube` | `sonarqube` | Creada en bootstrap via postInitSQL |
+
+El rol `sonarqube` es gestionado por `managed.roles` — el operador reconcilia su contraseña desde `sonarqube-db-secret`.
+
+### 5.2 MongoDB — Percona Operator
+
+**Operador**: `percona/psmdb-operator 1.17.0` — **CRD**: `kind: PerconaServerMongoDB`
+
+Equivalente open source al MongoDB Enterprise Operator. Provee replica sets, backups a S3, PITR y gestión declarativa de usuarios.
 
 | Parámetro | Valor |
 |-----------|-------|
-| Arquitectura | standalone |
+| Imagen | `percona/percona-server-mongodb:8.0` |
+| Replica set | rs0 (1 miembro, ampliable a 3 sin migración) |
 | Database | homelab |
+| Usuario de aplicación | admin |
 | Puerto | 27017 |
 | Storage | 10Gi (longhorn) |
 | Requests | CPU 100m / RAM 256Mi |
 | Limits | CPU 500m / RAM 512Mi |
 | Acceso desde | `apps`, `dev-tools` |
+
+#### Servicios generados por el operador
+
+| Servicio | Descripción |
+|---------|-------------|
+| `mongodb-rs0.databases` | Servicio del replica set (puerto 27017) |
+| `mongodb-rs0-0.databases` | Pod individual (acceso directo) |
+
+#### Connection string
+
+```
+mongodb://admin:admin@mongodb-rs0.databases.svc.cluster.local:27017/homelab?replicaSet=rs0&authSource=homelab
+```
 
 ### 5.3 Redis
 
@@ -438,13 +479,17 @@ Plugin `internal-dashboard` en APISIX:
 
 ### Secrets que deben crearse manualmente (nunca en git)
 
-| Secret | Namespace | Contenido |
-|--------|-----------|-----------|
-| `cloudflare-api-token` | cert-manager | Token API de Cloudflare |
-| `cloudflared-token` | infra | Token del túnel Cloudflare |
-| `flow-secrets` | apps | `DATABASE_URL`, `REDIS_URL` |
+| Secret | Namespace | Claves |
+|--------|-----------|--------|
+| `cloudflare-api-token` | cert-manager | `api-token` |
+| `cloudflared-token` | infra | `token` |
+| `postgresql-app-secret` | databases | `username`, `password` |
+| `mongodb-secret` | databases | Claves de sistema Percona (5 usuarios internos) |
+| `mongodb-app-secret` | databases | `password` |
+| `redis-secret` | databases | `redis-password` |
+| `flow-secrets` | apps | `database-url`, `mongodb-url`, `redis-url` |
 | `openmemory-secrets` | dev-tools | `OPENAI_API_KEY` |
-| `sonarqube-db-secret` | dev-tools | Password PostgreSQL |
+| `sonarqube-db-secret` | dev-tools | `password` |
 
 ---
 
@@ -455,12 +500,12 @@ Argo CD despliega las aplicaciones en orden via `sync-wave`. La `root-app` apunt
 ```
 root-app (gitops/root-app.yaml)
   └── App of Apps (gitops/apps/)
-        ├── Wave 1:  Longhorn, cert-manager
+        ├── Wave 1:  Longhorn, cert-manager, cloudnative-pg (operador), percona-mongodb-operator
         ├── Wave 2:  cert-manager-config (ClusterIssuer + Certificate)
         ├── Wave 3:  APISIX (Helm)
         ├── Wave 4:  apisix-config (Routes, PluginConfigs, TLS)
         ├── Wave 5:  kube-prometheus-stack, cloudflared, headlamp
-        ├── Wave 6:  PostgreSQL, MongoDB, Redis, Qdrant, ServiceMonitors
+        ├── Wave 6:  PostgreSQL (Cluster), MongoDB (PSMDB), Redis, Qdrant, ServiceMonitors
         ├── Wave 7:  NetworkPolicies de bases de datos
         ├── Wave 8:  SonarQube, OpenMemory
         └── Wave 9:  Flow API
@@ -532,26 +577,45 @@ helm repo add argo https://argoproj.github.io/argo-helm
 helm install argocd argo/argo-cd -n infra -f bootstrap/argocd/values.yaml
 
 # 5. Crear secrets manuales (jamás se commitean)
-kubectl create secret generic cloudflare-api-token \
-  --from-literal=api-token=TU_TOKEN \
-  -n cert-manager
+# PostgreSQL (CloudNativePG)
+kubectl create secret generic postgresql-app-secret \
+  --from-literal=username=admin --from-literal=password=admin -n databases
 
-kubectl create secret generic cloudflared-token \
-  --from-literal=token=TU_TUNNEL_TOKEN \
-  -n infra
+# MongoDB (Percona Operator) — usuarios de sistema internos
+kubectl create secret generic mongodb-secret \
+  --from-literal=MONGODB_BACKUP_USER=backup --from-literal=MONGODB_BACKUP_PASSWORD=admin \
+  --from-literal=MONGODB_DATABASE_ADMIN_USER=databaseAdmin --from-literal=MONGODB_DATABASE_ADMIN_PASSWORD=admin \
+  --from-literal=MONGODB_CLUSTER_ADMIN_USER=clusterAdmin --from-literal=MONGODB_CLUSTER_ADMIN_PASSWORD=admin \
+  --from-literal=MONGODB_CLUSTER_MONITOR_USER=clusterMonitor --from-literal=MONGODB_CLUSTER_MONITOR_PASSWORD=admin \
+  --from-literal=MONGODB_USER_ADMIN_USER=userAdmin --from-literal=MONGODB_USER_ADMIN_PASSWORD=admin \
+  -n databases
 
+# MongoDB — usuario de aplicación
+kubectl create secret generic mongodb-app-secret \
+  --from-literal=password=admin -n databases
+
+# Redis
+kubectl create secret generic redis-secret \
+  --from-literal=redis-password=admin -n databases
+
+# Aplicaciones
 kubectl create secret generic flow-secrets \
-  --from-literal=database-url=postgresql://... \
-  --from-literal=redis-url=redis://... \
+  --from-literal=database-url="postgresql://admin:admin@postgresql-rw.databases.svc.cluster.local:5432/homelab" \
+  --from-literal=mongodb-url="mongodb://admin:admin@mongodb-rs0.databases.svc.cluster.local:27017/homelab?replicaSet=rs0&authSource=homelab" \
+  --from-literal=redis-url="redis://:admin@redis-master.databases.svc.cluster.local:6379" \
   -n apps
 
 kubectl create secret generic openmemory-secrets \
-  --from-literal=OPENAI_API_KEY=sk-... \
-  -n dev-tools
+  --from-literal=OPENAI_API_KEY=sk-... -n dev-tools
 
 kubectl create secret generic sonarqube-db-secret \
-  --from-literal=password=TU_PASSWORD \
-  -n dev-tools
+  --from-literal=password=admin -n dev-tools
+
+kubectl create secret generic cloudflare-api-token \
+  --from-literal=api-token=TU_TOKEN -n cert-manager
+
+kubectl create secret generic cloudflared-token \
+  --from-literal=token=TU_TUNNEL_TOKEN -n infra
 
 # 6. Activar GitOps — Argo CD despliega todo en orden automáticamente
 kubectl apply -f gitops/root-app.yaml

@@ -13,6 +13,12 @@ Punto de partida: MicroK8s 1.32 instalado y limpio. El cluster debe estar en est
 5. [Instalar Cilium (CNI)](#5-instalar-cilium-cni)
 6. [Instalar Argo CD](#6-instalar-argo-cd)
 7. [Crear secrets de aplicaciones](#7-crear-secrets-de-aplicaciones)
+   - [7.1 PostgreSQL (CloudNativePG)](#71-postgresql-cloudnativepg)
+   - [7.2 MongoDB (Percona Operator)](#72-mongodb-percona-operator)
+   - [7.3 Redis](#73-redis)
+   - [7.4 Aplicaciones](#74-aplicaciones)
+   - [7.5 Cloudflare — cert-manager](#75-cloudflare--cert-manager-dns01-challenge)
+   - [7.6 Cloudflare — cloudflared](#76-cloudflare--cloudflared-tunnel)
 8. [Activar GitOps](#8-activar-gitops)
    - [8.1 Registrar repositorio privado en ArgoCD](#81-registrar-repositorio-privado-en-argocd)
    - [8.2 Aplicar la root-app](#82-aplicar-la-root-app)
@@ -192,32 +198,65 @@ Estos secrets **nunca se commitean** al repositorio. Se crean directamente en el
 
 Los comandos son idempotentes: crean el secret si no existe o lo actualizan si ya existe.
 
-### 7.1 Bases de datos
+### 7.1 PostgreSQL (CloudNativePG)
+
+El operador requiere un secret con claves `username` y `password` para el usuario propietario de la base de datos.
 
 ```bash
-microk8s kubectl create secret generic postgresql-secret \
-  --from-literal=postgres-password=TU_PASSWORD_POSTGRES \
-  -n databases \
-  --dry-run=client -o yaml | microk8s kubectl apply -f -
-
-microk8s kubectl create secret generic mongodb-secret \
-  --from-literal=root-password=TU_PASSWORD_MONGO \
-  -n databases \
-  --dry-run=client -o yaml | microk8s kubectl apply -f -
-
-microk8s kubectl create secret generic redis-secret \
-  --from-literal=redis-password=TU_PASSWORD_REDIS \
+# Usuario propietario de la DB homelab
+microk8s kubectl create secret generic postgresql-app-secret \
+  --from-literal=username=admin \
+  --from-literal=password=admin \
   -n databases \
   --dry-run=client -o yaml | microk8s kubectl apply -f -
 ```
 
-### 7.2 Aplicaciones
+### 7.2 MongoDB (Percona Operator)
+
+Percona requiere dos secrets separados: uno para los usuarios internos del operador y otro para el usuario de aplicación.
+
+```bash
+# Usuarios de sistema internos del operador Percona
+microk8s kubectl create secret generic mongodb-secret \
+  --from-literal=MONGODB_BACKUP_USER=backup \
+  --from-literal=MONGODB_BACKUP_PASSWORD=admin \
+  --from-literal=MONGODB_DATABASE_ADMIN_USER=databaseAdmin \
+  --from-literal=MONGODB_DATABASE_ADMIN_PASSWORD=admin \
+  --from-literal=MONGODB_CLUSTER_ADMIN_USER=clusterAdmin \
+  --from-literal=MONGODB_CLUSTER_ADMIN_PASSWORD=admin \
+  --from-literal=MONGODB_CLUSTER_MONITOR_USER=clusterMonitor \
+  --from-literal=MONGODB_CLUSTER_MONITOR_PASSWORD=admin \
+  --from-literal=MONGODB_USER_ADMIN_USER=userAdmin \
+  --from-literal=MONGODB_USER_ADMIN_PASSWORD=admin \
+  -n databases \
+  --dry-run=client -o yaml | microk8s kubectl apply -f -
+
+# Usuario de aplicación (definido en spec.users del CRD)
+microk8s kubectl create secret generic mongodb-app-secret \
+  --from-literal=password=admin \
+  -n databases \
+  --dry-run=client -o yaml | microk8s kubectl apply -f -
+```
+
+### 7.3 Redis
+
+```bash
+microk8s kubectl create secret generic redis-secret \
+  --from-literal=redis-password=admin \
+  -n databases \
+  --dry-run=client -o yaml | microk8s kubectl apply -f -
+```
+
+### 7.4 Aplicaciones
 
 ```bash
 # Flow API
+# Nota: PostgreSQL usa el servicio postgresql-rw (primario de CloudNativePG)
+# Nota: MongoDB incluye replicaSet=rs0 requerido por Percona
 microk8s kubectl create secret generic flow-secrets \
-  --from-literal=database-url="postgresql://postgres:TU_PASSWORD_POSTGRES@postgresql.databases.svc.cluster.local:5432/homelab" \
-  --from-literal=redis-url="redis://:TU_PASSWORD_REDIS@redis-master.databases.svc.cluster.local:6379" \
+  --from-literal=database-url="postgresql://admin:admin@postgresql-rw.databases.svc.cluster.local:5432/homelab" \
+  --from-literal=mongodb-url="mongodb://admin:admin@mongodb-rs0.databases.svc.cluster.local:27017/homelab?replicaSet=rs0&authSource=homelab" \
+  --from-literal=redis-url="redis://:admin@redis-master.databases.svc.cluster.local:6379" \
   -n apps \
   --dry-run=client -o yaml | microk8s kubectl apply -f -
 
@@ -227,14 +266,14 @@ microk8s kubectl create secret generic openmemory-secrets \
   -n dev-tools \
   --dry-run=client -o yaml | microk8s kubectl apply -f -
 
-# SonarQube (password de PostgreSQL)
+# SonarQube — contraseña del rol 'sonarqube' gestionado por CloudNativePG managed.roles
 microk8s kubectl create secret generic sonarqube-db-secret \
-  --from-literal=password=TU_PASSWORD_POSTGRES \
+  --from-literal=password=admin \
   -n dev-tools \
   --dry-run=client -o yaml | microk8s kubectl apply -f -
 ```
 
-### 7.3 Cloudflare — cert-manager (DNS01 challenge)
+### 7.5 Cloudflare — cert-manager (DNS01 challenge)
 
 Crear el token en Cloudflare → My Profile → API Tokens.  
 Permisos necesarios: `Zone:DNS:Edit` para el dominio `cristianpuenguenan.online`.
@@ -246,7 +285,7 @@ microk8s kubectl create secret generic cloudflare-api-token \
   --dry-run=client -o yaml | microk8s kubectl apply -f -
 ```
 
-### 7.4 Cloudflare — cloudflared (Tunnel)
+### 7.6 Cloudflare — cloudflared (Tunnel)
 
 Crear el túnel en Cloudflare → Zero Trust → Networks → Tunnels → Create Tunnel.  
 Copiar el token que aparece al crearlo.
@@ -301,12 +340,12 @@ ArgoCD comenzará a sincronizar en este orden:
 
 | Wave | Componentes |
 |------|-------------|
-| 1 | Longhorn, cert-manager |
+| 1 | Longhorn, cert-manager, cloudnative-pg (operador), percona-mongodb-operator |
 | 2 | cert-manager-config (ClusterIssuer + Certificate wildcard) |
 | 3 | APISIX |
 | 4 | apisix-config (Routes, PluginConfigs, TLS) |
 | 5 | kube-prometheus-stack, cloudflared, headlamp |
-| 6 | PostgreSQL, MongoDB, Redis, Qdrant, ServiceMonitors |
+| 6 | PostgreSQL (Cluster CRD), MongoDB (PSMDB CRD), Redis, Qdrant, ServiceMonitors |
 | 7 | NetworkPolicies de bases de datos |
 | 8 | SonarQube, OpenMemory |
 | 9 | Flow API |

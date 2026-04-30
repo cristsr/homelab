@@ -1,0 +1,3 @@
+# El operador vigila el namespace donde se despliega (databases).
+# watchAllNamespaces: false es el default — no necesita permisos de cluster adicionales.
+watchAllNamespaces: false
