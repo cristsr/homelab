@@ -1,4 +1,4 @@
-# OpenBao Helm values - simplified for homelab
+# OpenBao Helm values - production mode
 # Using HashiCorp Vault Helm chart with OpenBao image
 
 server:
@@ -7,23 +7,26 @@ server:
     tag: "2.0.0"
     pullPolicy: IfNotPresent
 
-  # Override the command to use bao instead of vault
-  extraArgs: ""
-  
-  # Dev mode - single node, in-memory, auto-unsealed
+  # Production mode
   dev:
-    enabled: true
+    enabled: false
 
-  # Disable HA
+  # Standalone server (no HA)
   ha:
     enabled: false
     replicas: 1
 
-  # Disable storage (dev mode uses in-memory)
+  # Storage backend (local PVC for homelab)
   dataStorage:
-    enabled: false
+    enabled: true
+    accessMode: ReadWriteOnce
+    size: 1Gi
   auditStorage:
     enabled: false
+
+  # Listener config for UI
+  extraArgs:
+    - "-log-level=info"
 
   # Service
   service:
@@ -41,14 +44,10 @@ server:
       cpu: 500m
       memory: 512Mi
 
-  # UI disabled in dev mode (not needed)
+  # UI enabled for production
   ui:
-    enabled: false
+    enabled: true
 
 # Disable injector
 injector:
   enabled: false
-
-# Standalone config
-standalone:
-  enabled: true
