@@ -1,5 +1,6 @@
-# OpenBao StatefulSet - simplified for homelab
-# Dev mode - single node, in-memory, auto-unsealed
+# OpenBao StatefulSet - production mode
+# Using Helm chart via ArgoCD (gitops/apps/infra/openbao.yaml)
+# This file is kept as reference only.
 
 apiVersion: v1
 kind: Service
@@ -45,14 +46,17 @@ spec:
           env:
             - name: BAO_ADDR
               value: "http://127.0.0.1:8200"
-            - name: BAO_DEV_ROOT_TOKEN_ID
-              value: "root"  # Change in production!
+            - name: BAO_UI
+              value: "true"
           command:
             - "/bin/bao"
             - "server"
-            - "-dev"
-            - "-dev-listen-address=0.0.0.0:8200"
-            - "-dev-root-token-id=${BAO_DEV_ROOT_TOKEN_ID}"
+            - "-config=/vault/config/config.hcl"
+          volumeMounts:
+            - name: config
+              mountPath: /vault/config
+            - name: data
+              mountPath: /vault/data
           resources:
             requests:
               cpu: 100m
@@ -72,6 +76,30 @@ spec:
               port: 8200
             initialDelaySeconds: 10
             periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: openbao-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openbao-config
+  namespace: vault
+data:
+  config.hcl: |
+    ui = true
+
+    listener "tcp" {
+      address     = "0.0.0.0:8200"
+      tls_disable = 1
+    }
+
+    storage "file" {
+      path = "/vault/data"
+    }
 ---
 apiVersion: v1
 kind: ServiceAccount
