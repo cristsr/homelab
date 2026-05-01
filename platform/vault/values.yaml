@@ -1,0 +1,72 @@
+# OpenBao Helm values
+# Compatible with Vault OSS - using OpenBao image
+
+server:
+  image:
+    repository: "ghcr.io/openbao/openbao"
+    tag: "2.0.0"
+    pullPolicy: IfNotPresent
+
+  # Single node for homelab
+  ha:
+    enabled: false
+    replicas: 1
+
+  # File storage backend (single node)
+  dataStorage:
+    enabled: true
+    size: 1Gi
+    storageClass: longhorn
+
+  # Audit logs
+  auditStorage:
+    enabled: true
+    size: 1Gi
+    storageClass: longhorn
+
+  # Service config
+  service:
+    enabled: true
+    type: ClusterIP
+    port: 8200
+    targetPort: 8200
+
+  # Extra args for dev/test - disable in production
+  extraArgs:
+    - "-dev"
+    - "-dev-listen-address=0.0.0.0:8200"
+
+  # Resources
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Network policy
+  networkPolicy:
+    enabled: true
+
+  # UI
+  ui:
+    enabled: true
+
+# Injector disabled (not using agent injector in homelab)
+injector:
+  enabled: false
+
+# Standalone mode
+standalone:
+  enabled: true
+  config: |
+    ui = true
+    listener "tcp" {
+      address = "0.0.0.0:8200"
+      tls_disable = 1
+    }
+    storage "file" {
+      path = "/vault/data"
+    }
+    disable_mlock = true
