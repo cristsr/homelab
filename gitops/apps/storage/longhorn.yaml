@@ -14,13 +14,13 @@ spec:
       helm:
         releaseName: longhorn
         valueFiles:
-          - $values/platform/infra/longhorn/values.yaml
+          - $values/platform/longhorn/values.yaml
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: infra
+    namespace: longhorn-system
   syncPolicy:
     automated:
       prune: true
