@@ -61,13 +61,8 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/etcd/data
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        storageClassName: longhorn
-        resources:
-          requests:
-            storage: 2Gi
-        volumeMode: Block
+      volumes:
+        - name: data
+          hostPath:
+            path: /var/local/apisix-etcd
+            type: DirectoryOrCreate
