@@ -40,10 +40,10 @@ spec:
             - --name=default
             - --data-dir=/var/etcd/data
             - --listen-client-urls=http://0.0.0.0:2379
-            - --advertise-client-urls=http://apisix-etcd.infra.svc.cluster.local:2379
+            - --advertise-client-urls=http://apisix-etcd.ingress.svc.cluster.local:2379
             - --listen-peer-urls=http://0.0.0.0:2380
-            - --initial-advertise-peer-urls=http://apisix-etcd.infra.svc.cluster.local:2380
-            - --initial-cluster=default=http://apisix-etcd.infra.svc.cluster.local:2380
+            - --initial-advertise-peer-urls=http://apisix-etcd.ingress.svc.cluster.local:2380
+            - --initial-cluster=default=http://apisix-etcd.ingress.svc.cluster.local:2380
             - --initial-cluster-token=apisix-etcd
             - --initial-cluster-state=new
           ports:

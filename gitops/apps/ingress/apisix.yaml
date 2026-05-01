@@ -15,7 +15,7 @@ spec:
       helm:
         releaseName: apisix
         valueFiles:
-          - $values/platform/ingress/apisix/values.yaml
+          - $values/platform/ingress/values.yaml
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values
