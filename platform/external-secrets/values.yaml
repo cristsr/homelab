@@ -1,0 +1,31 @@
+# External Secrets Operator Helm values
+
+installCRDs: true
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# Webhook disabled for simplicity
+webhook:
+  replicaCount: 1
+
+# Cert controller
+certController:
+  replicaCount: 1
+
+# Network policy
+networkPolicy:
+  enabled: true
+
+# Prometheus metrics
+metrics:
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
