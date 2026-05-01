@@ -1,5 +1,5 @@
-# OpenBao Helm values
-# Compatible with Vault OSS - using OpenBao image
+# OpenBao Helm values - simplified for homelab
+# Using HashiCorp Vault Helm chart with OpenBao image
 
 server:
   image:
@@ -7,34 +7,30 @@ server:
     tag: "2.0.0"
     pullPolicy: IfNotPresent
 
-  # Single node for homelab
+  # Override the command to use bao instead of vault
+  extraArgs: ""
+  
+  # Dev mode - single node, in-memory, auto-unsealed
+  dev:
+    enabled: true
+
+  # Disable HA
   ha:
     enabled: false
     replicas: 1
 
-  # File storage backend (single node)
+  # Disable storage (dev mode uses in-memory)
   dataStorage:
-    enabled: true
-    size: 1Gi
-    storageClass: longhorn
-
-  # Audit logs
+    enabled: false
   auditStorage:
-    enabled: true
-    size: 1Gi
-    storageClass: longhorn
+    enabled: false
 
-  # Service config
+  # Service
   service:
     enabled: true
     type: ClusterIP
     port: 8200
     targetPort: 8200
-
-  # Extra args for dev/test - disable in production
-  extraArgs:
-    - "-dev"
-    - "-dev-listen-address=0.0.0.0:8200"
 
   # Resources
   resources:
@@ -45,28 +41,14 @@ server:
       cpu: 500m
       memory: 512Mi
 
-  # Network policy
-  networkPolicy:
-    enabled: true
-
-  # UI
+  # UI disabled in dev mode (not needed)
   ui:
-    enabled: true
+    enabled: false
 
-# Injector disabled (not using agent injector in homelab)
+# Disable injector
 injector:
   enabled: false
 
-# Standalone mode
+# Standalone config
 standalone:
   enabled: true
-  config: |
-    ui = true
-    listener "tcp" {
-      address = "0.0.0.0:8200"
-      tls_disable = 1
-    }
-    storage "file" {
-      path = "/vault/data"
-    }
-    disable_mlock = true
