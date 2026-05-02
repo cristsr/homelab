@@ -1,6 +1,9 @@
 # SonarQube Community Edition
 edition: community
 
+deploymentAnnotations:
+  reloader.stakater.com/auto: "true"
+
 persistence:
   enabled: true
   storageClass: longhorn
