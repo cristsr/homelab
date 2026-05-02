@@ -20,7 +20,9 @@ spec:
               value: "http://openbao.vault.svc.cluster.local:8200"
           args:
             - |
-              # Wait for OpenBao to be ready
+              set -e
+
+              echo "Waiting for OpenBao..."
               sleep 10
 
               # Check if already initialized
@@ -31,9 +33,13 @@ spec:
               fi
 
               # Initialize (dev mode - single key)
+              echo "Initializing OpenBao..."
               bao operator init -key-shares=1 -key-threshold=1 -format=json > /tmp/init.json
               UNSEAL_KEY=$(jq -r '.unseal_keys_b64[0]' /tmp/init.json)
               ROOT_TOKEN=$(jq -r '.root_token' /tmp/init.json)
+
+              # Save token for later use
+              echo "$ROOT_TOKEN" > /tmp/bao-token
 
               # Unseal
               bao operator unseal $UNSEAL_KEY
@@ -72,4 +78,70 @@ spec:
                 policies=external-secrets \
                 ttl=24h
 
-              echo "OpenBao configured successfully"
+              # Install kubectl
+              kubectl version --client >/dev/null 2>&1 || \
+                curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+                chmod +x kubectl && mv kubectl /usr/local/bin/
+              apk add --no-cache jq >/dev/null 2>&1 || true
+
+              # Import bootstrap secrets to KV
+              if kubectl get secret vault-bootstrap-secrets -n vault >/dev/null 2>&1; then
+                echo "Importing bootstrap secrets to OpenBao..."
+
+                # Get all keys from secret
+                KEYS=$(kubectl get secret vault-bootstrap-secrets -n vault -o jsonpath='{.data}' | jq -r 'keys[]')
+
+                for key in $KEYS; do
+                  value=$(kubectl get secret vault-bootstrap-secrets -n vault -o jsonpath="{.data.$key}" | base64 -d)
+
+                  # Skip DUMMY values
+                  if [[ "$value" == DUMMY_* ]]; then
+                    continue
+                  fi
+
+                  # Map key to KV path
+                  case "$key" in
+                    argocd_github_pat)
+                      bao kv put secret/argocd github_pat="$value"
+                      echo "  secret/argocd -> github_pat"
+                      ;;
+                    dockerhub_password)
+                      bao kv put secret/dockerhub password="$value"
+                      echo "  secret/dockerhub -> password"
+                      ;;
+                    cloudflare_api_token)
+                      bao kv put secret/infra/cloudflare api_token="$value"
+                      echo "  secret/infra/cloudflare -> api_token"
+                      ;;
+                    cloudflared_token)
+                      bao kv put secret/infra/cloudflared token="$value"
+                      echo "  secret/infra/cloudflared -> token"
+                      ;;
+                    postgresql_username)
+                      POSTGRES_PASSWORD=$(kubectl get secret vault-bootstrap-secrets -n vault -o jsonpath='{.data.postgresql_password}' | base64 -d)
+                      bao kv put secret/databases/postgresql-app username="$value" password="$POSTGRES_PASSWORD"
+                      echo "  secret/databases/postgresql-app -> username, password"
+                      ;;
+                    redis_username)
+                      REDIS_PASSWORD=$(kubectl get secret vault-bootstrap-secrets -n vault -o jsonpath='{.data.redis_password}' | base64 -d)
+                      bao kv put secret/databases/redis username="$value" redis_password="$REDIS_PASSWORD"
+                      echo "  secret/databases/redis -> username, redis_password"
+                      ;;
+                    mongodb_username)
+                      MONGODB_PASSWORD=$(kubectl get secret vault-bootstrap-secrets -n vault -o jsonpath='{.data.mongodb_password}' | base64 -d)
+                      bao kv put secret/databases/mongodb-app username="$value" password="$MONGODB_PASSWORD"
+                      echo "  secret/databases/mongodb-app -> username, password"
+                      ;;
+                    qdrant_api_key)
+                      bao kv put secret/databases/qdrant api_key="$value"
+                      echo "  secret/databases/qdrant -> api_key"
+                      ;;
+                  esac
+                done
+
+                echo "Bootstrap secrets imported"
+              else
+                echo "No vault-bootstrap-secrets found, skipping import"
+              fi
+
+              echo "OpenBao initialized successfully"
