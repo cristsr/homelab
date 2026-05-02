@@ -78,6 +78,23 @@ spec:
                 policies=external-secrets \
                 ttl=24h
 
+              # Policy for vault-sync-operator
+              bao policy write vault-sync-operator - <<EOF
+              path "secret/data/*" {
+                capabilities = ["create", "read", "update", "delete"]
+              }
+              path "secret/metadata/*" {
+                capabilities = ["list", "read"]
+              }
+              EOF
+
+              # Role for vault-sync-operator
+              bao write auth/kubernetes/role/vault-sync-operator \
+                bound_service_account_names=vault-sync-operator-sa \
+                bound_service_account_namespaces=vault-sync-operator \
+                policies=vault-sync-operator \
+                ttl=24h
+
               # Install kubectl
               kubectl version --client >/dev/null 2>&1 || \
                 curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
