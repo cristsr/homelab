@@ -19,7 +19,7 @@ spec:
               protocol: TCP
     - fromEndpoints:
         - matchLabels:
-            k8s:io.kubernetes.pod.namespace: dev-tools
+            k8s:io.kubernetes.pod.namespace: devtools
       toPorts:
         - ports:
             - port: "27017"

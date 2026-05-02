@@ -53,10 +53,12 @@ ingress-controller:
         - ingress
         - apps
         - monitoring
-        - dev-tools
+        - devtools
         - kube-system
         - databases
-        - cert-manager
+        - networking
+        - vault
+        - infra
 
 # etcd gestionado como StatefulSet independiente (platform/infra/apisix-etcd)
 etcd:

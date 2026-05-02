@@ -20,7 +20,7 @@ spec:
       ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: vault-sync-operator
+    namespace: vault
   syncPolicy:
     automated:
       prune: true

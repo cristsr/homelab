@@ -43,7 +43,7 @@ spec:
             k8s:io.kubernetes.pod.namespace: databases
     - toEndpoints:
         - matchLabels:
-            k8s:io.kubernetes.pod.namespace: dev-tools
+            k8s:io.kubernetes.pod.namespace: devtools
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: apps
