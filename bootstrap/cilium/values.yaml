@@ -1,11 +1,10 @@
-# Cilium 1.16.x — MicroK8s 1.32
+# Cilium 1.16.x — k0s
 # Aplicar manualmente: helm install cilium cilium/cilium -n kube-system -f bootstrap/cilium/values.yaml
 
 kubeProxyReplacement: "true"
 
-# API server de MicroK8s (puerto no estándar)
 k8sServiceHost: "127.0.0.1"
-k8sServicePort: "16443"
+k8sServicePort: "6443"
 
 ipam:
   mode: cluster-pool
@@ -14,12 +13,10 @@ ipam:
       - "10.244.0.0/16"
     clusterPoolIPv4MaskSize: 24
 
-# Single-node: routing nativo, sin VXLAN (evita conflicto con Calico)
 routingMode: native
 autoDirectNodeRoutes: true
 ipv4NativeRoutingCIDR: "10.244.0.0/16"
 
-# Gateway API deshabilitado — APISIX es el ingress único
 gatewayAPI:
   enabled: false
 
@@ -30,18 +27,15 @@ hubble:
   ui:
     enabled: true
 
-# Paths ajustados a snap MicroK8s
 cni:
-  binPath: /var/snap/microk8s/common/opt/cni/bin
-  confPath: /var/snap/microk8s/common/run/cni
+  binPath: /opt/cni/bin
+  confPath: /etc/cni/net.d
 
-# eBPF reemplaza iptables MASQUERADE
 bpf:
   masquerade: true
 
 operator:
   replicas: 1
 
-# Directorio de estado en snap
 daemon:
-  runPath: /var/snap/microk8s/common/var/run/cilium
+  runPath: /var/run/cilium

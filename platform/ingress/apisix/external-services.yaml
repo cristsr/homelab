@@ -75,7 +75,7 @@ subsets:
     ports:
       - port: 80
 ---
-# ── sonarqube-sonarqube (namespace: dev-tools) ────────────────────────────
+# ── sonarqube-sonarqube (namespace: devtools) ────────────────────────────
 apiVersion: v1
 kind: Service
 metadata:
@@ -98,7 +98,7 @@ subsets:
     ports:
       - port: 9000
 ---
-# ── openmemory (namespace: dev-tools) ─────────────────────────────────────
+# ── openmemory (namespace: devtools) ─────────────────────────────────────
 apiVersion: v1
 kind: Service
 metadata:

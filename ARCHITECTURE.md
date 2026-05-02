@@ -18,13 +18,13 @@
 
 ## 1. Visión General
 
-Homelab de un solo nodo construido sobre MicroK8s con GitOps completo. ArgoCD gestiona todas las aplicaciones desde este repositorio. APISIX actúa como único punto de entrada (ingress). Cloudflare Tunnel expone servicios seleccionados a Internet sin abrir puertos en el router.
+Homelab de un solo nodo construido sobre k0s con GitOps completo. ArgoCD gestiona todas las aplicaciones desde este repositorio. APISIX actúa como único punto de entrada (ingress). Cloudflare Tunnel expone servicios seleccionados a Internet sin abrir puertos en el router.
 
 ### Stack tecnológico
 
 | Capa | Tecnología |
 |------|-----------|
-| Kubernetes | MicroK8s 1.32 (snap) |
+| Kubernetes | k0s 1.31.x |
 | CNI / NetworkPolicy | Cilium 1.16.x (eBPF, kubeProxy replacement) |
 | Ingress / Gateway | APISIX 2.9.x (hostPort directo 80/443) |
 | GitOps | Argo CD 7.x |
@@ -75,11 +75,11 @@ Reemplaza completamente kube-proxy con eBPF. Provee conectividad de pods, Networ
 |-----------|-------|
 | `kubeProxyReplacement` | `true` |
 | `k8sServiceHost` | `127.0.0.1` |
-| `k8sServicePort` | `16443` (MicroK8s) |
+| `k8sServicePort` | `6443` (k0s) |
 | `hubble.relay.enabled` | `true` |
 | `hubble.ui.enabled` | `true` |
-| CNI bin path | `/var/snap/microk8s/common/opt/cni/bin` |
-| Daemon run path | `/var/snap/microk8s/common/var/run/cilium` |
+| CNI bin path | `/opt/cni/bin` |
+| Daemon run path | `/var/run/cilium` |
 
 ### 2.2 Argo CD (GitOps)
 
@@ -101,14 +101,15 @@ Declarados en `bootstrap/namespaces.yaml`:
 
 | Namespace | Contenido |
 |-----------|-----------|
-| `infra` | Headlamp, Cloudflared, CloudNativePG operator |
+| `infra` | Headlamp, CloudNativePG operator |
 | `ingress` | APISIX (gateway + IC + dashboard + etcd) |
 | `argocd` | Argo CD |
-| `cert-manager` | cert-manager y sus CRDs |
+| `networking` | cloudflared, cert-manager |
 | `databases` | PostgreSQL, MongoDB, Redis, Qdrant, Percona operator |
-| `dev-tools` | SonarQube, OpenMemory |
+| `devtools` | SonarQube, OpenMemory |
 | `apps` | Flow API |
 | `monitoring` | Prometheus, Grafana, Alertmanager |
+| `vault` | OpenBao, External Secrets |
 
 ---
 
@@ -198,7 +199,7 @@ CSI StorageClass por defecto del cluster. En nodo único, las réplicas se confi
 |-----------|-------|
 | `defaultSettings.defaultReplicaCount` | `1` |
 | `defaultSettings.storageMinimalAvailablePercentage` | `10` |
-| `csi.kubeletRootDir` | `/var/snap/microk8s/common/var/lib/kubelet` |
+| `csi.kubeletRootDir` | `/var/lib/kubelet` |
 | StorageClass por defecto | `longhorn` |
 
 ### 3.4 Cloudflared (Túnel Internet)

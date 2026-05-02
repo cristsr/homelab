@@ -10,10 +10,10 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/dev-tools/openmemory
+    path: platform/devtools/openmemory
   destination:
     server: https://kubernetes.default.svc
-    namespace: dev-tools
+    namespace: devtools
   syncPolicy:
     automated:
       prune: true

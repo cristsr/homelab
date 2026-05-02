@@ -15,7 +15,7 @@ spec:
       exclude: "secret.yaml"
   destination:
     server: https://kubernetes.default.svc
-    namespace: infra
+    namespace: networking
   syncPolicy:
     automated:
       prune: true

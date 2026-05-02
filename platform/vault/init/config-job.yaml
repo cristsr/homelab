@@ -91,7 +91,7 @@ spec:
               # Role for vault-sync-operator
               bao write auth/kubernetes/role/vault-sync-operator \
                 bound_service_account_names=vault-sync-operator-sa \
-                bound_service_account_namespaces=vault-sync-operator \
+                bound_service_account_namespaces=vault \
                 policies=vault-sync-operator \
                 ttl=24h
 

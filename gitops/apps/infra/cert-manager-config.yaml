@@ -16,7 +16,7 @@ spec:
       exclude: "{values.yaml,cloudflare-secret.yaml}"
   destination:
     server: https://kubernetes.default.svc
-    namespace: cert-manager
+    namespace: networking
   syncPolicy:
     automated:
       prune: true
