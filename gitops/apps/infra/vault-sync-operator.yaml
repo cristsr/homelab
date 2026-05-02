@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault-sync-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  sources:
+    - repoURL: https://danieldonoghue.github.io/vault-sync-operator
+      chart: vault-sync-operator
+      targetRevision: "0.2.27"
+      helm:
+        releaseName: vault-sync-operator
+        valueFiles:
+          - $values/platform/vault-sync-operator/values.yaml
+    - repoURL: https://github.com/cristsr/homelab
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: vault-sync-operator
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
