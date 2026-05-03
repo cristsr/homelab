@@ -121,7 +121,7 @@ helm repo update
 
 helm upgrade --install cilium cilium/cilium \
   --namespace kube-system \
-  --version 1.16.6 \
+  --version 1.18.4 \
   -f bootstrap/cilium/values.yaml
 ```
 

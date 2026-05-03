@@ -1,4 +1,4 @@
-# Cilium 1.16.x — k0s
+# Cilium 1.18.4 — k0s
 # Aplicar manualmente: helm install cilium cilium/cilium -n kube-system -f bootstrap/cilium/values.yaml
 
 kubeProxyReplacement: "true"
