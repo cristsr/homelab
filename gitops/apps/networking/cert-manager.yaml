@@ -14,7 +14,7 @@ spec:
       helm:
         releaseName: cert-manager
         valueFiles:
-          - $values/platform/infra/cert-manager/values.yaml
+          - $values/platform/networking/cert-manager/values.yaml
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values

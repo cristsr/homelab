@@ -14,7 +14,7 @@ spec:
       helm:
         releaseName: openbao
         valueFiles:
-          - $values/platform/vault/values.yaml
+          - $values/platform/vault/openbao/values.yaml
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values

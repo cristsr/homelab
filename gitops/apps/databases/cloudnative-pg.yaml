@@ -14,7 +14,7 @@ spec:
       helm:
         releaseName: cloudnative-pg
         valueFiles:
-          - $values/platform/infra/operators/cloudnative-pg/values.yaml
+          - $values/platform/databases/operators/cloudnative-pg/values.yaml
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values

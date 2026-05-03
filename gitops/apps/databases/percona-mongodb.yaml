@@ -15,7 +15,7 @@ spec:
       helm:
         releaseName: percona-mongodb-operator
         valueFiles:
-          - $values/platform/infra/operators/percona-mongodb/values.yaml
+          - $values/platform/databases/operators/percona-mongodb/values.yaml
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values
