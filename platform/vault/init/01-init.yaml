@@ -1,0 +1,98 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openbao-init
+  namespace: vault
+  annotations:
+    helm.sh/hook: post-install
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  template:
+    spec:
+      serviceAccountName: external-secrets-sa
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: ghcr.io/openbao/openbao:2.0.0
+          command: ["/bin/sh", "-c"]
+          env:
+            - name: BAO_ADDR
+              value: "http://openbao.vault.svc.cluster.local:8200"
+          args:
+            - |
+              set -e
+
+              echo "Waiting for OpenBao..."
+              sleep 10
+
+              # Check if already initialized
+              STATUS=$(bao status 2>&1 || true)
+              if echo "$STATUS" | grep -q "Initialized.*true"; then
+                echo "OpenBao already initialized"
+                exit 0
+              fi
+
+              # Initialize (dev mode - single key)
+              echo "Initializing OpenBao..."
+              bao operator init -key-shares=1 -key-threshold=1 -format=json > /tmp/init.json
+              UNSEAL_KEY=$(jq -r '.unseal_keys_b64[0]' /tmp/init.json)
+              ROOT_TOKEN=$(jq -r '.root_token' /tmp/init.json)
+
+              # Save token for later use
+              echo "$ROOT_TOKEN" > /tmp/bao-token
+
+              # Unseal
+              bao operator unseal $UNSEAL_KEY
+
+              # Login
+              export BAO_TOKEN=$ROOT_TOKEN
+
+              # Enable KV v2
+              bao secrets enable -path=secret kv-v2 || true
+
+              # Enable Kubernetes auth
+              bao auth enable kubernetes || true
+
+              # Configure Kubernetes auth
+              BAO_SA_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+              BAO_CA_CERT=$(cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)
+              bao write auth/kubernetes/config \
+                kubernetes_host="https://kubernetes.default.svc" \
+                kubernetes_ca_cert="$BAO_CA_CERT" \
+                token_reviewer_jwt="$BAO_SA_TOKEN"
+
+              # Policy for external-secrets
+              bao policy write external-secrets - <<EOF
+              path "secret/data/*" {
+                capabilities = ["read"]
+              }
+              path "secret/metadata/*" {
+                capabilities = ["list", "read"]
+              }
+              EOF
+
+              # Role for external-secrets
+              bao write auth/kubernetes/role/external-secrets \
+                bound_service_account_names=external-secrets-sa \
+                bound_service_account_namespaces=vault \
+                policies=external-secrets \
+                ttl=24h
+
+              # Policy for vault-sync-operator
+              bao policy write vault-sync-operator - <<EOF
+              path "secret/data/*" {
+                capabilities = ["create", "read", "update", "delete"]
+              }
+              path "secret/metadata/*" {
+                capabilities = ["list", "read"]
+              }
+              EOF
+
+              # Role for vault-sync-operator
+              bao write auth/kubernetes/role/vault-sync-operator \
+                bound_service_account_names=vault-sync-operator-sa \
+                bound_service_account_namespaces=vault \
+                policies=vault-sync-operator \
+                ttl=24h
+
+              echo "OpenBao initialized successfully"
