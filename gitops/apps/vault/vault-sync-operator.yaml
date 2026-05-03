@@ -14,7 +14,7 @@ spec:
       helm:
         releaseName: vault-sync-operator
         valueFiles:
-          - $values/platform/vault-sync-operator/values.yaml
+          - $values/platform/vault/vault-sync-operator/values.yaml
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values
