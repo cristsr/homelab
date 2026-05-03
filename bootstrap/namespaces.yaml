@@ -67,3 +67,10 @@ metadata:
   name: longhorn-system
   labels:
     app.kubernetes.io/part-of: homelab
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agentgateway-system
+  labels:
+    app.kubernetes.io/part-of: homelab
