@@ -514,8 +514,6 @@ Los secrets se definen en Vault y se sincronizan via External Secrets. Las varia
 | **Monitoring** |||
 | `grafana_username` | Usuario Grafana | `admin` |
 | `grafana_password` | Password Grafana | `...` |
-| **Ingress** |||
-| `agent_gateway_admin_key` | Admin Key Agent Gateway | (generar con `openssl rand -hex 32`) |
 
 #### Crear el secret inicial
 
@@ -536,8 +534,7 @@ kubectl create secret generic vault-bootstrap-secrets \
   --from-literal=openmemory_openai_api_key='sk-...' \
   --from-literal=sonarqube_password='...' \
   --from-literal=grafana_username='admin' \
-  --from-literal=grafana_password='...' \
-  --from-literal=agent_gateway_admin_key='$(openssl rand -hex 32)'
+  --from-literal=grafana_password='...'
 ```
 
 ---
