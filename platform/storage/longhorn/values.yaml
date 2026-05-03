@@ -2,7 +2,7 @@
 defaultSettings:
   defaultDataPath: /var/lib/longhorn
   defaultReplicaCount: 1
-  storageMinimalAvailablePercentage: 10
+  storageMinimalAvailablePercentage: 50
 
 csi:
   kubeletRootDir: /var/lib/kubelet

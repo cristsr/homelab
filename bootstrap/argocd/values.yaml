@@ -18,3 +18,17 @@ configs:
     timeout.reconciliation: 180s
   rbac:
     policy.default: role:readonly
+    # Admin: full access to all apps
+    # Readonly: can view but not modify
+    policy.csv: |
+      p, admin, applications, *, */*, allow
+      p, admin, applicationsets, *, */*, allow
+      p, admin, projects, *, */*, allow
+      p, admin, repositories, *, */*, allow
+      p, admin, certificates, *, */*, allow
+      p, admin, secrets, *, */*, allow
+      p, admin, configmaps, *, */*, allow
+      p, admin, workflows, *, */*, allow
+      p, admin, events, *, */*, allow
+      g, admin, admin
+      g, readonly, role:readonly

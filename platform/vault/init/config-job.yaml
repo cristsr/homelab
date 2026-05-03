@@ -9,7 +9,7 @@ metadata:
 spec:
   template:
     spec:
-      serviceAccountName: vault
+      serviceAccountName: external-secrets-sa
       restartPolicy: OnFailure
       containers:
         - name: init
@@ -152,6 +152,19 @@ spec:
                     qdrant_api_key)
                       bao kv put secret/databases/qdrant api_key="$value"
                       echo "  secret/databases/qdrant -> api_key"
+                      ;;
+                    openmemory_openai_api_key)
+                      bao kv put secret/devtools/openmemory OPENAI_API_KEY="$value"
+                      echo "  secret/devtools/openmemory -> OPENAI_API_KEY"
+                      ;;
+                    sonarqube_password)
+                      bao kv put secret/devtools/sonarqube password="$value"
+                      echo "  secret/devtools/sonarqube -> password"
+                      ;;
+                    grafana_username)
+                      GRAFANA_PASSWORD=$(kubectl get secret vault-bootstrap-secrets -n vault -o jsonpath='{.data.grafana_password}' | base64 -d)
+                      bao kv put secret/monitoring/grafana username="$value" password="$GRAFANA_PASSWORD"
+                      echo "  secret/monitoring/grafana -> username, password"
                       ;;
                   esac
                 done
