@@ -1,3 +1,10 @@
 # El operador vigila el namespace donde se despliega (databases).
 # watchAllNamespaces: false es el default — no necesita permisos de cluster adicionales.
 watchAllNamespaces: false
+
+# Namespace override para deployments cuando difiere del namespace de instalación
+namespaceOverride: ""
+
+# Configuración de log
+logLevel: INFO
+logStructured: false

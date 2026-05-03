@@ -11,7 +11,7 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/infra/cert-manager
+    path: platform/networking/cert-manager
     directory:
       exclude: "{values.yaml,cloudflare-secret.yaml}"
   destination:
