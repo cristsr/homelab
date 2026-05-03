@@ -165,7 +165,7 @@ Capability: NET_BIND_SERVICE
   Trusted addresses: `127.0.0.1`
 - **prometheus**: métricas en todas las rutas (`prefer_name: true`)
 
-#### Plugin configs (`ApisixPluginConfig`)
+#### Plugin configs
 
 **`internal-dashboard`** — para dashboards y herramientas internas:
 - ip-restriction whitelist: LAN `192.168.80.0/24`
@@ -175,7 +175,7 @@ Capability: NET_BIND_SERVICE
 - limit-req: 100 req/s, burst 50, HTTP 429
 - cors: `*`, métodos GET/POST/PUT/DELETE/PATCH/OPTIONS
 
-#### TLS (`ApisixTls`)
+#### TLS
 
 Certificado wildcard `*.cristianpuenguenan.online` en secret `wildcard-home-tls` (namespace `ingress`).
 
@@ -458,7 +458,7 @@ Todos apuntan a `192.168.80.20` como registro A. Certificado wildcard cubre `*.c
 | Subdominio | Servicio |
 |-----------|---------|
 | `argocd.cristianpuenguenan.online` | Argo CD |
-| `apisix.cristianpuenguenan.online` | Agent Gateway Dashboard |
+| `agentgateway.cristianpuenguenan.online` | Agent Gateway Dashboard |
 | `grafana.cristianpuenguenan.online` | Grafana |
 | `headlamp.cristianpuenguenan.online` | Headlamp |
 | `hubble.cristianpuenguenan.online` | Hubble UI (Cilium) |
