@@ -11,5 +11,5 @@ spec:
     - sonarqube.cristianpuenguenan.online
   rules:
     - backendRefs:
-        - name: sonarqube-sonarqube
+        - name: sonarqube
           port: 9000

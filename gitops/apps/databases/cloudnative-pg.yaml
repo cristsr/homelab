@@ -20,7 +20,7 @@ spec:
       ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: infra
+    namespace: databases
   syncPolicy:
     automated:
       prune: true
