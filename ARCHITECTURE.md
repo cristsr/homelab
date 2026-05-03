@@ -488,19 +488,54 @@ Estrategia: **default deny implícito** con listas blancas explícitas por names
 Plugin `internal-dashboard` en Agent Gateway:
 - LAN: `192.168.80.0/24` (ej. `192.168.80.0/24`)
 
-### Secrets que deben crearse manualmente (nunca en git)
+### Variables de entorno requeridas
 
-| Secret | Namespace | Claves |
-|--------|-----------|--------|
-| `cloudflare-api-token` | networking | `api-token` |
-| `cloudflared-token` | networking | `token` |
-| `postgresql-app-secret` | databases | `username`, `password` |
-| `mongodb-secret` | databases | Claves de sistema Percona (5 usuarios internos) |
-| `mongodb-app-secret` | databases | `password` |
-| `redis-secret` | databases | `redis-password` |
-| `flow-secrets` | apps | `database-url`, `mongodb-url`, `redis-url` |
-| `openmemory-secrets` | devtools | `OPENAI_API_KEY` |
-| `sonarqube-db-secret` | devtools | `password` |
+Los secrets se definen en Vault y se sincronizan via External Secrets. Las variables requeridas son:
+
+| Variable | Descripción | Ejemplo |
+|----------|--------------|---------|
+| **Argocd** |||
+| `argocd_github_pat` | GitHub PAT (scope repo) | `ghp_...` |
+| `argocd_repo_url` | URL del repositorio | `https://github.com/cristsr/homelab` |
+| **Infra** |||
+| `cloudflare_api_token` | Token API Cloudflare | `...` |
+| `cloudflared_token` | Token Cloudflare Tunnel | `...` |
+| **Databases** |||
+| `postgresql_username` | Usuario app PostgreSQL | `appuser` |
+| `postgresql_password` | Password PostgreSQL | `...` |
+| `redis_username` | Usuario Redis | `default` |
+| `redis_password` | Password Redis | `...` |
+| `mongodb_username` | Usuario MongoDB | `appuser` |
+| `mongodb_password` | Password MongoDB | `...` |
+| `qdrant_api_key` | API Key Qdrant | `...` |
+| **Devtools** |||
+| `openmemory_openai_api_key` | OpenAI API Key | `sk-...` |
+| `sonarqube_password` | Password SonarQube | `...` |
+| **Monitoring** |||
+| `grafana_username` | Usuario Grafana | `admin` |
+| `grafana_password` | Password Grafana | `...` |
+
+#### Crear el secret inicial
+
+```bash
+kubectl create secret generic vault-bootstrap-secrets \
+  -n vault \
+  --from-literal=argocd_github_pat='...' \
+  --from-literal=argocd_repo_url='https://github.com/cristsr/homelab' \
+  --from-literal=cloudflare_api_token='...' \
+  --from-literal=cloudflared_token='...' \
+  --from-literal=postgresql_username='appuser' \
+  --from-literal=postgresql_password='...' \
+  --from-literal=redis_username='default' \
+  --from-literal=redis_password='...' \
+  --from-literal=mongodb_username='appuser' \
+  --from-literal=mongodb_password='...' \
+  --from-literal=qdrant_api_key='...' \
+  --from-literal=openmemory_openai_api_key='sk-...' \
+  --from-literal=sonarqube_password='...' \
+  --from-literal=grafana_username='admin' \
+  --from-literal=grafana_password='...'
+```
 
 ---
 

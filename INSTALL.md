@@ -32,9 +32,9 @@ cd homelab
 
 ---
 
-## 3. Configurar bootstrap secrets
+## 3. Configurar variables de entorno
 
-Crear el secret de bootstrap directamente (no commitear):
+Crear el secret con todas las variables necesarias:
 
 ```bash
 kubectl create secret generic vault-bootstrap-secrets \
@@ -63,7 +63,7 @@ Agent Gateway Admin Key:
 openssl rand -hex 32
 ```
 
-Editar `platform/ingress/agentgateway/values.yaml` (este sí se puede commitear).
+Editar `platform/ingress/agentgateway/values.yaml`.
 
 ---
 
