@@ -18,7 +18,7 @@
 
 ## 1. Visión General
 
-Homelab de un solo nodo construido sobre k0s con GitOps completo. ArgoCD gestiona todas las aplicaciones desde este repositorio. APISIX actúa como único punto de entrada (ingress). Cloudflare Tunnel expone servicios seleccionados a Internet sin abrir puertos en el router.
+Homelab de un solo nodo construido sobre k0s con GitOps completo. ArgoCD gestiona todas las aplicaciones desde este repositorio. Agent Gateway actúa como único punto de entrada (ingress). Cloudflare Tunnel expone servicios seleccionados a Internet sin abrir puertos en el router.
 
 ### Stack tecnológico
 
@@ -26,7 +26,7 @@ Homelab de un solo nodo construido sobre k0s con GitOps completo. ArgoCD gestion
 |------|-----------|
 | Kubernetes | k0s 1.31.x |
 | CNI / NetworkPolicy | Cilium 1.18.4 (eBPF, kubeProxy replacement) |
-| Ingress / Gateway | APISIX 2.9.x (hostPort directo 80/443) |
+| Ingress / Gateway | Agent Gateway 1.1.0 (API7) |
 | GitOps | Argo CD 7.x |
 | Certificados TLS | cert-manager 1.16.2 + Let's Encrypt + Cloudflare DNS-01 |
 | Storage | Longhorn 1.7.2 |
@@ -46,24 +46,25 @@ homelab/
 ├── gitops/                  # Applications de Argo CD
 │   ├── root-app.yaml
 │   └── apps/
-│       ├── infra/           # headlamp, cloudnative-pg, reloader
+│       ├── infra/           # reloader
+│       ├── argocd/         # argocd-config
 │       ├── networking/     # cert-manager, cloudflared
-│       ├── ingress/        # APISIX (gateway, etcd, config)
+│       ├── ingress/        # Agent Gateway
+│       ├── storage/        # Longhorn
 │       ├── databases/      # PostgreSQL, MongoDB, Redis, Qdrant, operators
 │       ├── devtools/       # SonarQube, OpenMemory
 │       ├── apps/           # Flow API
-│       ├── monitoring/     # Prometheus, Grafana
-│       ├── storage/        # Longhorn
+│       ├── monitoring/     # Prometheus, Grafana, monitors, headlamp
 │       └── vault/          # OpenBao, External Secrets, vault-sync-operator
 ├── platform/                # Valores Helm y manifiestos de cada servicio
-│   ├── infra/               # headlamp
+│   ├── argocd/            # cluster secret
 │   ├── networking/         # cert-manager, cloudflared
-│   ├── ingress/            # APISIX (apisix/, apisix-etcd/)
+│   ├── ingress/            # Agent Gateway
+│   ├── storage/            # Longhorn
 │   ├── databases/          # PostgreSQL, MongoDB, Redis, Qdrant, operators
 │   ├── devtools/           # SonarQube, OpenMemory
 │   ├── apps/               # Flow API
-│   ├── monitoring/         # Prometheus, Grafana
-│   ├── storage/            # Longhorn
+│   ├── monitoring/         # Prometheus, Grafana, headlamp
 │   └── vault/              # OpenBao, External Secrets, vault-sync-operator
 ```
 
@@ -95,8 +96,8 @@ Controla el ciclo de vida de todas las aplicaciones del cluster. La `root-app` a
 
 | Parámetro | Valor |
 |-----------|-------|
-| `server.ingress.enabled` | `false` (gestionado por APISIX) |
-| `server.insecure` | `true` (TLS termina en APISIX) |
+| `server.ingress.enabled` | `false` (gestionado por Agent Gateway) |
+| `server.insecure` | `true` (TLS termina en Agent Gateway) |
 | Timeout de reconciliación | 180s |
 | RBAC por defecto | `role:readonly` |
 | Dominio | `argocd.cristianpuenguenan.online` |
@@ -107,14 +108,14 @@ Declarados en `bootstrap/namespaces.yaml`:
 
 | Namespace | Contenido |
 |-----------|-----------|
-| `infra` | Headlamp |
-| `ingress` | APISIX (gateway + IC + dashboard + etcd) |
+| `infra` | Reloader |
+| `ingress` | Agent Gateway |
 | `argocd` | Argo CD |
 | `networking` | cloudflared, cert-manager |
 | `databases` | PostgreSQL, MongoDB, Redis, Qdrant, CloudNativePG, Percona operators |
 | `devtools` | SonarQube, OpenMemory |
 | `apps` | Flow API |
-| `monitoring` | Prometheus, Grafana, Alertmanager |
+| `monitoring` | Prometheus, Grafana, Alertmanager, Headlamp |
 | `vault` | OpenBao, External Secrets, vault-sync-operator |
 | `longhorn-system` | Longhorn |
 
@@ -122,23 +123,20 @@ Declarados en `bootstrap/namespaces.yaml`:
 
 ## 3. Componentes de Plataforma
 
-### 3.1 APISIX (Ingress + Gateway)
+### 3.1 Agent Gateway (Ingress + Gateway API7)
 
-**Chart**: `apisix/apisix 2.9.0` — **Namespace**: `ingress`
+**Chart**: `oci://cr.agentgateway.dev/charts/agentgateway 1.1.0` — **Namespace**: `ingress`
 
-Punto de entrada único al cluster. Escucha en puertos 80 y 443 via `hostPort` directo en la IP del nodo (`192.168.80.20`). Gestiona TLS, autenticación, rate limiting y routing hacia backends internos.
+Punto de entrada único al cluster. Escucha en puertos 80 y 443 via `hostPort` directo en la IP del nodo (`192.168.80.20`).
 
 #### Sub-componentes
 
 | Componente | Puerto | Descripción |
 |-----------|--------|-------------|
-| APISIX Gateway | 80, 443 (hostPort) | Ingress principal, datos HTTP/HTTPS |
-| Admin API | 9180 (ClusterIP) | Configuración, protegido por NetworkPolicy |
-| Dashboard | 9000 (ClusterIP) | UI de administración, acceso via APISIX Route |
-| etcd | 2379 (ClusterIP) | Almacena config de rutas (PVC 2Gi Longhorn) |
-| Ingress Controller | — | Reconcilia CRDs de APISIX → etcd |
+| Agent Gateway | 80, 443 (hostPort) | Ingress principal, datos HTTP/HTTPS |
+| Dashboard | 9000 (ClusterIP) | UI de administración, acceso via Agent Gateway Route |
 
-#### Recursos APISIX Gateway
+#### Recursos Agent Gateway
 
 ```
 Requests: CPU 100m / RAM 128Mi
@@ -150,7 +148,7 @@ Capability: NET_BIND_SERVICE
 
 | Subdominio | Path | Backend | Namespace | Plugin |
 |-----------|------|---------|-----------|--------|
-| `apisix.cristianpuenguenan.online` | `/*` | apisix-dashboard:9000 | ingress | internal-dashboard |
+| `agentgateway.cristianpuenguenan.online` | `/*` | agent-gateway:9000 | ingress | internal-dashboard |
 | `argocd.cristianpuenguenan.online` | `/*` | argocd-server:80 | argocd | internal-dashboard |
 | `grafana.cristianpuenguenan.online` | `/*` | kube-prometheus-stack-grafana:80 | monitoring | internal-dashboard |
 | `headlamp.cristianpuenguenan.online` | `/*` | headlamp:80 | infra | internal-dashboard |
@@ -161,7 +159,7 @@ Capability: NET_BIND_SERVICE
 | `api.cristianpuenguenan.online` | `/flow/*` | flow:8000 | apps | public-api (JWT) |
 | `api.cristianpuenguenan.online` | `/webhooks/*` | flow:8000 | apps | rate-limit 20/s |
 
-#### Plugins globales (`ApisixGlobalRule`)
+#### Plugins globales
 
 - **real-ip**: detecta IP real del cliente detrás de Cloudflare Tunnel  
   Trusted addresses: `127.0.0.1`
@@ -231,7 +229,7 @@ Dashboard web de solo lectura para inspeccionar el estado del cluster.
 |-----------|-------|
 | `inCluster` | `true` |
 | Service | ClusterIP:80 |
-| Acceso | `headlamp.cristianpuenguenan.online` via APISIX |
+| Acceso | `headlamp.cristianpuenguenan.online` via Agent Gateway |
 
 ---
 
@@ -251,7 +249,7 @@ Limits:   CPU 500m / RAM 512Mi
 Secrets:  flow-secrets (DATABASE_URL, REDIS_URL)
 ```
 
-Rutas APISIX:
+Rutas Agent Gateway:
 - `flow.cristianpuenguenan.online/*` → acceso interno (ip-restriction)
 - `api.cristianpuenguenan.online/flow/*` → API pública (JWT + rate-limit)
 - `api.cristianpuenguenan.online/webhooks/*` → webhooks públicos (rate-limit 20/s)
@@ -411,7 +409,6 @@ Prometheus descubre ServiceMonitors de **todos los namespaces** (`serviceMonitor
 
 | Monitor | Target | Path | Intervalo |
 |---------|--------|------|-----------|
-| APISIX | `ingress/apisix` puerto `prometheus` | `/apisix/prometheus/metrics` | 30s |
 | Longhorn | `longhorn-system/longhorn-manager` puerto `manager` | `/metrics` | 30s |
 
 ---
@@ -424,11 +421,11 @@ Prometheus descubre ServiceMonitors de **todos los namespaces** (`serviceMonitor
 Internet
   └── Cloudflare (DNS + WAF)
         └── Cloudflare Tunnel (egreso desde cloudflared)
-              └── APISIX :443 (hostPort en 192.168.80.20)
+              └── Agent Gateway :443 (hostPort en 192.168.80.20)
                     └── Backend ClusterIP (por ruta)
 
 LAN
-  └── APISIX :443 (hostPort en 192.168.80.20)
+  └── Agent Gateway :443 (hostPort en 192.168.80.20)
         └── Backend ClusterIP (por ruta)
 
 Tailscale → SSH al host (mantenimiento del servidor, fuera del cluster)
@@ -438,8 +435,8 @@ Tailscale → SSH al host (mantenimiento del servidor, fuera del cluster)
 
 | Puerto | Protocolo | Descripción |
 |--------|-----------|-------------|
-| 80 | TCP | APISIX HTTP (redirige a HTTPS) |
-| 443 | TCP | APISIX HTTPS (TLS wildcard) |
+| 80 | TCP | Agent Gateway HTTP (redirige a HTTPS) |
+| 443 | TCP | Agent Gateway HTTPS (TLS wildcard) |
 
 ### Puertos internos (ClusterIP)
 
@@ -450,8 +447,6 @@ Tailscale → SSH al host (mantenimiento del servidor, fuera del cluster)
 | Redis | 6379 | databases |
 | Qdrant REST | 6333 | databases |
 | Qdrant gRPC | 6334 | databases |
-| APISIX Admin API | 9180 | ingress |
-| etcd (APISIX) | 2379 | ingress |
 | Flow API | 8000 | apps |
 | OpenMemory | 8080 | devtools |
 | Prometheus | 9090 | monitoring |
@@ -463,7 +458,7 @@ Todos apuntan a `192.168.80.20` como registro A. Certificado wildcard cubre `*.c
 | Subdominio | Servicio |
 |-----------|---------|
 | `argocd.cristianpuenguenan.online` | Argo CD |
-| `apisix.cristianpuenguenan.online` | APISIX Dashboard |
+| `apisix.cristianpuenguenan.online` | Agent Gateway Dashboard |
 | `grafana.cristianpuenguenan.online` | Grafana |
 | `headlamp.cristianpuenguenan.online` | Headlamp |
 | `hubble.cristianpuenguenan.online` | Hubble UI (Cilium) |
@@ -482,8 +477,7 @@ Estrategia: **default deny implícito** con listas blancas explícitas por names
 
 | Recurso | Ingress permitido | Puerto |
 |---------|------------------|--------|
-| APISIX Admin API | Ingress Controller, Dashboard | 9180 |
-| APISIX datos | Cualquier origen (hostPort) | 9080, 9443 |
+| Agent Gateway datos | Cualquier origen (hostPort) | 80, 443 |
 | PostgreSQL | `apps`, `devtools` | 5432 |
 | MongoDB | `apps`, `devtools` | 27017 |
 | Redis | `apps`, `devtools` | 6379 |
@@ -491,7 +485,7 @@ Estrategia: **default deny implícito** con listas blancas explícitas por names
 
 ### Restricción de IP en dashboards
 
-Plugin `internal-dashboard` en APISIX:
+Plugin `internal-dashboard` en Agent Gateway:
 - LAN: `192.168.80.0/24` (ej. `192.168.80.0/24`)
 
 ### Secrets que deben crearse manualmente (nunca en git)
@@ -517,13 +511,12 @@ Argo CD despliega las aplicaciones en orden via `sync-wave`. La `root-app` apunt
 ```
 root-app (gitops/root-app.yaml)
   └── App of Apps (gitops/apps/)
-        ├── Wave 1:  Longhorn (storage), cert-manager (networking), cloudnative-pg (databases), percona-mongodb-operator (databases)
-        ├── Wave 2:  cert-manager-config (ClusterIssuer + Certificate)
-        ├── Wave 3:  APISIX (Helm)
-        ├── Wave 4:  apisix-config (Routes, PluginConfigs, TLS)
-        ├── Wave 5:  kube-prometheus-stack, cloudflared, headlamp
-        ├── Wave 6:  PostgreSQL (Cluster), MongoDB (PSMDB), Redis, Qdrant, ServiceMonitors
-        ├── Wave 7:  NetworkPolicies de bases de datos
+        ├── Wave 1:  Longhorn, cert-manager, cloudnative-pg, percona-mongodb, reloader
+        ├── Wave 2:  OpenBao, External Secrets, vault-sync-operator, cert-manager-config
+        ├── Wave 3:  Agent Gateway (Helm)
+        ├── Wave 4:  agentgateway-config, argocd-config
+        ├── Wave 5:  monitoring (prometheus, grafana), cloudflared, headlamp, argocd-config
+        ├── Wave 6:  PostgreSQL, MongoDB, Redis, Qdrant
         ├── Wave 8:  SonarQube, OpenMemory
         └── Wave 9:  Flow API
 ```
@@ -531,13 +524,15 @@ root-app (gitops/root-app.yaml)
 ### Dependencias implícitas entre componentes
 
 ```
-Longhorn (longhorn-system) ─────────► etcd APISIX, PostgreSQL, MongoDB,
+Longhorn (longhorn-system) ─────────► PostgreSQL, MongoDB,
                                       Redis, Qdrant, Prometheus, Grafana,
                                       SonarQube
 
-cert-manager ──► certificate ──────► wildcard-home-tls ──► APISIX TLS
+cert-manager ──► certificate ──────► wildcard-home-tls ──► Agent Gateway TLS
 
-APISIX ────────────────────────────► Todas las rutas de acceso externo
+Agent Gateway ────────────────────────────► Todas las rutas de acceso externo
+
+OpenBao ──► External Secrets ──► Secrets en cluster
 
 PostgreSQL ────────────────────────► SonarQube, Flow API
 
@@ -552,7 +547,6 @@ Qdrant ────────────────────────�
 
 | Componente | Tamaño |
 |-----------|--------|
-| etcd (APISIX) | 2Gi |
 | PostgreSQL | 10Gi |
 | MongoDB | 10Gi |
 | Redis | 5Gi |
@@ -560,7 +554,7 @@ Qdrant ────────────────────────�
 | Prometheus | 20Gi |
 | Grafana | 5Gi |
 | SonarQube | 10Gi |
-| **Total** | **~72Gi** |
+| **Total** | **~60Gi** |
 
 ### Recursos de CPU y RAM (estimado total)
 
@@ -587,55 +581,67 @@ kubectl apply -f bootstrap/namespaces.yaml
 
 # 3. Instalar Cilium (CNI, antes que cualquier otra cosa)
 helm repo add cilium https://helm.cilium.io
-helm install cilium cilium/cilium -n kube-system -f bootstrap/cilium/values.yaml
+helm repo update
+
+helm upgrade --install cilium cilium/cilium \
+  --namespace kube-system \
+  --version 1.18.4 \
+  -f bootstrap/cilium/values.yaml
 
 # 4. Instalar Argo CD (bootstrap manual, luego se autogestiona)
 helm repo add argo https://argoproj.github.io/argo-helm
-helm install argocd argo/argo-cd -n argocd -f bootstrap/argocd/values.yaml
+helm repo update
 
-# 5. Crear secrets manuales (jamás se commitean)
-# PostgreSQL (CloudNativePG)
-kubectl create secret generic postgresql-app-secret \
-  --from-literal=username=admin --from-literal=password=admin -n databases
+helm upgrade --install argocd argo/argo-cd \
+  --namespace argocd \
+  --version 7.8.0 \
+  -f bootstrap/argocd/values.yaml
 
-# MongoDB (Percona Operator) — usuarios de sistema internos
-kubectl create secret generic mongodb-secret \
-  --from-literal=MONGODB_BACKUP_USER=backup --from-literal=MONGODB_BACKUP_PASSWORD=admin \
-  --from-literal=MONGODB_DATABASE_ADMIN_USER=databaseAdmin --from-literal=MONGODB_DATABASE_ADMIN_PASSWORD=admin \
-  --from-literal=MONGODB_CLUSTER_ADMIN_USER=clusterAdmin --from-literal=MONGODB_CLUSTER_ADMIN_PASSWORD=admin \
-  --from-literal=MONGODB_CLUSTER_MONITOR_USER=clusterMonitor --from-literal=MONGODB_CLUSTER_MONITOR_PASSWORD=admin \
-  --from-literal=MONGODB_USER_ADMIN_USER=userAdmin --from-literal=MONGODB_USER_ADMIN_PASSWORD=admin \
-  -n databases
+# 5. Obtener kubeconfig
+sudo cp /etc/k0s/k0s.yaml ~/.kube/config
+sudo chown $USER:$USER ~/.kube/config
+chmod 600 ~/.kube/config
 
-# MongoDB — usuario de aplicación
-kubectl create secret generic mongodb-app-secret \
-  --from-literal=password=admin -n databases
+# 6. Crear cluster secret para ArgoCD
+CA_DATA=$(kubectl get configmap kube-root-ca.crt \
+  -n kube-system -o jsonpath='{.data.ca\.crt}' | base64 -w0)
 
-# Redis
-kubectl create secret generic redis-secret \
-  --from-literal=redis-password=admin -n databases
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: in-cluster-secret
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: cluster
+type: Opaque
+data:
+  server: $(echo -n "https://kubernetes.default.svc" | base64 -w0)
+  name: $(echo -n "in-cluster" | base64 -w0)
+  config: $(echo -n "{\"tlsClientConfig\":{\"insecure\":false,\"caData\":\"${CA_DATA}\"}}" | base64 -w0)
+EOF
 
-# Aplicaciones
-kubectl create secret generic flow-secrets \
-  --from-literal=database-url="postgresql://admin:admin@postgresql-rw.databases.svc.cluster.local:5432/homelab" \
-  --from-literal=mongodb-url="mongodb://admin:admin@mongodb-rs0.databases.svc.cluster.local:27017/homelab?replicaSet=rs0&authSource=homelab" \
-  --from-literal=redis-url="redis://:admin@redis-master.databases.svc.cluster.local:6379" \
-  -n apps
+# 7. Registrar repositorio privado en ArgoCD
+# Crear Personal Access Token en GitHub con scope 'repo'
+kubectl -n argocd create secret generic homelab-repo \
+  --from-literal=type=git \
+  --from-literal=url=https://github.com/cristsr/homelab \
+  --from-literal=username=cristsr \
+  --from-literal=password=TU_GITHUB_PAT \
+  --dry-run=client -o yaml | kubectl apply -f -
 
-kubectl create secret generic openmemory-secrets \
-  --from-literal=OPENAI_API_KEY=sk-... -n devtools
+kubectl -n argocd label secret homelab-repo \
+  argocd.argoproj.io/secret-type=repository \
+  --overwrite
 
-kubectl create secret generic sonarqube-db-secret \
-  --from-literal=password=admin -n devtools
-
-kubectl create secret generic cloudflare-api-token \
-  --from-literal=api-token=TU_TOKEN -n cert-manager
-
-kubectl create secret generic cloudflared-token \
-  --from-literal=token=TU_TUNNEL_TOKEN -n infra
-
-# 6. Activar GitOps — Argo CD despliega todo en orden automáticamente
+# 8. Aplicar root-app (ArgoCD despliega el resto)
 kubectl apply -f gitops/root-app.yaml
+
+# 9. Desbloquear Longhorn (si es necesario)
+kubectl create serviceaccount longhorn-service-account -n argocd
+kubectl create clusterrolebinding longhorn-pre-upgrade-temp \
+  --clusterrole=cluster-admin \
+  --serviceaccount=argocd:longhorn-service-account
 ```
 
 A partir del paso 8, Argo CD sincroniza el estado del cluster con el repositorio Git siguiendo el orden de sync-waves definido.
