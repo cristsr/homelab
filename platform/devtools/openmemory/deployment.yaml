@@ -29,7 +29,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: openmemory-secrets
-                  key: openai-api-key
+                  key: OPENAI_API_KEY
           resources:
             requests:
               cpu: 50m

@@ -1,2 +1,4 @@
-# Generated with: helm template cilium cilium/cilium --namespace kube-system --version 1.18.4 -f bootstrap/cilium/values.yaml > bootstrap/cilium/manifests.yaml
-# NOTE: This is a placeholder - actual file must be generated with the command above
+# GENERATE MANUALLY before deployment:
+# helm repo add cilium https://helm.cilium.io
+# helm template cilium cilium/cilium --namespace kube-system --version 1.18.4 -f bootstrap/cilium/values.yaml > bootstrap/cilium/manifests.yaml
+# Then apply: kubectl apply -f bootstrap/cilium/manifests.yaml
