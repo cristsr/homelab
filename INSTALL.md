@@ -63,7 +63,7 @@ cd homelab
 
 Antes de activar GitOps hay que reemplazar los valores `REEMPLAZAR_CON_*` en los archivos de values.
 
-### 3.1 APISIX Admin Key
+### 3.1 Agent Gateway Admin Key
 
 Generar una clave aleatoria:
 
@@ -71,7 +71,7 @@ Generar una clave aleatoria:
 openssl rand -hex 32
 ```
 
-Editar `platform/ingress/values.yaml` y reemplazar:
+Editar `platform/ingress/agentgateway/values.yaml` y reemplazar:
 
 ```yaml
 adminKey: "REEMPLAZAR_CON_ADMIN_KEY"
@@ -173,34 +173,12 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 
 > Guardar esta contraseña. Se puede cambiar después desde la UI de ArgoCD en `User Info → Update Password`.
 
-### 6.1 Crear el cluster secret
+### 6.1 Crear el cluster secret (opcional)
 
-ArgoCD necesita un secret con las credenciales de conexión al cluster.
-
-```bash
-CA_DATA=$(kubectl get configmap kube-root-ca.crt \
-  -n kube-system -o jsonpath='{.data.ca\.crt}' | base64 -w0)
-
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: in-cluster-secret
-  namespace: argocd
-  labels:
-    argocd.argoproj.io/secret-type: cluster
-type: Opaque
-data:
-  server: $(echo -n "https://kubernetes.default.svc" | base64 -w0)
-  name: $(echo -n "in-cluster" | base64 -w0)
-  config: $(echo -n "{\"tlsClientConfig\":{\"insecure\":false,\"caData\":\"${CA_DATA}\"}}" | base64 -w0)
-EOF
-```
-
-Verificar que ArgoCD reconoce el cluster:
+ArgoCD ya tiene el cluster secretdefinido en `platform/argocd/in-cluster-secret.yaml`. Si las aplicaciones están en `Unknown`, aplicarlo manualmente:
 
 ```bash
-kubectl -n argocd get secrets -l argocd.argoproj.io/secret-type=cluster
+kubectl apply -f platform/argocd/in-cluster-secret.yaml
 ```
 
 > Si ArgoCD ya estaba instalado y las aplicaciones están en `Unknown`, crear el secret y reiniciar el controller:
@@ -388,7 +366,7 @@ ArgoCD comenzará a sincronizar en este orden:
 | 2 | OpenBao (vault) |
 | 3 | External Secrets Operator |
 | 4 | cert-manager-config (ClusterIssuer + Certificate) |
-| 5 | APISIX |
+| 5 | Agent Gateway |
 | 6 | apisix-config (Routes, PluginConfigs, TLS) |
 | 7 | kube-prometheus-stack, cloudflared, headlamp |
 | 8 | PostgreSQL, MongoDB, Redis, Qdrant, ServiceMonitors |
@@ -459,7 +437,7 @@ Todos los servicios son accesibles en `https://<subdominio>.cristianpuenguenan.o
 |-----|---------|--------------|
 | `https://argocd.cristianpuenguenan.online` | Argo CD | `admin` / contraseña del paso 6 |
 | `https://grafana.cristianpuenguenan.online` | Grafana | `admin` / contraseña configurada en paso 3.3 |
-| `https://apisix.cristianpuenguenan.online` | APISIX Dashboard | `admin` / `admin` (cambiar al entrar) |
+| `https://agentgateway.cristianpuenguenan.online` | Agent Gateway Dashboard | `admin` / `admin` (cambiar al entrar) |
 | `https://headlamp.cristianpuenguenan.online` | Headlamp | Token de ServiceAccount |
 | `https://hubble.cristianpuenguenan.online` | Hubble UI | Sin auth |
 | `https://sonarqube.cristianpuenguenan.online` | SonarQube | `admin` / `admin` |
