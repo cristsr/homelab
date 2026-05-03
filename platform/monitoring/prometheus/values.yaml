@@ -1,0 +1,60 @@
+# kube-prometheus-stack 83.x - solo operator (sin Prometheus/Grafana/Alertmanager)
+# Estos se despliegan como CRs después
+
+prometheus:
+  enabled: false
+
+alertmanager:
+  enabled: false
+
+grafana:
+  enabled: false
+
+prometheus-node-exporter:
+  enabled: true
+
+kube-state-metrics:
+  enabled: true
+
+# Deshabilitar todo lo innecesario
+defaultRules:
+  create: false
+
+crds:
+  enabled: true
+
+kubeApiServer:
+  enabled: false
+
+kubelet:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+coreDns:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeProxy:
+  enabled: false
+
+kubelet:
+  enabled: false
+
+kubeDns:
+  enabled: false
+
+kubernetesServiceMonitors:
+  enabled: false
+
+prometheus:
+  enabled: false
+
+prometheus-windows-exporter:
+  enabled: false
