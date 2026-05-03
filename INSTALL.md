@@ -34,27 +34,36 @@ cd homelab
 
 ## 3. Configurar bootstrap secrets
 
-Las contraseñas se definen en `platform/vault/secrets/bootstrap.yaml`:
+Crear el secret de bootstrap directamente (no commitear):
 
-```yaml
-grafana_password: "TU_PASSWORD_SEGURA"
+```bash
+kubectl create secret generic vault-bootstrap-secrets \
+  -n vault \
+  --from-literal=argocd_github_pat='TU_GITHUB_PAT' \
+  --from-literal=argocd_repo_url='https://github.com/cristsr/homelab' \
+  --from-literal=dockerhub_password='TU_DOCKERHUB_PASSWORD' \
+  --from-literal=cloudflare_api_token='TU_CLOUDFLARE_API_TOKEN' \
+  --from-literal=cloudflared_token='TU_CLOUDFLARE_TUNNEL_TOKEN' \
+  --from-literal=postgresql_username='appuser' \
+  --from-literal=postgresql_password='TU_POSTGRES_PASSWORD' \
+  --from-literal=redis_username='default' \
+  --from-literal=redis_password='TU_REDIS_PASSWORD' \
+  --from-literal=mongodb_username='appuser' \
+  --from-literal=mongodb_password='TU_MONGODB_PASSWORD' \
+  --from-literal=qdrant_api_key='TU_QDRANT_API_KEY' \
+  --from-literal=openmemory_openai_api_key='TU_OPENAI_KEY' \
+  --from-literal=sonarqube_password='TU_SONARQUBE_PASSWORD' \
+  --from-literal=grafana_username='admin' \
+  --from-literal=grafana_password='TU_GRAFANA_PASSWORD'
 ```
 
-Generar Admin Key para Agent Gateway:
+Agent Gateway Admin Key:
 
 ```bash
 openssl rand -hex 32
 ```
 
-Editar `platform/ingress/agentgateway/values.yaml`.
-
-Commitear:
-
-```bash
-git add platform/vault/secrets/bootstrap.yaml platform/ingress/agentgateway/values.yaml
-git commit -m "chore: set passwords"
-git push
-```
+Editar `platform/ingress/agentgateway/values.yaml` (este sí se puede commitear).
 
 ---
 
