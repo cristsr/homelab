@@ -34,7 +34,7 @@ cd homelab
 
 ## 3. Configurar variables de entorno
 
-Crear el secret con todas las variables necesarias:
+Crear el secret con todas las variables necesarias (generar admin key con `openssl rand -hex 32`):
 
 ```bash
 kubectl create secret generic vault-bootstrap-secrets \
@@ -54,16 +54,9 @@ kubectl create secret generic vault-bootstrap-secrets \
   --from-literal=openmemory_openai_api_key='TU_OPENAI_KEY' \
   --from-literal=sonarqube_password='TU_SONARQUBE_PASSWORD' \
   --from-literal=grafana_username='admin' \
-  --from-literal=grafana_password='TU_GRAFANA_PASSWORD'
+  --from-literal=grafana_password='TU_GRAFANA_PASSWORD' \
+  --from-literal=agent_gateway_admin_key='TU_ADMIN_KEY'
 ```
-
-Agent Gateway Admin Key:
-
-```bash
-openssl rand -hex 32
-```
-
-Editar `platform/ingress/agentgateway/values.yaml`.
 
 ---
 
