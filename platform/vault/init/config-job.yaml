@@ -119,8 +119,9 @@ spec:
                   # Map key to KV path
                   case "$key" in
                     argocd_github_pat)
-                      bao kv put secret/argocd github_pat="$value"
-                      echo "  secret/argocd -> github_pat"
+                      ARGO_URL=$(kubectl get secret vault-bootstrap-secrets -n vault -o jsonpath='{.data.argocd_repo_url}' | base64 -d)
+                      bao kv put secret/argocd username="x-access-token" github_pat="$value" url="$ARGO_URL"
+                      echo "  secret/argocd -> github_pat, username, url"
                       ;;
                     dockerhub_password)
                       bao kv put secret/dockerhub password="$value"
