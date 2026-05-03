@@ -111,8 +111,8 @@ spec:
                 for key in $KEYS; do
                   value=$(kubectl get secret vault-bootstrap-secrets -n vault -o jsonpath="{.data.$key}" | base64 -d)
 
-                  # Skip DUMMY values
-                  if [[ "$value" == DUMMY_* ]]; then
+                  # Skip DUMMY or REEMPLAZAR values
+                  if [[ "$value" == DUMMY_* ]] || [[ "$value" == REEMPLAZAR_* ]]; then
                     continue
                   fi
 
