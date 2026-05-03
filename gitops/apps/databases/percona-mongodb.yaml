@@ -10,8 +10,13 @@ spec:
   project: default
   sources:
     - repoURL: https://percona.github.io/percona-helm-charts
+      chart: psmdb-operator-crds
+      targetRevision: "1.22.0"
+      helm:
+        releaseName: percona-mongodb-operator-crds
+    - repoURL: https://percona.github.io/percona-helm-charts
       chart: psmdb-operator
-      targetRevision: "1.17.0"
+      targetRevision: "1.22.0"
       helm:
         releaseName: percona-mongodb-operator
         valueFiles:

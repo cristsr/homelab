@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/infra/cloudflared
+    path: platform/networking/cloudflared
     directory:
       exclude: "secret.yaml"
   destination:

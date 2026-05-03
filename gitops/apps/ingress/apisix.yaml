@@ -11,7 +11,7 @@ spec:
   sources:
     - repoURL: https://charts.apiseven.com
       chart: apisix
-      targetRevision: "2.9.0"
+      targetRevision: "2.14.0"
       helm:
         releaseName: apisix
         valueFiles:

@@ -14,13 +14,13 @@ spec:
       helm:
         releaseName: headlamp
         valueFiles:
-          - $values/platform/infra/headlamp/values.yaml
+          - $values/platform/monitoring/headlamp/values.yaml
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: infra
+    namespace: monitoring
   ignoreDifferences:
     - group: apps
       kind: Deployment
