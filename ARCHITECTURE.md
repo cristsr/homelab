@@ -25,7 +25,7 @@ Homelab de un solo nodo construido sobre k0s con GitOps completo. ArgoCD gestion
 | Capa | Tecnología |
 |------|-----------|
 | Kubernetes | k0s 1.31.x |
-| CNI / NetworkPolicy | Cilium 1.16.x (eBPF, kubeProxy replacement) |
+| CNI / NetworkPolicy | Cilium 1.18.4 (eBPF, kubeProxy replacement) |
 | Ingress / Gateway | APISIX 2.9.x (hostPort directo 80/443) |
 | GitOps | Argo CD 7.x |
 | Certificados TLS | cert-manager 1.16.2 + Let's Encrypt + Cloudflare DNS-01 |
@@ -46,19 +46,25 @@ homelab/
 ├── gitops/                  # Applications de Argo CD
 │   ├── root-app.yaml
 │   └── apps/
-│       ├── infra/           # cert-manager, headlamp, longhorn, cloudflared, operators
-│       ├── ingress/         # APISIX (gateway, etcd, config)
-│       ├── databases/
-│       ├── dev-tools/
-│       ├── apps/
-│       └── monitoring/
+│       ├── infra/           # headlamp, cloudnative-pg, reloader
+│       ├── networking/     # cert-manager, cloudflared
+│       ├── ingress/        # APISIX (gateway, etcd, config)
+│       ├── databases/      # PostgreSQL, MongoDB, Redis, Qdrant, operators
+│       ├── devtools/       # SonarQube, OpenMemory
+│       ├── apps/           # Flow API
+│       ├── monitoring/     # Prometheus, Grafana
+│       ├── storage/        # Longhorn
+│       └── vault/          # OpenBao, External Secrets, vault-sync-operator
 ├── platform/                # Valores Helm y manifiestos de cada servicio
-│   ├── infra/               # cert-manager, headlamp, longhorn, cloudflared, operators
-│   ├── ingress/             # APISIX (apisix/, apisix-etcd/)
-│   ├── databases/
-│   ├── apps/
-│   ├── dev-tools/
-│   └── monitoring/
+│   ├── infra/               # headlamp
+│   ├── networking/         # cert-manager, cloudflared
+│   ├── ingress/            # APISIX (apisix/, apisix-etcd/)
+│   ├── databases/          # PostgreSQL, MongoDB, Redis, Qdrant, operators
+│   ├── devtools/           # SonarQube, OpenMemory
+│   ├── apps/               # Flow API
+│   ├── monitoring/         # Prometheus, Grafana
+│   ├── storage/            # Longhorn
+│   └── vault/              # OpenBao, External Secrets, vault-sync-operator
 ```
 
 ---
@@ -101,15 +107,16 @@ Declarados en `bootstrap/namespaces.yaml`:
 
 | Namespace | Contenido |
 |-----------|-----------|
-| `infra` | Headlamp, CloudNativePG operator |
+| `infra` | Headlamp |
 | `ingress` | APISIX (gateway + IC + dashboard + etcd) |
 | `argocd` | Argo CD |
 | `networking` | cloudflared, cert-manager |
-| `databases` | PostgreSQL, MongoDB, Redis, Qdrant, Percona operator |
+| `databases` | PostgreSQL, MongoDB, Redis, Qdrant, CloudNativePG, Percona operators |
 | `devtools` | SonarQube, OpenMemory |
 | `apps` | Flow API |
 | `monitoring` | Prometheus, Grafana, Alertmanager |
-| `vault` | OpenBao, External Secrets |
+| `vault` | OpenBao, External Secrets, vault-sync-operator |
+| `longhorn-system` | Longhorn |
 
 ---
 
@@ -148,8 +155,8 @@ Capability: NET_BIND_SERVICE
 | `grafana.cristianpuenguenan.online` | `/*` | kube-prometheus-stack-grafana:80 | monitoring | internal-dashboard |
 | `headlamp.cristianpuenguenan.online` | `/*` | headlamp:80 | infra | internal-dashboard |
 | `hubble.cristianpuenguenan.online` | `/*` | hubble-ui:80 | kube-system | internal-dashboard |
-| `openmemory.cristianpuenguenan.online` | `/*` | openmemory:8080 | dev-tools | internal-dashboard |
-| `sonarqube.cristianpuenguenan.online` | `/*` | sonarqube-sonarqube:9000 | dev-tools | internal-dashboard |
+| `openmemory.cristianpuenguenan.online` | `/*` | openmemory:8080 | devtools | internal-dashboard |
+| `sonarqube.cristianpuenguenan.online` | `/*` | sonarqube-sonarqube:9000 | devtools | internal-dashboard |
 | `flow.cristianpuenguenan.online` | `/*` | flow:8000 | apps | internal-dashboard |
 | `api.cristianpuenguenan.online` | `/flow/*` | flow:8000 | apps | public-api (JWT) |
 | `api.cristianpuenguenan.online` | `/webhooks/*` | flow:8000 | apps | rate-limit 20/s |
@@ -176,7 +183,7 @@ Certificado wildcard `*.cristianpuenguenan.online` en secret `wildcard-home-tls`
 
 ### 3.2 cert-manager
 
-**Chart**: `jetstack/cert-manager 1.16.2` — **Namespace**: `cert-manager`
+**Chart**: `jetstack/cert-manager 1.16.2` — **Namespace**: `networking`
 
 Automatiza la emisión y renovación de certificados TLS.
 
@@ -191,7 +198,7 @@ Automatiza la emisión y renovación de certificados TLS.
 
 ### 3.3 Longhorn (Storage)
 
-**Chart**: `longhorn/longhorn 1.7.2` — **Namespace**: `infra`
+**Chart**: `longhorn/longhorn 1.7.2` — **Namespace**: `longhorn-system`
 
 CSI StorageClass por defecto del cluster. En nodo único, las réplicas se configuran en 1.
 
@@ -204,7 +211,7 @@ CSI StorageClass por defecto del cluster. En nodo único, las réplicas se confi
 
 ### 3.4 Cloudflared (Túnel Internet)
 
-**Imagen**: `cloudflare/cloudflared:latest` — **Namespace**: `infra`
+**Imagen**: `cloudflare/cloudflared:latest` — **Namespace**: `networking`
 
 Establece un túnel cifrado saliente hacia Cloudflare sin necesidad de abrir puertos en el router. Los dominios que se exponen públicamente se configuran en el dashboard de Cloudflare Tunnel.
 
@@ -251,7 +258,7 @@ Rutas APISIX:
 
 ### 4.2 OpenMemory (MCP + Vector Memory)
 
-**Namespace**: `dev-tools` — **Imagen**: `mem0ai/openmemory-mcp:latest`
+**Namespace**: `devtools` — **Imagen**: `mem0ai/openmemory-mcp:latest`
 
 Agente de memoria vectorial para LLMs. Almacena embeddings en Qdrant.
 
@@ -267,7 +274,7 @@ Secrets:  openmemory-secrets (OPENAI_API_KEY)
 
 ### 4.3 SonarQube Community
 
-**Chart**: `SonarSource/sonarqube 10.7.0` — **Namespace**: `dev-tools`
+**Chart**: `SonarSource/sonarqube 10.7.0` — **Namespace**: `devtools`
 
 Análisis estático de calidad de código.
 
@@ -304,7 +311,7 @@ El operador gestiona el ciclo de vida completo: bootstrapping, backups, upgrades
 | Storage | 10Gi (longhorn) |
 | Requests | CPU 100m / RAM 256Mi |
 | Limits | CPU 500m / RAM 512Mi |
-| Acceso desde | `apps`, `dev-tools` |
+| Acceso desde | `apps`, `devtools` |
 | Métricas | PodMonitor integrado |
 
 #### Servicios generados por el operador
@@ -340,7 +347,7 @@ Equivalente open source al MongoDB Enterprise Operator. Provee replica sets, bac
 | Storage | 10Gi (longhorn) |
 | Requests | CPU 100m / RAM 256Mi |
 | Limits | CPU 500m / RAM 512Mi |
-| Acceso desde | `apps`, `dev-tools` |
+| Acceso desde | `apps`, `devtools` |
 
 #### Servicios generados por el operador
 
@@ -367,7 +374,7 @@ mongodb://admin:admin@mongodb-rs0.databases.svc.cluster.local:27017/homelab?repl
 | Storage | 5Gi (longhorn) |
 | Requests | CPU 50m / RAM 128Mi |
 | Limits | CPU 200m / RAM 256Mi |
-| Acceso desde | `apps`, `dev-tools` |
+| Acceso desde | `apps`, `devtools` |
 
 ### 5.4 Qdrant (Vector DB)
 
@@ -380,7 +387,7 @@ mongodb://admin:admin@mongodb-rs0.databases.svc.cluster.local:27017/homelab?repl
 | Storage | 10Gi (longhorn) |
 | Requests | CPU 100m / RAM 256Mi |
 | Limits | CPU 500m / RAM 1Gi |
-| Acceso desde | `dev-tools` únicamente |
+| Acceso desde | `devtools` únicamente |
 
 ---
 
@@ -405,7 +412,7 @@ Prometheus descubre ServiceMonitors de **todos los namespaces** (`serviceMonitor
 | Monitor | Target | Path | Intervalo |
 |---------|--------|------|-----------|
 | APISIX | `ingress/apisix` puerto `prometheus` | `/apisix/prometheus/metrics` | 30s |
-| Longhorn | `infra/longhorn-manager` puerto `manager` | `/metrics` | 30s |
+| Longhorn | `longhorn-system/longhorn-manager` puerto `manager` | `/metrics` | 30s |
 
 ---
 
@@ -446,7 +453,7 @@ Tailscale → SSH al host (mantenimiento del servidor, fuera del cluster)
 | APISIX Admin API | 9180 | ingress |
 | etcd (APISIX) | 2379 | ingress |
 | Flow API | 8000 | apps |
-| OpenMemory | 8080 | dev-tools |
+| OpenMemory | 8080 | devtools |
 | Prometheus | 9090 | monitoring |
 
 ### DNS y subdominios
@@ -477,10 +484,10 @@ Estrategia: **default deny implícito** con listas blancas explícitas por names
 |---------|------------------|--------|
 | APISIX Admin API | Ingress Controller, Dashboard | 9180 |
 | APISIX datos | Cualquier origen (hostPort) | 9080, 9443 |
-| PostgreSQL | `apps`, `dev-tools` | 5432 |
-| MongoDB | `apps`, `dev-tools` | 27017 |
-| Redis | `apps`, `dev-tools` | 6379 |
-| Qdrant | `dev-tools` | 6333, 6334 |
+| PostgreSQL | `apps`, `devtools` | 5432 |
+| MongoDB | `apps`, `devtools` | 27017 |
+| Redis | `apps`, `devtools` | 6379 |
+| Qdrant | `devtools` | 6333, 6334 |
 
 ### Restricción de IP en dashboards
 
@@ -491,15 +498,15 @@ Plugin `internal-dashboard` en APISIX:
 
 | Secret | Namespace | Claves |
 |--------|-----------|--------|
-| `cloudflare-api-token` | cert-manager | `api-token` |
-| `cloudflared-token` | infra | `token` |
+| `cloudflare-api-token` | networking | `api-token` |
+| `cloudflared-token` | networking | `token` |
 | `postgresql-app-secret` | databases | `username`, `password` |
 | `mongodb-secret` | databases | Claves de sistema Percona (5 usuarios internos) |
 | `mongodb-app-secret` | databases | `password` |
 | `redis-secret` | databases | `redis-password` |
 | `flow-secrets` | apps | `database-url`, `mongodb-url`, `redis-url` |
-| `openmemory-secrets` | dev-tools | `OPENAI_API_KEY` |
-| `sonarqube-db-secret` | dev-tools | `password` |
+| `openmemory-secrets` | devtools | `OPENAI_API_KEY` |
+| `sonarqube-db-secret` | devtools | `password` |
 
 ---
 
@@ -510,7 +517,7 @@ Argo CD despliega las aplicaciones en orden via `sync-wave`. La `root-app` apunt
 ```
 root-app (gitops/root-app.yaml)
   └── App of Apps (gitops/apps/)
-        ├── Wave 1:  Longhorn, cert-manager, cloudnative-pg (operador), percona-mongodb-operator
+        ├── Wave 1:  Longhorn (storage), cert-manager (networking), cloudnative-pg (databases), percona-mongodb-operator (databases)
         ├── Wave 2:  cert-manager-config (ClusterIssuer + Certificate)
         ├── Wave 3:  APISIX (Helm)
         ├── Wave 4:  apisix-config (Routes, PluginConfigs, TLS)
@@ -524,7 +531,7 @@ root-app (gitops/root-app.yaml)
 ### Dependencias implícitas entre componentes
 
 ```
-Longhorn ──────────────────────────► etcd APISIX, PostgreSQL, MongoDB,
+Longhorn (longhorn-system) ─────────► etcd APISIX, PostgreSQL, MongoDB,
                                       Redis, Qdrant, Prometheus, Grafana,
                                       SonarQube
 
@@ -616,10 +623,10 @@ kubectl create secret generic flow-secrets \
   -n apps
 
 kubectl create secret generic openmemory-secrets \
-  --from-literal=OPENAI_API_KEY=sk-... -n dev-tools
+  --from-literal=OPENAI_API_KEY=sk-... -n devtools
 
 kubectl create secret generic sonarqube-db-secret \
-  --from-literal=password=admin -n dev-tools
+  --from-literal=password=admin -n devtools
 
 kubectl create secret generic cloudflare-api-token \
   --from-literal=api-token=TU_TOKEN -n cert-manager
