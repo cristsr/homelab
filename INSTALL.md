@@ -1,33 +1,81 @@
 # Guía de Instalación
 
-Punto de partida: k0s instalado y listo. El cluster debe estar en estado `Ready`.
+> El playbook de Ansible se ejecuta **directamente en el servidor** (no desde un host remoto).  
+> Todos los comandos de esta guía se ejecutan con sesión SSH abierta en el nodo.
 
 ---
 
-## 1. Preparar k0s
+## 1. Preparar el servidor
 
-Verificar nodo listo:
-
-```bash
-kubectl get nodes
-```
-
-Copiar kubeconfig:
+### 1.1 Instalar dependencias
 
 ```bash
-mkdir -p ~/.kube
-sudo cp /etc/k0s/k0s.yaml ~/.kube/config
-sudo chown $USER:$USER ~/.kube/config
-chmod 600 ~/.kube/config
+sudo apt update && sudo apt install -y git pipx
+pipx install ansible
+pipx ensurepath
+source ~/.bashrc
 ```
 
----
+Verificar:
 
-## 2. Clonar repositorio
+```bash
+ansible --version
+```
+
+### 1.2 Clonar repositorio
 
 ```bash
 git clone git@github.com:cristsr/homelab.git
 cd homelab
+```
+
+---
+
+## 2. Instalar k0s con Ansible
+
+### 2.1 Ajustar inventario y variables
+
+Edita `ansible/inventory.yaml` si tu usuario o IP difieren del predeterminado, y `ansible/group_vars/all.yaml` para ajustar versiones y el username de GitHub:
+
+```yaml
+github_username: tu-usuario-github
+```
+
+### 2.2 Cifrar el GitHub token con ansible-vault
+
+```bash
+cd ansible
+ansible-vault encrypt_string 'ghp_tutoken' --name 'github_token'
+```
+
+Copia el bloque `!vault |` que genera y reemplaza el placeholder en `group_vars/all.yaml`:
+
+```yaml
+github_token: !vault |
+  $ANSIBLE_VAULT;1.1;AES256
+  38613330623564376561373361333864...
+```
+
+### 2.3 Configurar contraseña del vault
+
+```bash
+echo "tu-contrasena-vault" > ansible/.vault-pass
+echo "ansible/.vault-pass" >> .gitignore
+```
+
+### 2.4 Ejecutar el playbook
+
+```bash
+cd ansible
+ansible-playbook site.yaml
+```
+
+El playbook instala k0s (nodo único), escribe `~/.kube/config`, instala `helm` y `helmfile`, y crea el secret `github-repo-creds` en el namespace `argocd` para que ArgoCD pueda acceder al repositorio privado.
+
+Verificar que el cluster está listo:
+
+```bash
+kubectl get nodes
 ```
 
 ---
@@ -59,48 +107,23 @@ kubectl create secret generic vault-bootstrap-secrets \
 
 ---
 
-## 4. Crear namespaces
+## 4. Bootstrap (namespaces + Cilium + Argo CD)
 
 ```bash
-kubectl apply -f bootstrap/namespaces.yaml
+cd bootstrap
+helmfile sync
 ```
 
----
+El helmfile aplica los namespaces, instala Cilium (espera a que esté listo) e instala Argo CD en ese orden.
 
-## 5. Instalar Cilium
-
-```bash
-helm repo add cilium https://helm.cilium.io
-helm repo update
-
-helm upgrade --install cilium cilium/cilium \
-  --namespace kube-system \
-  --version 1.18.4 \
-  -f bootstrap/cilium/values.yaml
-```
-
-Esperar (2-3 min):
+Verificar Cilium:
 
 ```bash
 kubectl -n kube-system rollout status daemonset/cilium
 kubectl get nodes
 ```
 
----
-
-## 6. Instalar Argo CD
-
-```bash
-helm repo add argo https://argoproj.github.io/argo-helm
-helm repo update
-
-helm upgrade --install argocd argo/argo-cd \
-  --namespace argocd \
-  --version 7.8.0 \
-  -f bootstrap/argocd/values.yaml
-```
-
-Obtener contraseña admin:
+Obtener contraseña admin de Argo CD:
 
 ```bash
 kubectl -n argocd get secret argocd-initial-admin-secret \
@@ -109,9 +132,9 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 
 ---
 
-## 7. Activar GitOps
+## 5. Activar GitOps
 
-### 7.1 Cluster secret
+### 5.1 Cluster secret
 
 Si las aplicaciones quedan en `Unknown`:
 
@@ -134,13 +157,13 @@ data:
 EOF
 ```
 
-### 7.2 Aplicar root-app
+### 5.2 Aplicar root-app
 
 ```bash
 kubectl apply -f gitops/root-app.yaml
 ```
 
-### 7.3 Sync order
+### 5.3 Sync order
 
 | Wave | Componentes |
 |------|-------------|
@@ -167,7 +190,7 @@ kubectl -n argocd patch application root --type merge -p '{"operation":{"sync":{
 
 ---
 
-## 8. Verificar
+## 6. Verificar
 
 ```bash
 kubectl -n argocd get applications
@@ -176,11 +199,11 @@ kubectl get pods -n argocd ingress networking databases monitoring vault
 
 ---
 
-## 9. Acceder
+## 7. Acceder
 
 | URL | Servicio | Credenciales |
 |-----|---------|--------------|
-| `argocd.*` | Argo CD | admin / (paso 6) |
+| `argocd.*` | Argo CD | admin / (paso 4) |
 | `grafana.*` | Grafana | admin / (bootstrap.yaml) |
 | `agentgateway.*` | Agent Gateway | admin / admin |
 | `headlamp.*` | Headlamp | `--token` |
@@ -196,7 +219,7 @@ kubectl create token headlamp -n monitoring
 
 ---
 
-## 10. DNS
+## 8. DNS
 
 Registros en Cloudflare:
 

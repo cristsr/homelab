@@ -1,0 +1,19 @@
+---
+- name: Download Helmfile {{ helmfile_version }}
+  ansible.builtin.get_url:
+    url: "https://github.com/helmfile/helmfile/releases/download/{{ helmfile_version }}/helmfile_linux_amd64.tar.gz"
+    dest: /tmp/helmfile.tar.gz
+    mode: "0644"
+    force: false
+  tags: [helmfile]
+
+- name: Extract helmfile binary
+  ansible.builtin.unarchive:
+    src: /tmp/helmfile.tar.gz
+    dest: /usr/local/bin
+    remote_src: true
+    include:
+      - helmfile
+    creates: /usr/local/bin/helmfile
+    mode: "0755"
+  tags: [helmfile]

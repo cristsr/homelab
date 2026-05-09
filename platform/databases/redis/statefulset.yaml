@@ -4,7 +4,7 @@ metadata:
   name: redis
   namespace: databases
 spec:
-  serviceName: redis-master
+  serviceName: redis-headless
   replicas: 1
   selector:
     matchLabels:
@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: redis
-          image: redis:7-alpine
+          image: redis:8-alpine
           command:
             - redis-server
             - --requirepass
@@ -46,7 +46,7 @@ spec:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
-        storageClassName: longhorn
+        storageClassName: longhorn-retain
         resources:
           requests:
             storage: 5Gi

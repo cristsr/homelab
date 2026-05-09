@@ -3,6 +3,8 @@ kind: Application
 metadata:
   name: argocd-config
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
   annotations:
     argocd.argoproj.io/sync-wave: "4"
 spec:
@@ -11,6 +13,8 @@ spec:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
     path: platform/argocd
+    directory:
+      exclude: "in-cluster-secret.yaml"
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
