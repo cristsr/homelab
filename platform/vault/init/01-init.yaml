@@ -28,7 +28,7 @@ spec:
               done
 
               # Idempotency: Static Seal auto-unseals on restart, so status 0 = already done
-              if bao status -format=json 2>/dev/null | grep -q '"initialized":true'; then
+              if bao status -format=json 2>/dev/null | grep -q '"initialized": true'; then
                 echo "Already initialised, exiting"
                 exit 0
               fi
