@@ -1,11 +1,11 @@
-# Longhorn 1.11.1 — k0s
 defaultSettings:
   defaultDataPath: /var/lib/longhorn
   defaultReplicaCount: 1
   storageMinimalAvailablePercentage: 50
 
 csi:
-  kubeletRootDir: /var/lib/kubelet
+  # k0s usa /var/lib/k0s/kubelet en lugar del path estándar /var/lib/kubelet
+  kubeletRootDir: /var/lib/k0s/kubelet
 
 persistence:
   defaultClass: true
