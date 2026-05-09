@@ -28,12 +28,10 @@ server:
       }
 
   # Static seal key injected from Secret created by Ansible bootstrap
-  extraEnv:
-    - name: BAO_UNSEAL_KEY
-      valueFrom:
-        secretKeyRef:
-          name: openbao-static-unseal-key
-          key: key
+  extraSecretEnvironmentVars:
+    - envName: BAO_UNSEAL_KEY
+      secretName: openbao-static-unseal-key
+      secretKey: key
 
   dataStorage:
     enabled: true
