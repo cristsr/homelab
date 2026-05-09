@@ -29,41 +29,66 @@ spec:
 
               # Idempotency: Static Seal auto-unseals on restart, so status 0 = already done
               if bao status -format=json 2>/dev/null | grep -q '"initialized": true'; then
-                echo "Already initialised, exiting"
-                exit 0
+                echo "Already initialised, skipping init"
+                ROOT_TOKEN_EXISTS=$(kubectl get secret openbao-root-token -n vault --ignore-not-found -o name 2>/dev/null)
+                if [ -n "$ROOT_TOKEN_EXISTS" ]; then
+                  BAO_TOKEN=$(kubectl get secret openbao-root-token -n vault -o jsonpath='{.data.token}' 2>/dev/null | base64 -d)
+                else
+                  echo "Root token secret not found, re-initializing"
+                  bao operator init -recovery-shares=1 -recovery-threshold=1 -format=json > /tmp/init.json
+                  BAO_TOKEN=$(jq -r '.root_token' /tmp/init.json)
+                  RECOVERY_KEY=$(jq -r '.recovery_keys_b64[0]' /tmp/init.json)
+                  KUBE_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+                  KUBE_CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                  curl -sf --cacert "$KUBE_CA" \
+                    -H "Authorization: Bearer $KUBE_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -X POST "https://kubernetes.default.svc/api/v1/namespaces/vault/secrets" \
+                    -d "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"openbao-recovery-key\",\"namespace\":\"vault\"},\"data\":{\"key\":\"$(printf '%s' "$RECOVERY_KEY" | base64 | tr -d '\n')\"}}" \
+                    > /dev/null
+                  echo "Recovery key saved to openbao-recovery-key secret"
+                  curl -sf --cacert "$KUBE_CA" \
+                    -H "Authorization: Bearer $KUBE_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -X POST "https://kubernetes.default.svc/api/v1/namespaces/vault/secrets" \
+                    -d "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"openbao-root-token\",\"namespace\":\"vault\"},\"data\":{\"token\":\"$(printf '%s' "$BAO_TOKEN" | base64 | tr -d '\n')\"}}" \
+                    > /dev/null
+                  echo "Root token saved to openbao-root-token secret (temporary)"
+                fi
+              else
+                # First-time init
+                bao operator init -recovery-shares=1 -recovery-threshold=1 -format=json > /tmp/init.json
+                BAO_TOKEN=$(jq -r '.root_token' /tmp/init.json)
+                RECOVERY_KEY=$(jq -r '.recovery_keys_b64[0]' /tmp/init.json)
+                KUBE_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+                KUBE_CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                curl -sf --cacert "$KUBE_CA" \
+                  -H "Authorization: Bearer $KUBE_TOKEN" \
+                  -H "Content-Type: application/json" \
+                  -X POST "https://kubernetes.default.svc/api/v1/namespaces/vault/secrets" \
+                  -d "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"openbao-recovery-key\",\"namespace\":\"vault\"},\"data\":{\"key\":\"$(printf '%s' "$RECOVERY_KEY" | base64 | tr -d '\n')\"}}" \
+                  > /dev/null
+                echo "Recovery key saved to openbao-recovery-key secret"
+                curl -sf --cacert "$KUBE_CA" \
+                  -H "Authorization: Bearer $BAO_TOKEN" \
+                  -H "Content-Type: application/json" \
+                  -X POST "https://kubernetes.default.svc/api/v1/namespaces/vault/secrets" \
+                  -d "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"openbao-root-token\",\"namespace\":\"vault\"},\"data\":{\"token\":\"$(printf '%s' "$BAO_TOKEN" | base64 | tr -d '\n')\"}}" \
+                  > /dev/null
+                echo "Root token saved to openbao-root-token secret (temporary)"
               fi
 
-              # Init generates recovery keys (Static Seal handles unsealing — no bao operator unseal needed)
-              bao operator init -recovery-shares=1 -recovery-threshold=1 -format=json > /tmp/init.json
-              export BAO_TOKEN=$(jq -r '.root_token' /tmp/init.json)
-              RECOVERY_KEY=$(jq -r '.recovery_keys_b64[0]' /tmp/init.json)
+              export BAO_TOKEN
+              RECOVERY_KEY="" KUBE_TOKEN="" KUBE_CA=""  # scrub sensitive vars
 
-              # Persist recovery key so it can be retrieved after bootstrap and stored securely.
-              # Retrieve with: kubectl get secret openbao-recovery-key -n vault -o jsonpath='{.data.key}' | base64 -d
-              KUBE_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-              KUBE_CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-              curl -sf --cacert "$KUBE_CA" \
-                -H "Authorization: Bearer $KUBE_TOKEN" \
-                -H "Content-Type: application/json" \
-                -X POST "https://kubernetes.default.svc/api/v1/namespaces/vault/secrets" \
-                -d "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"openbao-recovery-key\",\"namespace\":\"vault\"},\"data\":{\"key\":\"$(printf '%s' "$RECOVERY_KEY" | base64 | tr -d '\n')\"}}" \
-                > /dev/null
-              echo "Recovery key saved to openbao-recovery-key secret"
+              # Authenticate with root token for the remaining setup
+              bao login "$BAO_TOKEN" &>/dev/null
 
-              # Root token (temporary — deleted by vault-populate playbook after use)
-              curl -sf --cacert "$KUBE_CA" \
-                -H "Authorization: Bearer $KUBE_TOKEN" \
-                -H "Content-Type: application/json" \
-                -X POST "https://kubernetes.default.svc/api/v1/namespaces/vault/secrets" \
-                -d "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"openbao-root-token\",\"namespace\":\"vault\"},\"data\":{\"token\":\"$(printf '%s' "$BAO_TOKEN" | base64 | tr -d '\n')\"}}" \
-                > /dev/null
-              echo "Root token saved to openbao-root-token secret (temporary)"
+              # Secrets engine (safe to rerun — errors if already enabled are ignored)
+              bao secrets enable -path=secret kv-v2 2>/dev/null || true
 
-              # Secrets engine
-              bao secrets enable -path=secret kv-v2
-
-              # Kubernetes auth
-              bao auth enable kubernetes
+              # Kubernetes auth (safe to rerun)
+              bao auth enable kubernetes 2>/dev/null || true
               bao write auth/kubernetes/config \
                 kubernetes_host="https://kubernetes.default.svc" \
                 kubernetes_ca_cert="$(cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)" \
