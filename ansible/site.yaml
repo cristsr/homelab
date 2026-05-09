@@ -1,0 +1,17 @@
+---
+- name: Install k0s and bootstrap tooling
+  hosts: k0s
+  become: true
+
+  handlers:
+    - name: Restart k0s controller
+      ansible.builtin.systemd:
+        name: k0scontroller
+        state: restarted
+
+  tasks:
+    - import_tasks: tasks/k0s.yaml
+    - import_tasks: tasks/kubeconfig.yaml
+    - import_tasks: tasks/helm.yaml
+    - import_tasks: tasks/helmfile.yaml
+    - import_tasks: tasks/argocd-secret.yaml

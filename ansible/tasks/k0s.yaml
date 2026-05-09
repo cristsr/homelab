@@ -1,0 +1,55 @@
+---
+- name: Download k0s binary {{ k0s_version }}
+  ansible.builtin.get_url:
+    url: "https://github.com/k0sproject/k0s/releases/download/{{ k0s_version }}/k0s-{{ k0s_version }}-amd64"
+    dest: /usr/local/bin/k0s
+    mode: "0755"
+    force: false
+  tags: [k0s]
+
+- name: Create k0s config directory
+  ansible.builtin.file:
+    path: /etc/k0s
+    state: directory
+    mode: "0755"
+  tags: [k0s]
+
+- name: Deploy k0s config
+  ansible.builtin.template:
+    src: k0s-config.yaml.j2
+    dest: /etc/k0s/k0s.yaml
+    mode: "0644"
+  notify: Restart k0s controller
+  tags: [k0s]
+
+- name: Register k0s as systemd service
+  ansible.builtin.command: >
+    k0s install controller --single --config /etc/k0s/k0s.yaml
+  args:
+    creates: /etc/systemd/system/k0scontroller.service
+  tags: [k0s]
+
+- name: Start and enable k0s
+  ansible.builtin.systemd:
+    name: k0scontroller
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags: [k0s]
+
+- name: Wait for API server to be reachable
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: 6443
+    timeout: 120
+  tags: [k0s]
+
+- name: Wait for node to reach Ready state
+  ansible.builtin.command: >
+    k0s kubectl wait --for=condition=Ready node --all --timeout=60s
+  register: node_wait
+  until: node_wait.rc == 0
+  retries: 8
+  delay: 15
+  changed_when: false
+  tags: [k0s]

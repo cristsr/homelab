@@ -3,11 +3,17 @@ kind: Application
 metadata:
   name: openbao
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
   annotations:
     argocd.argoproj.io/sync-wave: "2"
 spec:
   project: default
   sources:
+    # TODO: migrar al chart oficial de OpenBao en lugar del chart de HashiCorp Vault
+    # repoURL: https://openbao.github.io/openbao-helm
+    # chart: openbao
+    # El chart de HashiCorp tiene bugs conocidos al usarse con imagen OpenBao (templates del injector)
     - repoURL: https://helm.releases.hashicorp.com
       chart: vault
       targetRevision: "0.32.0"

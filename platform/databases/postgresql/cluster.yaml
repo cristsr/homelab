@@ -5,11 +5,11 @@ metadata:
   namespace: databases
 spec:
   instances: 1
-  imageName: ghcr.io/cloudnative-pg/postgresql:17.5
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.6-standard-bookworm
 
   storage:
     size: 10Gi
-    storageClass: longhorn
+    storageClass: longhorn-retain
 
   resources:
     requests:

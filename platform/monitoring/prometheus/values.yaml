@@ -44,16 +44,10 @@ kubeScheduler:
 kubeProxy:
   enabled: false
 
-kubelet:
-  enabled: false
-
 kubeDns:
   enabled: false
 
 kubernetesServiceMonitors:
-  enabled: false
-
-prometheus:
   enabled: false
 
 prometheus-windows-exporter:

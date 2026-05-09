@@ -3,9 +3,6 @@ kind: Job
 metadata:
   name: openbao-init
   namespace: vault
-  annotations:
-    helm.sh/hook: post-install
-    helm.sh/hook-delete-policy: before-hook-creation
 spec:
   template:
     spec:
@@ -13,7 +10,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: init
-          image: ghcr.io/openbao/openbao:2.0.0
+          image: ghcr.io/openbao/openbao:2.5.3
           command: ["/bin/sh", "-c"]
           env:
             - name: BAO_ADDR

@@ -6,7 +6,7 @@ metadata:
 spec:
   endpointSelector:
     matchLabels:
-      app.kubernetes.io/name: redis
+      app: redis
   ingress:
     - fromEndpoints:
         - matchLabels:

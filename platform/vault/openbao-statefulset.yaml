@@ -1,6 +1,8 @@
-# OpenBao StatefulSet - production mode
-# Using Helm chart via ArgoCD (gitops/apps/infra/openbao.yaml)
-# This file is kept as reference only.
+# REFERENCIA SOLAMENTE — NO DESPLEGAR DIRECTAMENTE
+# OpenBao se gestiona vía Helm chart en gitops/apps/vault/openbao.yaml
+# Este archivo es solo documentación histórica. No apuntar ninguna
+# ArgoCD Application a platform/vault/ (raíz) o este archivo se desplegará
+# creando un StatefulSet duplicado en conflicto con el chart de Helm.
 
 apiVersion: v1
 kind: Service

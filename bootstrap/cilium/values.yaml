@@ -1,9 +1,9 @@
-# Cilium 1.18.4 — k0s
-# Aplicar manualmente: helm install cilium cilium/cilium -n kube-system -f bootstrap/cilium/values.yaml
+# Cilium 1.19.3 — k0s
+# Gestionado vía helmfile (bootstrap/helmfile.yaml)
 
 kubeProxyReplacement: "true"
 
-k8sServiceHost: "kube-apiserver.kube-system.svc.cluster.local"
+k8sServiceHost: "127.0.0.1"
 k8sServicePort: "6443"
 
 ipam:

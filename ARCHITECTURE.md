@@ -24,48 +24,63 @@ Homelab de un solo nodo construido sobre k0s con GitOps completo. ArgoCD gestion
 
 | Capa | Tecnología |
 |------|-----------|
-| Kubernetes | k0s 1.31.x |
-| CNI / NetworkPolicy | Cilium 1.18.4 (eBPF, kubeProxy replacement) |
-| Ingress / Gateway | Agent Gateway 1.1.0 (API7) |
-| GitOps | Argo CD 7.x |
-| Certificados TLS | cert-manager 1.16.2 + Let's Encrypt + Cloudflare DNS-01 |
-| Storage | Longhorn 1.7.2 |
-| Túnel Internet | Cloudflare Tunnel (cloudflared) |
-| Monitoreo | kube-prometheus-stack 67.9.0 (Prometheus + Grafana) |
-| Operador PostgreSQL | CloudNativePG 0.22.x (CNCF) |
-| Operador MongoDB | Percona Server for MongoDB Operator 1.17.x |
+| Kubernetes | k0s 1.31.5 |
+| CNI / NetworkPolicy | Cilium 1.19.3 (eBPF, kubeProxy replacement) |
+| Ingress / Gateway | Agent Gateway 1.1.0 |
+| GitOps | Argo CD 7.8.28 |
+| Certificados TLS | cert-manager v1.20.2 + Let's Encrypt + Cloudflare DNS-01 |
+| Storage | Longhorn 1.11.2 |
+| Túnel Internet | Cloudflare Tunnel (cloudflared 2026.3.0) |
+| Monitoreo | kube-prometheus-stack 83.3.0 + Grafana Operator 5.22.2 |
+| Secrets | OpenBao 2.5.3 + External Secrets Operator 2.4.1 |
+| Operador PostgreSQL | CloudNative-PG 0.28.0 (chart) |
+| Operador MongoDB | Percona PSMDB Operator 1.22.0 |
 
 ### Estructura del repositorio
 
 ```
 homelab/
-├── bootstrap/               # Instalación manual previa a GitOps
+├── ansible/                 # Provisioning del nodo (k0s, helm, helmfile, argocd secret)
+│   ├── tasks/
+│   │   ├── k0s.yaml         # Instalación y configuración de k0s
+│   │   ├── kubeconfig.yaml  # Export de kubeconfig y wrapper kubectl
+│   │   ├── helm.yaml        # Instalación de Helm
+│   │   ├── helmfile.yaml    # Instalación de Helmfile
+│   │   └── argocd-secret.yaml # Secret repo-creds de GitHub para ArgoCD
+│   ├── templates/
+│   │   └── k0s-config.yaml.j2
+│   ├── group_vars/all.yaml  # Variables globales + github_token (ansible-vault)
+│   ├── ansible.cfg
+│   ├── inventory.yaml
+│   └── site.yaml
+├── bootstrap/               # Bootstrap del cluster (namespaces, Cilium, ArgoCD)
 │   ├── cilium/values.yaml
 │   ├── argocd/values.yaml
-│   └── namespaces.yaml
+│   ├── namespaces.yaml
+│   └── helmfile.yaml        # Despliega Cilium y ArgoCD en orden
 ├── gitops/                  # Applications de Argo CD
 │   ├── root-app.yaml
 │   └── apps/
 │       ├── infra/           # reloader
-│       ├── argocd/         # argocd-config
-│       ├── networking/     # cert-manager, cloudflared
-│       ├── ingress/        # Agent Gateway
-│       ├── storage/        # Longhorn
-│       ├── databases/      # PostgreSQL, MongoDB, Redis, Qdrant, operators
-│       ├── devtools/       # SonarQube, OpenMemory
-│       ├── apps/           # Flow API
-│       ├── monitoring/     # Prometheus, Grafana, monitors, headlamp
-│       └── vault/          # OpenBao, External Secrets, vault-sync-operator
+│       ├── argocd/          # argocd-config
+│       ├── networking/      # cert-manager, cloudflared
+│       ├── ingress/         # Agent Gateway
+│       ├── storage/         # Longhorn
+│       ├── databases/       # PostgreSQL, MongoDB, Redis, Qdrant, operators
+│       ├── devtools/        # SonarQube, OpenMemory
+│       ├── apps/            # Flow API
+│       ├── monitoring/      # Prometheus, Grafana, monitors, headlamp
+│       └── vault/           # OpenBao, External Secrets, vault-sync-operator
 ├── platform/                # Valores Helm y manifiestos de cada servicio
-│   ├── argocd/            # cluster secret
-│   ├── networking/         # cert-manager, cloudflared
-│   ├── ingress/            # Agent Gateway
-│   ├── storage/            # Longhorn
-│   ├── databases/          # PostgreSQL, MongoDB, Redis, Qdrant, operators
-│   ├── devtools/           # SonarQube, OpenMemory
-│   ├── apps/               # Flow API
-│   ├── monitoring/         # Prometheus, Grafana, headlamp
-│   └── vault/              # OpenBao, External Secrets, vault-sync-operator
+│   ├── argocd/              # repo credentials (ExternalSecret)
+│   ├── networking/          # cert-manager, cloudflared
+│   ├── ingress/             # Agent Gateway routes
+│   ├── storage/             # Longhorn StorageClasses
+│   ├── databases/           # PostgreSQL, MongoDB, Redis, Qdrant, operators
+│   ├── devtools/            # SonarQube, OpenMemory
+│   ├── apps/                # Flow API
+│   ├── monitoring/          # Prometheus, Grafana, Alertmanager, Headlamp
+│   └── vault/               # OpenBao, External Secrets, init jobs
 ```
 
 ---
@@ -74,7 +89,7 @@ homelab/
 
 ### 2.1 Cilium (CNI)
 
-**Chart**: `cilium/cilium` — **Namespace**: `kube-system`
+**Chart**: `cilium/cilium` — **Namespace**: `kube-system` — **Versión**: `1.19.3`
 
 Reemplaza completamente kube-proxy con eBPF. Provee conectividad de pods, NetworkPolicies y observabilidad via Hubble.
 
@@ -82,7 +97,11 @@ Reemplaza completamente kube-proxy con eBPF. Provee conectividad de pods, Networ
 |-----------|-------|
 | `kubeProxyReplacement` | `true` |
 | `k8sServiceHost` | `127.0.0.1` |
-| `k8sServicePort` | `6443` (k0s) |
+| `k8sServicePort` | `6443` |
+| `ipam.mode` | `cluster-pool` |
+| Pod CIDR | `10.244.0.0/16` |
+| `routingMode` | `native` |
+| `bpf.masquerade` | `true` |
 | `hubble.relay.enabled` | `true` |
 | `hubble.ui.enabled` | `true` |
 | CNI bin path | `/opt/cni/bin` |
@@ -90,7 +109,7 @@ Reemplaza completamente kube-proxy con eBPF. Provee conectividad de pods, Networ
 
 ### 2.2 Argo CD (GitOps)
 
-**Chart**: `argo/argo-cd` — **Namespace**: `argocd`
+**Chart**: `argo/argo-cd` — **Namespace**: `argocd` — **Versión**: `7.8.28`
 
 Controla el ciclo de vida de todas las aplicaciones del cluster. La `root-app` apunta a `gitops/apps/` y crea las sub-aplicaciones que despliegan cada componente.
 
@@ -98,13 +117,13 @@ Controla el ciclo de vida de todas las aplicaciones del cluster. La `root-app` a
 |-----------|-------|
 | `server.ingress.enabled` | `false` (gestionado por Agent Gateway) |
 | `server.insecure` | `true` (TLS termina en Agent Gateway) |
-| Timeout de reconciliación | 180s |
+| Timeout de reconciliación | `180s` |
 | RBAC por defecto | `role:readonly` |
 | Dominio | `argocd.cristianpuenguenan.online` |
 
 ### 2.3 Namespaces
 
-Declarados en `bootstrap/namespaces.yaml`:
+Declarados en `bootstrap/namespaces.yaml` y creados por el hook presync de Cilium en el helmfile:
 
 | Namespace | Contenido |
 |-----------|-----------|
@@ -112,7 +131,7 @@ Declarados en `bootstrap/namespaces.yaml`:
 | `ingress` | Agent Gateway |
 | `argocd` | Argo CD |
 | `networking` | cloudflared, cert-manager |
-| `databases` | PostgreSQL, MongoDB, Redis, Qdrant, CloudNativePG, Percona operators |
+| `databases` | PostgreSQL, MongoDB, Redis, Qdrant, CloudNative-PG, Percona operators |
 | `devtools` | SonarQube, OpenMemory |
 | `apps` | Flow API |
 | `monitoring` | Prometheus, Grafana, Alertmanager, Headlamp |
@@ -123,65 +142,37 @@ Declarados en `bootstrap/namespaces.yaml`:
 
 ## 3. Componentes de Plataforma
 
-### 3.1 Agent Gateway (Ingress + Gateway API7)
+### 3.1 Agent Gateway (Ingress)
 
 **Chart**: `oci://cr.agentgateway.dev/charts/agentgateway 1.1.0` — **Namespace**: `ingress`
 
-Punto de entrada único al cluster. Escucha en puertos 80 y 443 via `hostPort` directo en la IP del nodo (`192.168.80.20`).
-
-#### Sub-componentes
-
-| Componente | Puerto | Descripción |
-|-----------|--------|-------------|
-| Agent Gateway | 80, 443 (hostPort) | Ingress principal, datos HTTP/HTTPS |
-| Dashboard | 9000 (ClusterIP) | UI de administración, acceso via Agent Gateway Route |
-
-#### Recursos Agent Gateway
-
-```
-Requests: CPU 100m / RAM 128Mi
-Limits:   CPU 1000m / RAM 512Mi
-Capability: NET_BIND_SERVICE
-```
+Punto de entrada único al cluster. Expone los servicios internos vía HTTPRoute (Gateway API).
 
 #### Rutas configuradas
 
-| Subdominio | Path | Backend | Namespace | Plugin |
-|-----------|------|---------|-----------|--------|
-| `agentgateway.cristianpuenguenan.online` | `/*` | agent-gateway:9000 | ingress | internal-dashboard |
-| `argocd.cristianpuenguenan.online` | `/*` | argocd-server:80 | argocd | internal-dashboard |
-| `grafana.cristianpuenguenan.online` | `/*` | kube-prometheus-stack-grafana:80 | monitoring | internal-dashboard |
-| `headlamp.cristianpuenguenan.online` | `/*` | headlamp:80 | infra | internal-dashboard |
-| `hubble.cristianpuenguenan.online` | `/*` | hubble-ui:80 | kube-system | internal-dashboard |
-| `openmemory.cristianpuenguenan.online` | `/*` | openmemory:8080 | devtools | internal-dashboard |
-| `sonarqube.cristianpuenguenan.online` | `/*` | sonarqube-sonarqube:9000 | devtools | internal-dashboard |
-| `flow.cristianpuenguenan.online` | `/*` | flow:8000 | apps | internal-dashboard |
-| `api.cristianpuenguenan.online` | `/flow/*` | flow:8000 | apps | public-api (JWT) |
-| `api.cristianpuenguenan.online` | `/webhooks/*` | flow:8000 | apps | rate-limit 20/s |
-
-#### Plugins globales
-
-- **real-ip**: detecta IP real del cliente detrás de Cloudflare Tunnel  
-  Trusted addresses: `127.0.0.1`
-- **prometheus**: métricas en todas las rutas (`prefer_name: true`)
-
-#### Plugin configs
-
-**`internal-dashboard`** — para dashboards y herramientas internas:
-- ip-restriction whitelist: LAN `192.168.80.0/24`
-
-**`public-api`** — para endpoints de la API pública:
-- jwt-auth
-- limit-req: 100 req/s, burst 50, HTTP 429
-- cors: `*`, métodos GET/POST/PUT/DELETE/PATCH/OPTIONS
+| Subdominio | Backend | Namespace |
+|-----------|---------|-----------|
+| `agentgateway.cristianpuenguenan.online` | agentgateway dashboard | ingress |
+| `argocd.cristianpuenguenan.online` | argocd-server:80 | argocd |
+| `grafana.cristianpuenguenan.online` | grafana:3000 | monitoring |
+| `headlamp.cristianpuenguenan.online` | headlamp:80 | monitoring |
+| `hubble.cristianpuenguenan.online` | hubble-ui:80 | kube-system |
+| `openmemory.cristianpuenguenan.online` | openmemory:8080 | devtools |
+| `sonarqube.cristianpuenguenan.online` | sonarqube-sonarqube:9000 | devtools |
+| `flow.cristianpuenguenan.online` | flow:80 | apps |
 
 #### TLS
 
 Certificado wildcard `*.cristianpuenguenan.online` en secret `wildcard-home-tls` (namespace `ingress`).
 
+```
+Requests: CPU 100m / RAM 128Mi
+Limits:   CPU 500m / RAM 256Mi
+```
+
 ### 3.2 cert-manager
 
-**Chart**: `jetstack/cert-manager 1.16.2` — **Namespace**: `networking`
+**Chart**: `jetstack/cert-manager v1.20.2` — **Namespace**: `networking`
 
 Automatiza la emisión y renovación de certificados TLS.
 
@@ -191,39 +182,46 @@ Automatiza la emisión y renovación de certificados TLS.
 | Método de validación | DNS-01 via Cloudflare API |
 | Certificado | Wildcard `*.cristianpuenguenan.online` + apex `cristianpuenguenan.online` |
 | Duración | 2160h (90 días), renueva 360h antes |
-| Secret del token | `cloudflare-api-token` en namespace `cert-manager` (manual) |
+| Secret del token | `cloudflare-api-token` en namespace `networking` (via ExternalSecret) |
 | Secret del certificado | `wildcard-home-tls` en namespace `ingress` |
 
 ### 3.3 Longhorn (Storage)
 
-**Chart**: `longhorn/longhorn 1.7.2` — **Namespace**: `longhorn-system`
+**Chart**: `longhorn/longhorn 1.11.2` — **Namespace**: `longhorn-system`
 
 CSI StorageClass por defecto del cluster. En nodo único, las réplicas se configuran en 1.
 
 | Parámetro | Valor |
 |-----------|-------|
 | `defaultSettings.defaultReplicaCount` | `1` |
-| `defaultSettings.storageMinimalAvailablePercentage` | `10` |
+| `defaultSettings.storageMinimalAvailablePercentage` | `50` |
 | `csi.kubeletRootDir` | `/var/lib/kubelet` |
 | StorageClass por defecto | `longhorn` |
 
+#### StorageClasses
+
+| Nombre | ReclaimPolicy | Réplicas | Uso |
+|--------|--------------|----------|-----|
+| `longhorn` | Delete | 1 | Por defecto (Grafana, Prometheus) |
+| `longhorn-retain` | Retain | 1 | Bases de datos (PostgreSQL, MongoDB, Redis, Qdrant) |
+
 ### 3.4 Cloudflared (Túnel Internet)
 
-**Imagen**: `cloudflare/cloudflared:latest` — **Namespace**: `networking`
+**Imagen**: `cloudflare/cloudflared:2026.3.0` — **Namespace**: `networking`
 
-Establece un túnel cifrado saliente hacia Cloudflare sin necesidad de abrir puertos en el router. Los dominios que se exponen públicamente se configuran en el dashboard de Cloudflare Tunnel.
+Establece un túnel cifrado saliente hacia Cloudflare sin necesidad de abrir puertos en el router.
 
 ```
 Requests: CPU 50m / RAM 64Mi
 Limits:   CPU 200m / RAM 128Mi
-Secret:   cloudflared-token (token del túnel, manual)
+Secret:   cloudflared-token (via ExternalSecret ← OpenBao secret/infra/cloudflared)
 ```
 
 ### 3.5 Headlamp (UI Kubernetes)
 
-**Chart**: `headlamp-k8s/headlamp 0.26.0` — **Namespace**: `infra`
+**Chart**: `headlamp-k8s/headlamp 0.42.0` — **Namespace**: `monitoring`
 
-Dashboard web de solo lectura para inspeccionar el estado del cluster.
+Dashboard web para inspeccionar el estado del cluster.
 
 | Parámetro | Valor |
 |-----------|-------|
@@ -231,32 +229,68 @@ Dashboard web de solo lectura para inspeccionar el estado del cluster.
 | Service | ClusterIP:80 |
 | Acceso | `headlamp.cristianpuenguenan.online` via Agent Gateway |
 
+### 3.6 OpenBao (Secrets Backend)
+
+**Chart**: `hashicorp/vault 0.32.0` (imagen `ghcr.io/openbao/openbao:2.5.3`) — **Namespace**: `vault`
+
+> Pendiente migrar al chart oficial `openbao/openbao-helm`.
+
+KV v2 secrets engine como backend central de todos los secrets del cluster.
+
+| Parámetro | Valor |
+|-----------|-------|
+| Modo | Production (standalone) |
+| Autenticación | Kubernetes auth |
+| KV mount | `secret` (v2) |
+| Storage | PVC 1Gi (Longhorn default) |
+| UI | habilitada en `:8200` |
+
+**Init jobs** (`platform/vault/init/`):
+- `openbao-init` — inicializa OpenBao, habilita Kubernetes auth, crea policies y roles
+- `openbao-import-secrets` — importa `vault-bootstrap-secrets` al KV de OpenBao
+
+> Tras cada restart del pod, OpenBao queda sellado. Unseal manual requerido.
+
+### 3.7 External Secrets Operator
+
+**Chart**: `external-secrets/external-secrets 2.4.1` — **Namespace**: `vault`
+
+Sincroniza secrets desde OpenBao hacia Kubernetes. Todos los recursos usan `apiVersion: external-secrets.io/v1`.
+
+| Recurso | Detalle |
+|---------|---------|
+| ClusterSecretStore | `openbao` — apunta a `http://openbao.vault.svc.cluster.local:8200` |
+| KV version | v2 |
+| Auth | Kubernetes (ServiceAccount `external-secrets-sa`) |
+| Paths de KV | Sin prefijo `secret/data/` en `remoteRef.key` (ESO lo añade automáticamente) |
+
+### 3.8 Reloader
+
+**Chart**: `stakater/reloader 1.4.16` — **Namespace**: `infra`
+
+Reinicia Deployments/StatefulSets automáticamente cuando cambia un Secret o ConfigMap referenciado. Activado con la anotación `reloader.stakater.com/auto: "true"`.
+
 ---
 
 ## 4. Aplicaciones y Herramientas
 
 ### 4.1 Flow API
 
-**Namespace**: `apps` — **Imagen**: `ghcr.io/cristsr/flow:latest`
+**Namespace**: `apps`
 
-Aplicación principal del homelab. Expone una API REST en el puerto 8000.
+> Actualmente usa imagen placeholder `traefik/whoami:latest`. Reemplazar con la imagen real de la aplicación.
 
 ```
 Replicas: 1
-Port:     8000
-Requests: CPU 100m / RAM 256Mi
-Limits:   CPU 500m / RAM 512Mi
-Secrets:  flow-secrets (DATABASE_URL, REDIS_URL)
+Port:     80
+Requests: CPU 10m / RAM 16Mi
+Limits:   CPU 100m / RAM 32Mi
+Secrets:  flow-secrets (database-url, mongodb-url, redis-url) via ExternalSecret
 ```
-
-Rutas Agent Gateway:
-- `flow.cristianpuenguenan.online/*` → acceso interno (ip-restriction)
-- `api.cristianpuenguenan.online/flow/*` → API pública (JWT + rate-limit)
-- `api.cristianpuenguenan.online/webhooks/*` → webhooks públicos (rate-limit 20/s)
 
 ### 4.2 OpenMemory (MCP + Vector Memory)
 
-**Namespace**: `devtools` — **Imagen**: `mem0ai/openmemory-mcp:latest`
+**Namespace**: `devtools` — **Imagen**: `mem0/openmemory-mcp:latest`
 
 Agente de memoria vectorial para LLMs. Almacena embeddings en Qdrant.
 
@@ -267,12 +301,12 @@ Requests: CPU 50m / RAM 128Mi
 Limits:   CPU 500m / RAM 512Mi
 Env:      QDRANT_HOST=qdrant.databases.svc.cluster.local
           QDRANT_PORT=6333
-Secrets:  openmemory-secrets (OPENAI_API_KEY)
+Secrets:  openmemory-secrets (OPENAI_API_KEY) via ExternalSecret
 ```
 
 ### 4.3 SonarQube Community
 
-**Chart**: `SonarSource/sonarqube 10.7.0` — **Namespace**: `devtools`
+**Chart**: `SonarSource/sonarqube 2026.2.1` — **Namespace**: `devtools`
 
 Análisis estático de calidad de código.
 
@@ -283,34 +317,30 @@ Requests: CPU 200m / RAM 1Gi
 Limits:   CPU 1000m / RAM 2Gi
 Storage:  10Gi (longhorn)
 DB:       postgresql-rw.databases.svc.cluster.local:5432/sonarqube
-Usuario:  sonarqube (gestionado por CloudNativePG managed.roles)
-Secret:   sonarqube-db-secret (clave: password)
+Usuario:  sonarqube (gestionado por CloudNative-PG managed.roles)
+Secret:   sonarqube-db-secret (via ExternalSecret ← OpenBao secret/devtools/sonarqube)
 ```
 
 ---
 
 ## 5. Bases de Datos
 
-Todas en namespace `databases`. Acceso restringido por CiliumNetworkPolicy.  
-PostgreSQL y MongoDB son gestionados por operadores Kubernetes que proveen backup, PITR y gestión declarativa de usuarios.
+Todas en namespace `databases`. Acceso restringido por CiliumNetworkPolicy.
 
-### 5.1 PostgreSQL — CloudNativePG
+### 5.1 PostgreSQL — CloudNative-PG
 
-**Operador**: `cloudnative-pg/cloudnative-pg 0.22.0` — **CRD**: `kind: Cluster`
-
-El operador gestiona el ciclo de vida completo: bootstrapping, backups, upgrades y roles de base de datos.
+**Operador**: `cloudnative-pg/cloudnative-pg 0.28.0` — **CRD**: `kind: Cluster`
 
 | Parámetro | Valor |
 |-----------|-------|
-| Imagen | `ghcr.io/cloudnative-pg/postgresql:17` |
-| Database | homelab |
-| Usuario propietario | admin |
+| Imagen | `ghcr.io/cloudnative-pg/postgresql:17.6-standard-bookworm` |
+| Database | `homelab` |
+| Usuario propietario | `admin` |
 | Puerto | 5432 |
-| Storage | 10Gi (longhorn) |
+| Storage | 10Gi (`longhorn-retain`) |
 | Requests | CPU 100m / RAM 256Mi |
 | Limits | CPU 500m / RAM 512Mi |
-| Acceso desde | `apps`, `devtools` |
-| Métricas | PodMonitor integrado |
+| Métricas | PodMonitor integrado (`enablePodMonitor: true`) |
 
 #### Servicios generados por el operador
 
@@ -325,91 +355,87 @@ El operador gestiona el ciclo de vida completo: bootstrapping, backups, upgrades
 | DB | Owner | Notas |
 |----|-------|-------|
 | `homelab` | `admin` | DB principal de aplicaciones |
-| `sonarqube` | `sonarqube` | Creada en bootstrap via postInitSQL |
-
-El rol `sonarqube` es gestionado por `managed.roles` — el operador reconcilia su contraseña desde `sonarqube-db-secret`.
+| `sonarqube` | `sonarqube` | Creada via `postInitSQL`; rol gestionado por `managed.roles` |
 
 ### 5.2 MongoDB — Percona Operator
 
-**Operador**: `percona/psmdb-operator 1.17.0` — **CRD**: `kind: PerconaServerMongoDB`
-
-Equivalente open source al MongoDB Enterprise Operator. Provee replica sets, backups a S3, PITR y gestión declarativa de usuarios.
+**Operador**: `percona/psmdb-operator 1.22.0` — **CRD**: `kind: PerconaServerMongoDB`
 
 | Parámetro | Valor |
 |-----------|-------|
-| Imagen | `percona/percona-server-mongodb:8.0` |
-| Replica set | rs0 (1 miembro, ampliable a 3 sin migración) |
-| Database | homelab |
-| Usuario de aplicación | admin |
+| Imagen | `percona/percona-server-mongodb:8.0.20-8` |
+| `crVersion` | `1.22.0` |
+| Replica set | `rs0` (1 miembro) |
+| Database | `homelab` |
 | Puerto | 27017 |
-| Storage | 10Gi (longhorn) |
+| Storage | 10Gi (`longhorn-retain`) |
 | Requests | CPU 100m / RAM 256Mi |
 | Limits | CPU 500m / RAM 512Mi |
-| Acceso desde | `apps`, `devtools` |
 
 #### Servicios generados por el operador
 
 | Servicio | Descripción |
 |---------|-------------|
-| `mongodb-rs0.databases` | Servicio del replica set (puerto 27017) |
-| `mongodb-rs0-0.databases` | Pod individual (acceso directo) |
+| `mongodb-rs0.databases` | Servicio del replica set |
+| `mongodb-rs0-0.databases` | Pod individual |
 
 #### Connection string
 
 ```
-mongodb://admin:admin@mongodb-rs0.databases.svc.cluster.local:27017/homelab?replicaSet=rs0&authSource=homelab
+mongodb://admin:<pass>@mongodb-rs0.databases.svc.cluster.local:27017/homelab?replicaSet=rs0&authSource=homelab
 ```
 
 ### 5.3 Redis
 
-**Chart**: `bitnami/redis 20.6.0`
+**Tipo**: StatefulSet manual — **Imagen**: `redis:8-alpine` — **Namespace**: `databases`
 
 | Parámetro | Valor |
 |-----------|-------|
-| Arquitectura | standalone |
 | Puerto | 6379 |
-| Auth | habilitada |
-| Storage | 5Gi (longhorn) |
+| Auth | `requirepass` via Secret |
+| Storage | 5Gi (`longhorn-retain`) |
 | Requests | CPU 50m / RAM 128Mi |
 | Limits | CPU 200m / RAM 256Mi |
-| Acceso desde | `apps`, `devtools` |
+| Servicios | `redis-master` (ClusterIP), `redis-headless` (headless) |
 
 ### 5.4 Qdrant (Vector DB)
 
-**Chart**: `qdrant/qdrant 1.13.0`
+**Chart**: `qdrant/qdrant 1.17.1` — **Namespace**: `databases`
 
 | Parámetro | Valor |
 |-----------|-------|
 | Puerto REST | 6333 |
 | Puerto gRPC | 6334 |
-| Storage | 10Gi (longhorn) |
+| Storage | 10Gi (`longhorn-retain`) |
 | Requests | CPU 100m / RAM 256Mi |
 | Limits | CPU 500m / RAM 1Gi |
-| Acceso desde | `devtools` únicamente |
+| API Key | via ExternalSecret (`qdrant-api-key`) |
 
 ---
 
 ## 6. Monitoreo
 
-**Chart**: `prometheus-community/kube-prometheus-stack 67.9.0` — **Namespace**: `monitoring`
+**Namespace**: `monitoring`
 
 ### Componentes
 
-| Componente | Descripción |
-|-----------|-------------|
-| Prometheus | Recolección de métricas, retención 15 días, 20Gi |
-| Grafana | Dashboards, 5Gi, `grafana.cristianpuenguenan.online` |
-| Alertmanager | Gestión de alertas |
-| node-exporter | Métricas del host |
-| kube-state-metrics | Estado de objetos Kubernetes |
-
-Prometheus descubre ServiceMonitors de **todos los namespaces** (`serviceMonitorNamespaceSelector: {}`).
+| Componente | Chart / Versión | Descripción |
+|-----------|----------------|-------------|
+| Prometheus Operator | `kube-prometheus-stack 83.3.0` | Solo operator + node-exporter + kube-state-metrics (Prometheus/Grafana/AM como CRs) |
+| Prometheus | CR `monitoring.coreos.com/v1` | Retención 15d, 20Gi, scrape vía ServiceMonitor label `prometheus: monitor` |
+| Grafana | Grafana Operator `5.22.2` | CR `grafana.integreatly.org/v1beta1`, 5Gi storage |
+| Alertmanager | CR `monitoring.coreos.com/v1` | 1Gi storage |
+| node-exporter | incluido en kube-prometheus-stack | Métricas del host |
+| kube-state-metrics | incluido en kube-prometheus-stack | Estado de objetos Kubernetes |
+| Headlamp | `headlamp-k8s/headlamp 0.42.0` | UI de gestión del cluster |
 
 ### ServiceMonitors adicionales
 
-| Monitor | Target | Path | Intervalo |
-|---------|--------|------|-----------|
-| Longhorn | `longhorn-system/longhorn-manager` puerto `manager` | `/metrics` | 30s |
+| Monitor | Target | Intervalo |
+|---------|--------|-----------|
+| Longhorn | `longhorn-system/longhorn-manager` puerto `manager` | 30s |
+| External Secrets | metrics port | via chart |
+| CloudNative-PG | PodMonitor integrado | via operador |
 
 ---
 
@@ -422,50 +448,34 @@ Internet
   └── Cloudflare (DNS + WAF)
         └── Cloudflare Tunnel (egreso desde cloudflared)
               └── Agent Gateway :443 (hostPort en 192.168.80.20)
-                    └── Backend ClusterIP (por ruta)
+                    └── Backend ClusterIP (por HTTPRoute)
 
 LAN
   └── Agent Gateway :443 (hostPort en 192.168.80.20)
-        └── Backend ClusterIP (por ruta)
-
-Tailscale → SSH al host (mantenimiento del servidor, fuera del cluster)
+        └── Backend ClusterIP (por HTTPRoute)
 ```
 
 ### Puertos expuestos en el nodo
 
 | Puerto | Protocolo | Descripción |
 |--------|-----------|-------------|
-| 80 | TCP | Agent Gateway HTTP (redirige a HTTPS) |
+| 80 | TCP | Agent Gateway HTTP |
 | 443 | TCP | Agent Gateway HTTPS (TLS wildcard) |
-
-### Puertos internos (ClusterIP)
-
-| Servicio | Puerto | Namespace |
-|---------|--------|-----------|
-| PostgreSQL | 5432 | databases |
-| MongoDB | 27017 | databases |
-| Redis | 6379 | databases |
-| Qdrant REST | 6333 | databases |
-| Qdrant gRPC | 6334 | databases |
-| Flow API | 8000 | apps |
-| OpenMemory | 8080 | devtools |
-| Prometheus | 9090 | monitoring |
 
 ### DNS y subdominios
 
-Todos apuntan a `192.168.80.20` como registro A. Certificado wildcard cubre `*.cristianpuenguenan.online`.
+Todos apuntan a `192.168.80.20` como registro A. Certificado wildcard `*.cristianpuenguenan.online`.
 
 | Subdominio | Servicio |
 |-----------|---------|
-| `argocd.cristianpuenguenan.online` | Argo CD |
-| `agentgateway.cristianpuenguenan.online` | Agent Gateway Dashboard |
-| `grafana.cristianpuenguenan.online` | Grafana |
-| `headlamp.cristianpuenguenan.online` | Headlamp |
-| `hubble.cristianpuenguenan.online` | Hubble UI (Cilium) |
-| `openmemory.cristianpuenguenan.online` | OpenMemory |
-| `sonarqube.cristianpuenguenan.online` | SonarQube |
-| `flow.cristianpuenguenan.online` | Flow (acceso interno) |
-| `api.cristianpuenguenan.online` | Flow API pública + webhooks |
+| `argocd.*` | Argo CD |
+| `agentgateway.*` | Agent Gateway Dashboard |
+| `grafana.*` | Grafana |
+| `headlamp.*` | Headlamp |
+| `hubble.*` | Hubble UI (Cilium) |
+| `openmemory.*` | OpenMemory |
+| `sonarqube.*` | SonarQube |
+| `flow.*` | Flow API |
 
 ---
 
@@ -477,45 +487,144 @@ Estrategia: **default deny implícito** con listas blancas explícitas por names
 
 | Recurso | Ingress permitido | Puerto |
 |---------|------------------|--------|
-| Agent Gateway datos | Cualquier origen (hostPort) | 80, 443 |
 | PostgreSQL | `apps`, `devtools` | 5432 |
 | MongoDB | `apps`, `devtools` | 27017 |
 | Redis | `apps`, `devtools` | 6379 |
 | Qdrant | `devtools` | 6333, 6334 |
 
-### Restricción de IP en dashboards
+### Gestión de Secrets
 
-Plugin `internal-dashboard` en Agent Gateway:
-- LAN: `192.168.80.0/24` (ej. `192.168.80.0/24`)
+Todos los secrets se almacenan en OpenBao (KV v2, mount `secret`) y se sincronizan al cluster via External Secrets Operator usando `apiVersion: external-secrets.io/v1`.
 
-### Variables de entorno requeridas
+Los `remoteRef.key` en los ExternalSecrets son paths relativos al mount, sin incluir `secret/data/`:
 
-Los secrets se definen en Vault y se sincronizan via External Secrets. Las variables requeridas son:
+```yaml
+remoteRef:
+  key: databases/postgresql-app   # ESO construye /v1/secret/data/databases/postgresql-app
+  property: password
+```
 
-| Variable | Descripción | Ejemplo |
-|----------|--------------|---------|
-| **Argocd** |||
-| `argocd_github_pat` | GitHub PAT (scope repo) | `ghp_...` |
-| `argocd_repo_url` | URL del repositorio | `https://github.com/cristsr/homelab` |
-| **Infra** |||
-| `cloudflare_api_token` | Token API Cloudflare | `...` |
-| `cloudflared_token` | Token Cloudflare Tunnel | `...` |
-| **Databases** |||
-| `postgresql_username` | Usuario app PostgreSQL | `appuser` |
-| `postgresql_password` | Password PostgreSQL | `...` |
-| `redis_username` | Usuario Redis | `default` |
-| `redis_password` | Password Redis | `...` |
-| `mongodb_username` | Usuario MongoDB | `appuser` |
-| `mongodb_password` | Password MongoDB | `...` |
-| `qdrant_api_key` | API Key Qdrant | `...` |
-| **Devtools** |||
-| `openmemory_openai_api_key` | OpenAI API Key | `sk-...` |
-| `sonarqube_password` | Password SonarQube | `...` |
-| **Monitoring** |||
-| `grafana_username` | Usuario Grafana | `admin` |
-| `grafana_password` | Password Grafana | `...` |
+### Variables de entorno requeridas (vault-bootstrap-secrets)
 
-#### Crear el secret inicial
+| Variable | Descripción |
+|----------|-------------|
+| `argocd_github_pat` | PAT de GitHub para acceso al repo privado |
+| `argocd_repo_url` | URL del repositorio |
+| `cloudflare_api_token` | Token API Cloudflare (DNS-01) |
+| `cloudflared_token` | Token Cloudflare Tunnel |
+| `postgresql_username` | Usuario app PostgreSQL |
+| `postgresql_password` | Password PostgreSQL |
+| `redis_username` | Usuario Redis (`default`) |
+| `redis_password` | Password Redis |
+| `mongodb_username` | Usuario MongoDB |
+| `mongodb_password` | Password MongoDB |
+| `qdrant_api_key` | API Key Qdrant |
+| `openmemory_openai_api_key` | OpenAI API Key |
+| `sonarqube_password` | Password SonarQube |
+| `grafana_username` | Usuario Grafana (`admin`) |
+| `grafana_password` | Password Grafana |
+
+---
+
+## 9. GitOps y Orden de Despliegue
+
+```
+root-app (gitops/root-app.yaml)
+  └── App of Apps (gitops/apps/ — recurse: true)
+        ├── Wave 1:  longhorn, cert-manager, cloudnative-pg, percona-mongodb-operator, reloader
+        ├── Wave 2:  openbao, external-secrets, vault-sync-operator, openbao-init, longhorn-config
+        ├── Wave 3:  agentgateway
+        ├── Wave 4:  agentgateway-config, argocd-config, cert-manager-config
+        ├── Wave 5:  prometheus, grafana-operator, monitoring-stack, cloudflared, headlamp
+        ├── Wave 6:  postgresql, mongodb, redis, qdrant, cloudnative-pg cluster, monitors
+        ├── Wave 8:  sonarqube, openmemory
+        └── Wave 9:  flow
+```
+
+### Dependencias implícitas
+
+```
+Longhorn ──────────────────────► PostgreSQL, MongoDB, Redis, Qdrant, Prometheus, Grafana, SonarQube
+
+cert-manager ──► Certificate ──► wildcard-home-tls ──► Agent Gateway TLS
+
+OpenBao ──► openbao-init ──► ExternalSecrets sync ──► todos los secrets en cluster
+
+PostgreSQL ────────────────────► SonarQube, Flow API
+
+Qdrant ────────────────────────► OpenMemory
+```
+
+---
+
+## 10. Almacenamiento y Recursos
+
+### Volúmenes persistentes
+
+| Componente | Tamaño | StorageClass |
+|-----------|--------|-------------|
+| PostgreSQL | 10Gi | longhorn-retain |
+| MongoDB | 10Gi | longhorn-retain |
+| Redis | 5Gi | longhorn-retain |
+| Qdrant | 10Gi | longhorn-retain |
+| OpenBao | 1Gi | longhorn (default) |
+| Prometheus | 20Gi | longhorn (default) |
+| Grafana | 5Gi | longhorn (default) |
+| Alertmanager | 1Gi | longhorn (default) |
+| SonarQube | 10Gi | longhorn (default) |
+| **Total** | **~72Gi** | |
+
+### Recursos de CPU y RAM (estimado total)
+
+| | CPU Requests | CPU Limits | RAM Requests | RAM Limits |
+|-|-------------|-----------|------------|-----------|
+| Infraestructura | ~1.0 core | ~5.0 cores | ~1.5Gi | ~4.0Gi |
+| Bases de datos | ~0.35 cores | ~1.7 cores | ~1.0Gi | ~2.3Gi |
+| Aplicaciones | ~0.35 cores | ~1.5 cores | ~1.4Gi | ~3.0Gi |
+| Sistema (Cilium, kube) | ~0.2 cores | ~2.0 cores | ~0.5Gi | ~2.0Gi |
+| **Total estimado** | **~1.9 cores** | **~10.2 cores** | **~4.4Gi** | **~11.3Gi** |
+
+**Requerimiento mínimo del host**: 8GB RAM, 4 CPU cores, 100GB disco.
+
+---
+
+## 11. Flujo de Instalación Inicial
+
+### Fase 1 — Provisioning del nodo (Ansible)
+
+Ansible instala k0s, exporta el kubeconfig, instala Helm y Helmfile, y crea el secret de GitHub para ArgoCD.
+
+```bash
+cd ansible
+ansible-playbook site.yaml
+kubectl get nodes
+```
+
+### Fase 2 — Bootstrap del cluster (Helmfile)
+
+Helmfile crea los namespaces (hook presync), instala Cilium y ArgoCD en orden.
+
+```bash
+cd bootstrap
+helmfile apply
+```
+
+Verificar Cilium:
+
+```bash
+kubectl -n kube-system rollout status daemonset/cilium
+```
+
+Obtener contraseña admin de Argo CD:
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" | base64 -d && echo
+```
+
+### Fase 3 — Secrets de Vault
+
+Crear el secret de bootstrap **antes** de activar GitOps:
 
 ```bash
 kubectl create secret generic vault-bootstrap-secrets \
@@ -537,110 +646,36 @@ kubectl create secret generic vault-bootstrap-secrets \
   --from-literal=grafana_password='...'
 ```
 
----
-
-## 9. GitOps y Orden de Despliegue
-
-Argo CD despliega las aplicaciones en orden via `sync-wave`. La `root-app` apunta a `gitops/apps/` y descubre todas las sub-aplicaciones.
-
-```
-root-app (gitops/root-app.yaml)
-  └── App of Apps (gitops/apps/)
-        ├── Wave 1:  Longhorn, cert-manager, cloudnative-pg, percona-mongodb, reloader
-        ├── Wave 2:  OpenBao, External Secrets, vault-sync-operator, cert-manager-config
-        ├── Wave 3:  Agent Gateway (Helm)
-        ├── Wave 4:  agentgateway-config, argocd-config
-        ├── Wave 5:  monitoring (prometheus, grafana), cloudflared, headlamp, argocd-config
-        ├── Wave 6:  PostgreSQL, MongoDB, Redis, Qdrant
-        ├── Wave 8:  SonarQube, OpenMemory
-        └── Wave 9:  Flow API
-```
-
-### Dependencias implícitas entre componentes
-
-```
-Longhorn (longhorn-system) ─────────► PostgreSQL, MongoDB,
-                                      Redis, Qdrant, Prometheus, Grafana,
-                                      SonarQube
-
-cert-manager ──► certificate ──────► wildcard-home-tls ──► Agent Gateway TLS
-
-Agent Gateway ────────────────────────────► Todas las rutas de acceso externo
-
-OpenBao ──► External Secrets ──► Secrets en cluster
-
-PostgreSQL ────────────────────────► SonarQube, Flow API
-
-Qdrant ────────────────────────────► OpenMemory
-```
-
----
-
-## 10. Almacenamiento y Recursos
-
-### Volúmenes persistentes (todos en StorageClass `longhorn`)
-
-| Componente | Tamaño |
-|-----------|--------|
-| PostgreSQL | 10Gi |
-| MongoDB | 10Gi |
-| Redis | 5Gi |
-| Qdrant | 10Gi |
-| Prometheus | 20Gi |
-| Grafana | 5Gi |
-| SonarQube | 10Gi |
-| **Total** | **~60Gi** |
-
-### Recursos de CPU y RAM (estimado total)
-
-| | CPU Requests | CPU Limits | RAM Requests | RAM Limits |
-|-|-------------|-----------|------------|-----------|
-| Infraestructura | ~1.0 core | ~5.0 cores | ~1.5Gi | ~4.0Gi |
-| Bases de datos | ~0.35 cores | ~1.7 cores | ~1.0Gi | ~2.3Gi |
-| Aplicaciones | ~0.35 cores | ~1.5 cores | ~1.4Gi | ~3.0Gi |
-| Sistema (Cilium, kube) | ~0.2 cores | ~2.0 cores | ~0.5Gi | ~2.0Gi |
-| **Total estimado** | **~1.9 cores** | **~10.2 cores** | **~4.4Gi** | **~11.3Gi** |
-
-**Requerimiento mínimo del host**: 8GB RAM, 4 CPU cores, 100GB disco.
-
----
-
-## 11. Flujo de Instalación Inicial
+### Fase 4 — Activar GitOps (ArgoCD)
 
 ```bash
-# 1. Subir el repositorio a Git
-git add -A && git commit -m "chore: initial commit" && git push
+kubectl apply -f gitops/root-app.yaml
+```
 
-# 2. Crear namespaces
-kubectl apply -f bootstrap/namespaces.yaml
+A partir de aquí ArgoCD sincroniza el cluster con el repositorio Git siguiendo el orden de sync-waves.
 
-# 3. Instalar Cilium (CNI, antes que cualquier otra cosa)
-helm repo add cilium https://helm.cilium.io
-helm repo update
+Seguir progreso:
 
-helm upgrade --install cilium cilium/cilium \
-  --namespace kube-system \
-  --version 1.18.4 \
-  -f bootstrap/cilium/values.yaml
+```bash
+kubectl -n argocd get applications -w
+```
 
-# 4. Instalar Argo CD (bootstrap manual, luego se autogestiona)
-helm repo add argo https://argoproj.github.io/argo-helm
-helm repo update
+### Resumen del flujo
 
-helm upgrade --install argocd argo/argo-cd \
-  --namespace argocd \
-  --version 7.8.0 \
-  -f bootstrap/argocd/values.yaml
+```
+cd ansible && ansible-playbook site.yaml   # k0s + kubeconfig + helm + helmfile + argocd secret
+cd bootstrap && helmfile apply             # namespaces + cilium + argocd
+kubectl create secret generic vault-bootstrap-secrets -n vault ...
+kubectl apply -f gitops/root-app.yaml      # GitOps activo → ArgoCD despliega el resto
+```
 
-# 5. Obtener kubeconfig
-sudo cp /etc/k0s/k0s.yaml ~/.kube/config
-sudo chown $USER:$USER ~/.kube/config
-chmod 600 ~/.kube/config
+---
 
-# 6. Crear cluster secret para ArgoCD
-CA_DATA=$(kubectl get configmap kube-root-ca.crt \
-  -n kube-system -o jsonpath='{.data.ca\.crt}' | base64 -w0)
+## Troubleshooting
 
+**Apps en Unknown — cluster secret:**
+```bash
+CA_DATA=$(kubectl get configmap kube-root-ca.crt -n kube-system -o jsonpath='{.data.ca\.crt}' | base64 -w0)
 kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Secret
@@ -655,28 +690,22 @@ data:
   name: $(echo -n "in-cluster" | base64 -w0)
   config: $(echo -n "{\"tlsClientConfig\":{\"insecure\":false,\"caData\":\"${CA_DATA}\"}}" | base64 -w0)
 EOF
-
-# 7. Registrar repositorio privado en ArgoCD
-# Crear Personal Access Token en GitHub con scope 'repo'
-kubectl -n argocd create secret generic homelab-repo \
-  --from-literal=type=git \
-  --from-literal=url=https://github.com/cristsr/homelab \
-  --from-literal=username=cristsr \
-  --from-literal=password=TU_GITHUB_PAT \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-kubectl -n argocd label secret homelab-repo \
-  argocd.argoproj.io/secret-type=repository \
-  --overwrite
-
-# 8. Aplicar root-app (ArgoCD despliega el resto)
-kubectl apply -f gitops/root-app.yaml
-
-# 9. Desbloquear Longhorn (si es necesario)
-kubectl create serviceaccount longhorn-service-account -n argocd
-kubectl create clusterrolebinding longhorn-pre-upgrade-temp \
-  --clusterrole=cluster-admin \
-  --serviceaccount=argocd:longhorn-service-account
 ```
 
-A partir del paso 8, Argo CD sincroniza el estado del cluster con el repositorio Git siguiendo el orden de sync-waves definido.
+**ClusterSecretStore False:**
+```bash
+kubectl get clustersecretstore openbao -o wide
+kubectl describe clustersecretstore openbao
+```
+
+**OpenBao sellado tras restart:**
+```bash
+# Obtener unseal key (guardada manualmente tras el primer init)
+kubectl exec -n vault openbao-0 -- bao operator unseal <UNSEAL_KEY>
+```
+
+**Longhorn stuck:**
+```bash
+kubectl create serviceaccount longhorn-sa -n argocd
+kubectl create clusterrolebinding longhorn-temp --clusterrole=cluster-admin --serviceaccount=argocd:longhorn-sa
+```

@@ -1,4 +1,4 @@
-# Longhorn 1.7.x — k0s
+# Longhorn 1.11.1 — k0s
 defaultSettings:
   defaultDataPath: /var/lib/longhorn
   defaultReplicaCount: 1
