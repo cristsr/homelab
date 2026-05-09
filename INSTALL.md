@@ -67,7 +67,7 @@ echo "ansible/.vault-pass" >> .gitignore
 
 ```bash
 cd ansible
-ansible-playbook site.yaml
+ansible-playbook site.yaml -K
 ```
 
 El playbook instala k0s (nodo único), escribe `~/.kube/config`, instala `helm` y `helmfile`, y crea el secret `github-repo-creds` en el namespace `argocd` para que ArgoCD pueda acceder al repositorio privado.
