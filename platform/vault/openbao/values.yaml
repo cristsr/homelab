@@ -19,8 +19,7 @@ server:
     enabled: false
 
   # Listener config for UI
-  extraArgs:
-    - "-log-level=info"
+  extraArgs: "-log-level=info"
 
   # Service
   service:
