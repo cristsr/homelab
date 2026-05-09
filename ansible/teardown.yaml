@@ -1,0 +1,29 @@
+---
+- name: Teardown k0s cluster
+  hosts: k0s
+  become: true
+
+  vars_prompt:
+    - name: confirm
+      prompt: "This will destroy the cluster completely. Type 'yes' to continue"
+      private: false
+
+  tasks:
+    - name: Abort if not confirmed
+      ansible.builtin.fail:
+        msg: "Teardown cancelled"
+      when: confirm != "yes"
+
+    - name: Stop k0s
+      ansible.builtin.systemd:
+        name: k0scontroller
+        state: stopped
+      ignore_errors: true
+
+    - name: Reset k0s (removes etcd, certs, PVs, systemd unit)
+      ansible.builtin.command: k0s reset
+      ignore_errors: true
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
