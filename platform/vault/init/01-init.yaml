@@ -19,77 +19,78 @@ spec:
             - |
               set -e
 
-              echo "Waiting for OpenBao..."
-              sleep 10
+              # Wait until OpenBao responds:
+              #   exit 0 = unsealed, exit 2 = sealed/uninitialised, exit 1 = not yet up
+              until bao status > /dev/null 2>&1; do
+                [ $? -eq 1 ] || break
+                echo "Waiting for OpenBao..."
+                sleep 5
+              done
 
-              # Check if already initialized
-              STATUS=$(bao status 2>&1 || true)
-              if echo "$STATUS" | grep -q "Initialized.*true"; then
-                echo "OpenBao already initialized"
+              # Idempotency: Static Seal auto-unseals on restart, so status 0 = already done
+              if bao status -format=json 2>/dev/null | grep -q '"initialized":true'; then
+                echo "Already initialised, exiting"
                 exit 0
               fi
 
-              # Initialize (dev mode - single key)
-              echo "Initializing OpenBao..."
-              bao operator init -key-shares=1 -key-threshold=1 -format=json > /tmp/init.json
-              UNSEAL_KEY=$(jq -r '.unseal_keys_b64[0]' /tmp/init.json)
-              ROOT_TOKEN=$(jq -r '.root_token' /tmp/init.json)
+              # Init generates recovery keys (Static Seal handles unsealing — no bao operator unseal needed)
+              bao operator init -recovery-shares=1 -recovery-threshold=1 -format=json > /tmp/init.json
+              export BAO_TOKEN=$(jq -r '.root_token' /tmp/init.json)
+              RECOVERY_KEY=$(jq -r '.recovery_keys_b64[0]' /tmp/init.json)
 
-              # Save token for later use
-              echo "$ROOT_TOKEN" > /tmp/bao-token
+              # Persist recovery key so it can be retrieved after bootstrap and stored securely.
+              # Retrieve with: kubectl get secret openbao-recovery-key -n vault -o jsonpath='{.data.key}' | base64 -d
+              KUBE_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+              KUBE_CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              curl -sf --cacert "$KUBE_CA" \
+                -H "Authorization: Bearer $KUBE_TOKEN" \
+                -H "Content-Type: application/json" \
+                -X POST "https://kubernetes.default.svc/api/v1/namespaces/vault/secrets" \
+                -d "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"openbao-recovery-key\",\"namespace\":\"vault\"},\"data\":{\"key\":\"$(printf '%s' "$RECOVERY_KEY" | base64 | tr -d '\n')\"}}" \
+                > /dev/null
+              echo "Recovery key saved to openbao-recovery-key secret"
 
-              # Unseal
-              bao operator unseal $UNSEAL_KEY
+              # Root token (temporary — deleted by vault-populate playbook after use)
+              curl -sf --cacert "$KUBE_CA" \
+                -H "Authorization: Bearer $KUBE_TOKEN" \
+                -H "Content-Type: application/json" \
+                -X POST "https://kubernetes.default.svc/api/v1/namespaces/vault/secrets" \
+                -d "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"openbao-root-token\",\"namespace\":\"vault\"},\"data\":{\"token\":\"$(printf '%s' "$BAO_TOKEN" | base64 | tr -d '\n')\"}}" \
+                > /dev/null
+              echo "Root token saved to openbao-root-token secret (temporary)"
 
-              # Login
-              export BAO_TOKEN=$ROOT_TOKEN
+              # Secrets engine
+              bao secrets enable -path=secret kv-v2
 
-              # Enable KV v2
-              bao secrets enable -path=secret kv-v2 || true
-
-              # Enable Kubernetes auth
-              bao auth enable kubernetes || true
-
-              # Configure Kubernetes auth
-              BAO_SA_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-              BAO_CA_CERT=$(cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)
+              # Kubernetes auth
+              bao auth enable kubernetes
               bao write auth/kubernetes/config \
                 kubernetes_host="https://kubernetes.default.svc" \
-                kubernetes_ca_cert="$BAO_CA_CERT" \
-                token_reviewer_jwt="$BAO_SA_TOKEN"
+                kubernetes_ca_cert="$(cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)" \
+                token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
 
-              # Policy for external-secrets
-              bao policy write external-secrets - <<EOF
-              path "secret/data/*" {
-                capabilities = ["read"]
-              }
-              path "secret/metadata/*" {
-                capabilities = ["list", "read"]
-              }
-              EOF
+              # ESO: read-only on all secrets
+              bao policy write external-secrets - << 'POLICY'
+              path "secret/data/*"     { capabilities = ["read"] }
+              path "secret/metadata/*" { capabilities = ["list", "read"] }
+              POLICY
 
-              # Role for external-secrets
               bao write auth/kubernetes/role/external-secrets \
                 bound_service_account_names=external-secrets-sa \
                 bound_service_account_namespaces=vault \
                 policies=external-secrets \
                 ttl=24h
 
-              # Policy for vault-sync-operator
-              bao policy write vault-sync-operator - <<EOF
-              path "secret/data/*" {
-                capabilities = ["create", "read", "update", "delete"]
-              }
-              path "secret/metadata/*" {
-                capabilities = ["list", "read"]
-              }
-              EOF
+              # vault-sync-operator: full CRUD on secrets
+              bao policy write vault-sync-operator - << 'POLICY'
+              path "secret/data/*"     { capabilities = ["create", "read", "update", "delete"] }
+              path "secret/metadata/*" { capabilities = ["list", "read"] }
+              POLICY
 
-              # Role for vault-sync-operator
               bao write auth/kubernetes/role/vault-sync-operator \
                 bound_service_account_names=vault-sync-operator-sa \
                 bound_service_account_namespaces=vault \
                 policies=vault-sync-operator \
                 ttl=24h
 
-              echo "OpenBao initialized successfully"
+              echo "OpenBao initialised successfully"

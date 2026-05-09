@@ -1,16 +1,40 @@
-# OpenBao Helm values - production mode
+# OpenBao Helm values - production mode with Static Seal auto-unseal
 
 server:
-  # Production mode
   dev:
     enabled: false
 
-  # Standalone server (no HA)
   ha:
     enabled: false
     replicas: 1
 
-  # Storage backend (local PVC for homelab)
+  standalone:
+    config: |
+      ui = true
+
+      listener "tcp" {
+        tls_disable = 1
+        address = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+
+      storage "file" {
+        path = "/openbao/data"
+      }
+
+      seal "static" {
+        current_key_id = "homelab-v1"
+        current_key    = "env://BAO_UNSEAL_KEY"
+      }
+
+  # Static seal key injected from Secret created by Ansible bootstrap
+  extraEnv:
+    - name: BAO_UNSEAL_KEY
+      valueFrom:
+        secretKeyRef:
+          name: openbao-static-unseal-key
+          key: key
+
   dataStorage:
     enabled: true
     accessMode: ReadWriteOnce
@@ -18,17 +42,14 @@ server:
   auditStorage:
     enabled: false
 
-  # Listener config for UI
   extraArgs: "-log-level=info"
 
-  # Service
   service:
     enabled: true
     type: ClusterIP
     port: 8200
     targetPort: 8200
 
-  # Resources
   resources:
     requests:
       cpu: 100m
@@ -37,10 +58,8 @@ server:
       cpu: 500m
       memory: 512Mi
 
-  # UI enabled for production
   ui:
     enabled: true
 
-# Disable injector
 injector:
   enabled: false

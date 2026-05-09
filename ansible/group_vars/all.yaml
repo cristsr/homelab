@@ -6,6 +6,17 @@ k0s_service_cidr: 10.96.0.0/12
 helm_version: 3.17.3
 helmfile_version: 1.5.0
 github_username: cristsr
+# OpenBao Static Seal Key — 256-bit AES key in base64
+# Generate: openssl rand -base64 32
+# Encrypt:  ansible-vault encrypt_string 'GENERATED_KEY' --name 'openbao_static_seal_key'
+openbao_static_seal_key: CHANGEME
+
+# Infrastructure secrets — written to OpenBao KV during vault-populate phase
+# Encrypt with: ansible-vault encrypt_string 'VALUE' --name 'VAR_NAME'
+argocd_github_pat: CHANGEME
+argocd_repo_url: https://github.com/cristsr/homelab
+cloudflare_api_token: CHANGEME
+cloudflared_token: CHANGEME
 github_token: !vault |
   $ANSIBLE_VAULT;1.1;AES256
   64616532323563333639346337323962313638353566636339633130306434666465393439633961

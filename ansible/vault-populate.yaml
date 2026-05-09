@@ -1,0 +1,68 @@
+---
+- name: Populate OpenBao KV
+  hosts: k0s
+  become: true
+
+  vars:
+    bao_url: "http://127.0.0.1:8200"
+    pf_pid_file: "/tmp/openbao-pf.pid"
+
+  tasks:
+    - name: Wait for openbao-init job to complete
+      ansible.builtin.shell: |
+        kubectl wait --for=condition=complete job/openbao-init \
+          -n vault --timeout=300s
+      become: false
+      changed_when: false
+
+    - name: Read root token from cluster
+      ansible.builtin.shell: |
+        kubectl get secret openbao-root-token -n vault \
+          -o jsonpath='{.data.token}' | base64 -d
+      register: bao_root_token
+      become: false
+      no_log: true
+      changed_when: false
+
+    - name: Start port-forward to OpenBao
+      ansible.builtin.shell: |
+        kubectl port-forward svc/openbao 8200:8200 -n vault \
+          > /tmp/openbao-pf.log 2>&1 &
+        echo $! > {{ pf_pid_file }}
+        sleep 2
+      become: false
+      changed_when: false
+
+    - block:
+        - name: Write infrastructure secrets to OpenBao KV
+          ansible.builtin.uri:
+            url: "{{ bao_url }}/v1/secret/data/{{ item.path }}"
+            method: POST
+            headers:
+              X-Vault-Token: "{{ bao_root_token.stdout }}"
+            body_format: json
+            body:
+              data: "{{ item.data }}"
+            status_code: 200
+          loop:
+            - path: argocd
+              data:
+                github_pat: "{{ argocd_github_pat }}"
+                username: "x-access-token"
+                url: "{{ argocd_repo_url }}"
+            - path: infra/cloudflare
+              data:
+                api_token: "{{ cloudflare_api_token }}"
+            - path: infra/cloudflared
+              data:
+                token: "{{ cloudflared_token }}"
+          no_log: true
+
+      always:
+        - name: Stop port-forward and delete root token secret
+          ansible.builtin.shell: |
+            kill $(cat {{ pf_pid_file }}) 2>/dev/null || true
+            rm -f {{ pf_pid_file }} /tmp/openbao-pf.log
+            kubectl delete secret openbao-root-token -n vault --ignore-not-found
+          become: false
+          changed_when: false

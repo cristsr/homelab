@@ -16,3 +16,4 @@
     - import_tasks: tasks/longhorn-prereqs.yaml
     - import_tasks: tasks/helmfile.yaml
     - import_tasks: tasks/argocd-secret.yaml
+    - import_tasks: tasks/vault-secrets.yaml
