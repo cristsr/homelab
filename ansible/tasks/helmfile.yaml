@@ -1,7 +1,7 @@
 ---
-- name: Download Helmfile {{ helmfile_version }}
+- name: Download Helmfile v{{ helmfile_version }}
   ansible.builtin.get_url:
-    url: "https://github.com/helmfile/helmfile/releases/download/{{ helmfile_version }}/helmfile_linux_amd64.tar.gz"
+    url: "https://github.com/helmfile/helmfile/releases/download/v{{ helmfile_version }}/helmfile_{{ helmfile_version }}_linux_amd64.tar.gz"
     dest: /tmp/helmfile.tar.gz
     mode: "0644"
     force: false
