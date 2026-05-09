@@ -10,13 +10,9 @@ metadata:
 spec:
   project: default
   sources:
-    # TODO: migrar al chart oficial de OpenBao en lugar del chart de HashiCorp Vault
-    # repoURL: https://openbao.github.io/openbao-helm
-    # chart: openbao
-    # El chart de HashiCorp tiene bugs conocidos al usarse con imagen OpenBao (templates del injector)
-    - repoURL: https://helm.releases.hashicorp.com
-      chart: vault
-      targetRevision: "0.32.0"
+    - repoURL: https://openbao.github.io/openbao-helm
+      chart: openbao
+      targetRevision: "0.27.2"
       helm:
         releaseName: openbao
         valueFiles:

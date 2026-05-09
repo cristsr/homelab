@@ -1,12 +1,6 @@
 # OpenBao Helm values - production mode
-# Using HashiCorp Vault Helm chart with OpenBao image
 
 server:
-  image:
-    repository: "ghcr.io/openbao/openbao"
-    tag: "2.5.3"
-    pullPolicy: IfNotPresent
-
   # Production mode
   dev:
     enabled: false
