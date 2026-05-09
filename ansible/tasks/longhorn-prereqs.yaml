@@ -1,0 +1,14 @@
+---
+- name: Install open-iscsi (Longhorn requirement)
+  ansible.builtin.apt:
+    name: open-iscsi
+    state: present
+    update_cache: true
+  tags: [longhorn]
+
+- name: Enable and start iscsid
+  ansible.builtin.systemd:
+    name: iscsid
+    state: started
+    enabled: true
+  tags: [longhorn]

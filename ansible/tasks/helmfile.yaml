@@ -5,7 +5,7 @@
     dest: /tmp/helmfile.tar.gz
     mode: "0644"
     force: false
-  tags: [helmfile]
+  tags: [ helmfile ]
 
 - name: Extract helmfile binary
   ansible.builtin.unarchive:
@@ -16,7 +16,7 @@
       - helmfile
     creates: /usr/local/bin/helmfile
     mode: "0755"
-  tags: [helmfile]
+  tags: [ helmfile ]
 
 - name: Bootstrap Cilium and ArgoCD via helmfile
   ansible.builtin.command: helmfile sync
@@ -25,14 +25,14 @@
   become: true
   environment:
     KUBECONFIG: /var/lib/k0s/pki/admin.conf
-  tags: [helmfile]
+  tags: [ helmfile ]
 
 - name: Wait for node to reach Ready state (after Cilium)
   ansible.builtin.command: >
-    k0s kubectl wait --for=condition=Ready node --all --timeout=60s
+    kubectl wait --for=condition=Ready node --all --timeout=60s
   register: node_wait
   until: node_wait.rc == 0
   retries: 20
   delay: 20
   changed_when: false
-  tags: [helmfile]
+  tags: [ helmfile ]
