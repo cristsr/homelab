@@ -22,7 +22,9 @@
   ansible.builtin.command: helmfile sync
   args:
     chdir: "{{ playbook_dir }}/../bootstrap"
-  become: false
+  become: true
+  environment:
+    KUBECONFIG: /var/lib/k0s/pki/admin.conf
   tags: [helmfile]
 
 - name: Wait for node to reach Ready state (after Cilium)
