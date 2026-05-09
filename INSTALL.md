@@ -70,7 +70,10 @@ cd ansible
 ansible-playbook site.yaml -K
 ```
 
-El playbook instala k0s (nodo único), escribe `~/.kube/config`, instala `helm` y `helmfile`, y crea el secret `github-repo-creds` en el namespace `argocd` para que ArgoCD pueda acceder al repositorio privado.
+El playbook realiza todo automaticamente:
+- Instala k0s (nodo único), escribe `~/.kube/config` e instala `kubectl` standalone (no requiere sudo)
+- Instala `helm`, `helmfile` y hace bootstrap de Cilium + ArgoCD via helmfile
+- Crea el secret `github-repo-creds` en el namespace `argocd`
 
 Verificar que el cluster está listo:
 
@@ -80,16 +83,43 @@ kubectl get nodes
 
 ---
 
-## 3. Configurar variables de entorno
+## 3. Bootstrap (namespaces + Cilium + ArgoCD)
 
-Crear el secret con todas las variables necesarias:
+> **Nota:** El playbook de Ansible (paso 2.4) ya ejecuta `helmfile sync` automaticamente.  
+> Solo necesitas ejecutarlo manualmente si quieres repetir el bootstrap.
+
+```bash
+cd bootstrap
+helmfile sync
+```
+
+Verificar Cilium:
+
+```bash
+kubectl -n kube-system rollout status daemonset/cilium
+kubectl get nodes
+```
+
+Obtener contraseña admin de ArgoCD:
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" | base64 -d && echo
+```
+
+---
+
+## 4. Configurar variables de entorno
+
+> **Cuándo hacerlo:** Después del bootstrap (paso 2 o 3) y **antes** de activar GitOps (paso 5).  
+> El namespace `vault` ya existe (lo creó Ansible en el paso 2, o el bootstrap manual en el paso 3).  
+> El job `openbao-import-secrets` lee este secret al iniciar OpenBao y lo importa al KV store.
+
+Crear el secret con las variables necesarias (es idempotente, puedes re-ejecutarlo para actualizar valores):
 
 ```bash
 kubectl create secret generic vault-bootstrap-secrets \
   -n vault \
-  --from-literal=argocd_github_pat='TU_GITHUB_PAT' \
-  --from-literal=argocd_repo_url='https://github.com/cristsr/homelab' \
-  --from-literal=dockerhub_password='TU_DOCKERHUB_PASSWORD' \
   --from-literal=cloudflare_api_token='TU_CLOUDFLARE_API_TOKEN' \
   --from-literal=cloudflared_token='TU_CLOUDFLARE_TUNNEL_TOKEN' \
   --from-literal=postgresql_username='appuser' \
@@ -102,33 +132,13 @@ kubectl create secret generic vault-bootstrap-secrets \
   --from-literal=openmemory_openai_api_key='TU_OPENAI_KEY' \
   --from-literal=sonarqube_password='TU_SONARQUBE_PASSWORD' \
   --from-literal=grafana_username='admin' \
-  --from-literal=grafana_password='TU_GRAFANA_PASSWORD'
+  --from-literal=grafana_password='TU_GRAFANA_PASSWORD' \
+  --dry-run=client -o yaml | kubectl apply -f -
 ```
 
----
-
-## 4. Bootstrap (namespaces + Cilium + Argo CD)
-
-```bash
-cd bootstrap
-helmfile sync
-```
-
-El helmfile aplica los namespaces, instala Cilium (espera a que esté listo) e instala Argo CD en ese orden.
-
-Verificar Cilium:
-
-```bash
-kubectl -n kube-system rollout status daemonset/cilium
-kubectl get nodes
-```
-
-Obtener contraseña admin de Argo CD:
-
-```bash
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d && echo
-```
+> **Valores críticos:** `cloudflare_api_token` y `cloudflared_token` son necesarios para el túnel Cloudflare.  
+> El token de GitHub para ArgoCD lo configura Ansible automáticamente (secret `github-repo-creds`).  
+> Los demás (`*_password`) puedes dejarlos como `DUMMY_...` para que el import job los salte, y configurarlos después directamente en OpenBao.
 
 ---
 
@@ -203,12 +213,12 @@ kubectl get pods -n argocd ingress networking databases monitoring vault
 
 | URL | Servicio | Credenciales |
 |-----|---------|--------------|
-| `argocd.*` | Argo CD | admin / (paso 4) |
-| `grafana.*` | Grafana | admin / (bootstrap.yaml) |
+| `argocd.*` | Argo CD | admin / (paso 3) |
+| `grafana.*` | Grafana | admin / (ver paso 4) |
 | `agentgateway.*` | Agent Gateway | admin / admin |
 | `headlamp.*` | Headlamp | `--token` |
 | `hubble.*` | Hubble | Sin auth |
-| `sonarqube.*` | SonarQube | admin / (bootstrap.yaml) |
+| `sonarqube.*` | SonarQube | admin / (ver paso 4) |
 | `openmemory.*` | OpenMemory | Sin auth |
 
 Token Headlamp:
