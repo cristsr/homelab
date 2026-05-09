@@ -2,8 +2,8 @@ k0s_version: v1.35.3+k0s.0
 k0s_node_ip: 192.168.80.20
 k0s_pod_cidr: 10.244.0.0/16
 k0s_service_cidr: 10.96.0.0/12
-helm_version: v3.17.3
-helmfile_version: v0.169.2
+helm_version: 3.17.3
+helmfile_version: 1.5.0
 github_token: !vault |
   $ANSIBLE_VAULT;1.1;AES256
   65633461643831383433643836373834306638346366623566626138653962653864376466643666
