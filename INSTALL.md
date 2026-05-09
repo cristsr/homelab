@@ -41,19 +41,31 @@ Edita `ansible/inventory.yaml` si tu usuario o IP difieren del predeterminado, y
 github_username: tu-usuario-github
 ```
 
-### 2.2 Cifrar el GitHub token con ansible-vault
+### 2.2 Cifrar las variables sensibles con ansible-vault
+
+El playbook gestiona automáticamente todos los secrets del cluster. Todas las variables marcadas como `CHANGEME` en `group_vars/all.yaml` deben cifrarse antes de ejecutar el playbook.
+
+**Formato:** ejecuta el siguiente comando por cada variable, copia el bloque `!vault |` generado y reemplaza el `CHANGEME` correspondiente en `group_vars/all.yaml`.
 
 ```bash
 cd ansible
-ansible-vault encrypt_string 'ghp_tutoken' --name 'github_token'
+ansible-vault encrypt_string 'EL_VALOR' --name 'NOMBRE_VARIABLE'
 ```
 
-Copia el bloque `!vault |` que genera y reemplaza el placeholder en `group_vars/all.yaml`:
+**Variables a cifrar** — solo secrets de infraestructura, los de aplicaciones se gestionan directamente en OpenBao:
 
-```yaml
-github_token: !vault |
-  $ANSIBLE_VAULT;1.1;AES256
-  38613330623564376561373361333864...
+| Variable | Descripción |
+|---|---|
+| `github_token` | PAT de GitHub para que Ansible clone el repo durante el bootstrap |
+| `openbao_static_seal_key` | Clave AES-256 para Static Seal — generar con `openssl rand -base64 32` |
+| `argocd_github_pat` | PAT de GitHub para que ArgoCD acceda al repo GitOps |
+| `cloudflare_api_token` | Token de API de Cloudflare (cert-manager DNS-01) |
+| `cloudflared_token` | Token del túnel Cloudflare |
+
+Ejemplo para la clave de OpenBao:
+
+```bash
+ansible-vault encrypt_string "$(openssl rand -base64 32)" --name 'openbao_static_seal_key'
 ```
 
 ### 2.3 Configurar contraseña del vault
@@ -74,6 +86,8 @@ El playbook realiza todo automaticamente:
 - Instala k0s (nodo único), escribe `~/.kube/config` e instala `kubectl` standalone (no requiere sudo)
 - Instala `helm`, `helmfile` y hace bootstrap de Cilium + ArgoCD via helmfile
 - Crea el secret `github-repo-creds` en el namespace `argocd`
+- Crea el secret `openbao-static-unseal-key` en el namespace `vault` (Static Seal)
+- Crea el secret `vault-bootstrap-secrets` en el namespace `vault` con todas las credenciales de aplicaciones
 
 Verificar que el cluster está listo:
 
@@ -111,34 +125,8 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 
 ## 4. Configurar variables de entorno
 
-> **Cuándo hacerlo:** Después del bootstrap (paso 2 o 3) y **antes** de activar GitOps (paso 5).  
-> El namespace `vault` ya existe (lo creó Ansible en el paso 2, o el bootstrap manual en el paso 3).  
-> El job `openbao-import-secrets` lee este secret al iniciar OpenBao y lo importa al KV store.
-
-Crear el secret con las variables necesarias (es idempotente, puedes re-ejecutarlo para actualizar valores):
-
-```bash
-kubectl create secret generic vault-bootstrap-secrets \
-  -n vault \
-  --from-literal=cloudflare_api_token='TU_CLOUDFLARE_API_TOKEN' \
-  --from-literal=cloudflared_token='TU_CLOUDFLARE_TUNNEL_TOKEN' \
-  --from-literal=postgresql_username='appuser' \
-  --from-literal=postgresql_password='TU_POSTGRES_PASSWORD' \
-  --from-literal=redis_username='default' \
-  --from-literal=redis_password='TU_REDIS_PASSWORD' \
-  --from-literal=mongodb_username='appuser' \
-  --from-literal=mongodb_password='TU_MONGODB_PASSWORD' \
-  --from-literal=qdrant_api_key='TU_QDRANT_API_KEY' \
-  --from-literal=openmemory_openai_api_key='TU_OPENAI_KEY' \
-  --from-literal=sonarqube_password='TU_SONARQUBE_PASSWORD' \
-  --from-literal=grafana_username='admin' \
-  --from-literal=grafana_password='TU_GRAFANA_PASSWORD' \
-  --dry-run=client -o yaml | kubectl apply -f -
-```
-
-> **Valores críticos:** `cloudflare_api_token` y `cloudflared_token` son necesarios para el túnel Cloudflare.  
-> El token de GitHub para ArgoCD lo configura Ansible automáticamente (secret `github-repo-creds`).  
-> Los demás (`*_password`) puedes dejarlos como `DUMMY_...` para que el import job los salte, y configurarlos después directamente en OpenBao.
+> El playbook de Ansible (paso 2.4) crea automáticamente los secrets `openbao-static-unseal-key` y `vault-bootstrap-secrets` en el namespace `vault` usando las variables cifradas en `group_vars/all.yaml`.  
+> **No es necesario crear nada manualmente.** Si necesitas actualizar un valor, edita `group_vars/all.yaml` y vuelve a ejecutar el playbook.
 
 ---
 
@@ -200,7 +188,59 @@ kubectl -n argocd patch application root --type merge -p '{"operation":{"sync":{
 
 ---
 
-## 6. Verificar
+## 6. Post-init: poblar OpenBao y guardar la recovery key
+
+> **Cuándo hacerlo:** Después de que GitOps active el cluster (paso 5) y el job `openbao-init` termine.  
+> Este paso escribe todos los secrets directamente en OpenBao KV desde Ansible y guarda la recovery key de forma segura.
+
+### 6.1 Poblar OpenBao KV
+
+```bash
+cd ansible
+ansible-playbook vault-populate.yaml
+```
+
+El playbook escribe los secrets de infraestructura en OpenBao KV y limpia el root token temporal:
+
+| Path KV | Contenido |
+|---|---|
+| `secret/argocd` | PAT y URL del repo GitOps |
+| `secret/infra/cloudflare` | Token de API de Cloudflare |
+| `secret/infra/cloudflared` | Token del túnel Cloudflare |
+
+Los secrets de aplicaciones (bases de datos, servicios) se gestionan directamente en OpenBao al desplegar cada servicio.
+
+### 6.2 Leer y guardar la recovery key
+
+La recovery key permite regenerar un root token en caso de emergencia. Sin ella, perder el acceso admin a OpenBao es **irreversible**.
+
+```bash
+kubectl get secret openbao-recovery-key -n vault \
+  -o jsonpath='{.data.key}' | base64 -d && echo
+```
+
+Cifrar y añadir a `group_vars/all.yaml`:
+
+```bash
+cd ansible
+ansible-vault encrypt_string 'LA_KEY_DEL_PASO_ANTERIOR' --name 'openbao_recovery_key'
+```
+
+```yaml
+openbao_recovery_key: !vault |
+  $ANSIBLE_VAULT;1.1;AES256
+  38613330623564376561373361333864...
+```
+
+### 6.3 Eliminar la recovery key del cluster
+
+```bash
+kubectl delete secret openbao-recovery-key -n vault
+```
+
+---
+
+## 7. Verificar
 
 ```bash
 kubectl -n argocd get applications
@@ -209,7 +249,7 @@ kubectl get pods -n argocd ingress networking databases monitoring vault
 
 ---
 
-## 7. Acceder
+## 8. Acceder
 
 | URL | Servicio | Credenciales |
 |-----|---------|--------------|
@@ -229,7 +269,7 @@ kubectl create token headlamp -n monitoring
 
 ---
 
-## 8. DNS
+## 9. DNS
 
 Registros en Cloudflare:
 
