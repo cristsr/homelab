@@ -17,3 +17,20 @@
     creates: /usr/local/bin/helmfile
     mode: "0755"
   tags: [helmfile]
+
+- name: Bootstrap Cilium and ArgoCD via helmfile
+  ansible.builtin.command: helmfile sync
+  args:
+    chdir: "{{ playbook_dir }}/../bootstrap"
+  become: false
+  tags: [helmfile]
+
+- name: Wait for node to reach Ready state (after Cilium)
+  ansible.builtin.command: >
+    k0s kubectl wait --for=condition=Ready node --all --timeout=60s
+  register: node_wait
+  until: node_wait.rc == 0
+  retries: 20
+  delay: 20
+  changed_when: false
+  tags: [helmfile]

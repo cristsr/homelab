@@ -43,13 +43,3 @@
     port: 6443
     timeout: 120
   tags: [k0s]
-
-- name: Wait for node to reach Ready state
-  ansible.builtin.command: >
-    k0s kubectl wait --for=condition=Ready node --all --timeout=60s
-  register: node_wait
-  until: node_wait.rc == 0
-  retries: 8
-  delay: 15
-  changed_when: false
-  tags: [k0s]
