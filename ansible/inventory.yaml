@@ -4,5 +4,5 @@ all:
       hosts:
         homelab:
           ansible_host: 192.168.80.20
-          ansible_user: cristian
+          ansible_user: abzu
           ansible_connection: local
