@@ -14,7 +14,7 @@ spec:
     targetRevision: HEAD
     path: platform/secret-management
     directory:
-      recurse: false
+      recurse: true
       exclude: "{openbao-statefulset.yaml,external-secrets-sa.yaml}"
   destination:
     server: https://kubernetes.default.svc
