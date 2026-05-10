@@ -6,7 +6,6 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
   annotations:
-    # Depende de cert-manager (wave 1) — ClusterIssuer y Certificate van después
     argocd.argoproj.io/sync-wave: "2"
 spec:
   project: default
