@@ -8,12 +8,20 @@
     pf_pid_file: "/tmp/openbao-pf.pid"
 
   tasks:
+    - name: Check if openbao-init job exists
+      ansible.builtin.shell: |
+        kubectl get job openbao-init -n vault -o name 2>/dev/null || true
+      register: init_job
+      become: false
+      changed_when: false
+
     - name: Wait for openbao-init job to complete
       ansible.builtin.shell: |
         kubectl wait --for=condition=complete job/openbao-init \
           -n vault --timeout=300s
       become: false
       changed_when: false
+      when: init_job.stdout | length > 0
 
     - name: Read root token from cluster
       ansible.builtin.shell: |
@@ -59,10 +67,9 @@
           no_log: true
 
       always:
-        - name: Stop port-forward and delete root token secret
+        - name: Stop port-forward
           ansible.builtin.shell: |
             kill $(cat {{ pf_pid_file }}) 2>/dev/null || true
             rm -f {{ pf_pid_file }} /tmp/openbao-pf.log
-            kubectl delete secret openbao-root-token -n vault --ignore-not-found
           become: false
           changed_when: false
