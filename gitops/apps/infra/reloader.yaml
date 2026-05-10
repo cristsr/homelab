@@ -16,6 +16,8 @@ spec:
       helm:
         releaseName: reloader
         values: |
+          reloader:
+            autoReloadAll: true
           webhook:
             enabled: true
     - repoURL: https://github.com/cristsr/homelab
