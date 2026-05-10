@@ -11,6 +11,7 @@ spec:
   project: default
   sources:
     - repoURL: oci://cr.agentgateway.dev/charts/agentgateway
+      chart: agentgateway
       targetRevision: "1.1.0"
       helm:
         releaseName: agentgateway
