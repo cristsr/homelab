@@ -166,7 +166,7 @@ kubectl apply -f gitops/root-app.yaml
 | Wave | Componentes |
 |------|-------------|
 | 1 | Longhorn, cert-manager, cloudnative-pg, percona-mongodb, reloader |
-| 2 | OpenBao, External Secrets, vault-sync-operator |
+| 2 | OpenBao, External Secrets |
 | 3 | Agent Gateway |
 | 4 | agentgateway-config, argocd-config |
 | 5 | monitoring, cloudflared, headlamp |

@@ -148,15 +148,4 @@ spec:
                 policies=external-secrets \
                 ttl=24h || true
 
-              bao policy write vault-sync-operator - << 'POLICY' || true
-              path "secret/data/*"     { capabilities = ["create", "read", "update", "delete"] }
-              path "secret/metadata/*" { capabilities = ["list", "read"] }
-              POLICY
-
-              bao write auth/kubernetes/role/vault-sync-operator \
-                bound_service_account_names=vault-sync-operator-sa \
-                bound_service_account_namespaces=secret-management \
-                policies=vault-sync-operator \
-                ttl=24h || true
-
               echo "=== OpenBao init completed successfully ==="

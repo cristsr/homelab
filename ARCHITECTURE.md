@@ -70,7 +70,7 @@ homelab/
 │       ├── devtools/        # SonarQube, OpenMemory
 │       ├── apps/            # Flow API
 │       ├── monitoring/      # Prometheus, Grafana, monitors, headlamp
-│       └── vault/           # OpenBao, External Secrets, vault-sync-operator
+│       └── vault/           # OpenBao, External Secrets
 ├── platform/                # Valores Helm y manifiestos de cada servicio
 │   ├── argocd/              # repo credentials (ExternalSecret)
 │   ├── networking/          # cert-manager, cloudflared
@@ -135,7 +135,7 @@ Declarados en `bootstrap/namespaces.yaml` y creados por el hook presync de Ciliu
 | `devtools` | SonarQube, OpenMemory |
 | `apps` | Flow API |
 | `monitoring` | Prometheus, Grafana, Alertmanager, Headlamp |
-| `vault` | OpenBao, External Secrets, vault-sync-operator |
+| `vault` | OpenBao, External Secrets |
 | `longhorn-system` | Longhorn |
 
 ---
@@ -532,7 +532,7 @@ remoteRef:
 root-app (gitops/root-app.yaml)
   └── App of Apps (gitops/apps/ — recurse: true)
         ├── Wave 1:  longhorn, cert-manager, cloudnative-pg, percona-mongodb-operator, reloader
-        ├── Wave 2:  openbao, external-secrets, vault-sync-operator, openbao-init, longhorn-config
+        ├── Wave 2:  openbao, external-secrets, openbao-init, longhorn-config
         ├── Wave 3:  agentgateway
         ├── Wave 4:  agentgateway-config, argocd-config, cert-manager-config
         ├── Wave 5:  prometheus, grafana-operator, monitoring-stack, cloudflared, headlamp
