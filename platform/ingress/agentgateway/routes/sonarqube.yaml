@@ -5,7 +5,7 @@ metadata:
   namespace: devtools
 spec:
   parentRefs:
-    - name: agentgateway
+    - name: main
       namespace: ingress
   hostnames:
     - sonarqube.cristianpuenguenan.online

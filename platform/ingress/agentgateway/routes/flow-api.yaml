@@ -5,7 +5,7 @@ metadata:
   namespace: apps
 spec:
   parentRefs:
-    - name: agentgateway
+    - name: main
       namespace: ingress
   hostnames:
     - api.cristianpuenguenan.online
