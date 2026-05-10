@@ -5,7 +5,7 @@ metadata:
   namespace: kube-system
 spec:
   parentRefs:
-    - name: agentgateway
+    - name: main
       namespace: ingress
   hostnames:
     - hubble.cristianpuenguenan.online
