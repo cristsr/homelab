@@ -39,7 +39,6 @@ spec:
         inherit: true
         passwordSecret:
           name: postgresql-app-secret
-          key: password
 
   monitoring:
     enablePodMonitor: true
