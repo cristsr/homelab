@@ -1,0 +1,44 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: mongodb
+  namespace: data-platform
+spec:
+  crVersion: "1.22.0"
+  image: percona/percona-server-mongodb:8.0.20-8
+  imagePullPolicy: IfNotPresent
+
+  replsets:
+    - name: rs0
+      size: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      volumeSpec:
+        persistentVolumeClaim:
+          storageClassName: longhorn-retain
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+  secrets:
+    users: mongodb-secret
+
+  users:
+    - name: admin
+      db: homelab
+      passwordSecretRef:
+        name: mongodb-app-secret
+        key: password
+      roles:
+        - name: readWrite
+          db: homelab
+
+  backup:
+    enabled: false
+    image: percona/percona-backup-mongodb:2.8.0

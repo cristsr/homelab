@@ -14,7 +14,6 @@ spec:
     targetRevision: HEAD
     path: platform/networking/cloudflared
     directory:
-      exclude: "secret.yaml"
   destination:
     server: https://kubernetes.default.svc
     namespace: networking

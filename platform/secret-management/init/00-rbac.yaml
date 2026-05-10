@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: external-secrets-sa
+  namespace: secret-management
+automountServiceAccountToken: true
+---
+# Required for OpenBao Kubernetes auth: this SA's token is used as token_reviewer_jwt
+# so OpenBao can validate tokens from other service accounts via TokenReview API
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: openbao-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: external-secrets-sa
+    namespace: secret-management
+---
+# Allows the init job to persist recovery key and root token after initialisation
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openbao-init
+  namespace: secret-management
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openbao-init
+  namespace: secret-management
+subjects:
+  - kind: ServiceAccount
+    name: external-secrets-sa
+    namespace: secret-management
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: openbao-init

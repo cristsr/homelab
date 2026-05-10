@@ -1,0 +1,26 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: postgresql-default-deny
+  namespace: data-platform
+spec:
+  # CloudNativePG etiqueta sus pods con cnpg.io/cluster
+  endpointSelector:
+    matchLabels:
+      cnpg.io/cluster: postgresql
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: apps
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: devtools
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+  egress: []
