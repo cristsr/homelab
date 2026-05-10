@@ -10,7 +10,7 @@
   tasks:
     - name: Check if openbao-init job exists
       ansible.builtin.shell: |
-        kubectl get job openbao-init -n vault -o name 2>/dev/null || true
+        kubectl get job openbao-init -n secret-management -o name 2>/dev/null || true
       register: init_job
       become: false
       changed_when: false
@@ -18,14 +18,14 @@
     - name: Wait for openbao-init job to complete
       ansible.builtin.shell: |
         kubectl wait --for=condition=complete job/openbao-init \
-          -n vault --timeout=300s
+          -n secret-management --timeout=300s
       become: false
       changed_when: false
       when: init_job.stdout | length > 0
 
     - name: Read root token from cluster
       ansible.builtin.shell: |
-        kubectl get secret openbao-root-token -n vault \
+        kubectl get secret openbao-root-token -n secret-management \
           -o jsonpath='{.data.token}' | base64 -d
       register: bao_root_token
       become: false
@@ -34,7 +34,7 @@
 
     - name: Start port-forward to OpenBao
       ansible.builtin.shell: |
-        kubectl port-forward svc/openbao 8200:8200 -n vault \
+        kubectl port-forward svc/openbao 8200:8200 -n secret-management \
           > /tmp/openbao-pf.log 2>&1 &
         echo $! > {{ pf_pid_file }}
         sleep 2
