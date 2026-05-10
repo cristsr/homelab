@@ -24,26 +24,18 @@ spec:
                 - secretRef:
                     name: grafana-admin-secret
   service:
-    type: ClusterIP
-    ports:
-      - name: http
-        port: 3000
+    spec:
+      type: ClusterIP
   config:
     log:
       mode: "console"
     security:
-      allow_embedding: true
+      allow_embedding: "true"
     auth:
-      disable_login_form: false
-      disable_signout_menu: false
+      disable_login_form: "false"
+      disable_signout_menu: "false"
     server:
       root_url: "https://grafana.cristianpuenguenan.online"
-  dashboardLabelSelectors:
-    - matchExpressions:
-        - key: dashboards
-          operator: In
-          values:
-            - grafana
   persistentVolumeClaim:
     spec:
       storageClassName: longhorn
