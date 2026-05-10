@@ -5,6 +5,8 @@ metadata:
   namespace: monitoring
   labels:
     dashboards: "grafana"
+  annotations:
+    reloader.stakater.com/auto: "true"
 spec:
   deployment:
     spec:
