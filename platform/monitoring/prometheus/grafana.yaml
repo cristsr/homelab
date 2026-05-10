@@ -34,6 +34,7 @@ spec:
       mode: "console"
     security:
       allow_embedding: "true"
+      allow_force_reset_user_password: "false"
     auth:
       disable_login_form: "false"
       disable_signout_menu: "false"
