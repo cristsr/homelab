@@ -22,7 +22,7 @@ spec:
             - containerPort: 8080
           env:
             - name: QDRANT_HOST
-              value: "qdrant.databases.svc.cluster.local"
+              value: "qdrant.data-platform.svc.cluster.local"
             - name: QDRANT_PORT
               value: "6333"
             - name: OPENAI_API_KEY

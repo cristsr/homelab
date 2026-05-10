@@ -16,7 +16,7 @@ spec:
       helm:
         releaseName: longhorn
         valueFiles:
-          - $values/platform/storage/longhorn/values.yaml
+          - $values/platform/storage/longhorn/longhorn.yaml
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values

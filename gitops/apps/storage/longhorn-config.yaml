@@ -15,7 +15,7 @@ spec:
     targetRevision: HEAD
     path: platform/storage/longhorn
     directory:
-      exclude: "values.yaml"
+      exclude: "longhorn.yaml"
   destination:
     server: https://kubernetes.default.svc
     namespace: longhorn-system

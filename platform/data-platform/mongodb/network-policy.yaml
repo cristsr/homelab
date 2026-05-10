@@ -1,0 +1,45 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: mongodb-default-deny
+  namespace: data-platform
+spec:
+  # Percona etiqueta sus pods con app.kubernetes.io/instance
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/instance: mongodb
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: apps
+      toPorts:
+        - ports:
+            - port: "27017"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: devtools
+      toPorts:
+        - ports:
+            - port: "27017"
+              protocol: TCP
+    # El operador Percona se ejecuta en el mismo namespace y necesita acceso al puerto de administración
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: data-platform
+            app.kubernetes.io/name: psmdb-operator
+      toPorts:
+        - ports:
+            - port: "27017"
+              protocol: TCP
+  # MongoDB necesita resolver sus propios hostnames para el replica set
+  egress:
+    - toEntities:
+        - cluster
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

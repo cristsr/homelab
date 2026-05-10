@@ -15,7 +15,7 @@ spec:
     targetRevision: HEAD
     path: platform/networking/cert-manager
     directory:
-      exclude: "{values.yaml,cloudflare-secret.yaml}"
+      exclude: "cert-manager.yaml"
   destination:
     server: https://kubernetes.default.svc
     namespace: networking

@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: percona-mongodb-operator
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    # Debe instalarse antes de que el CRD PerconaServerMongoDB sea aplicado (wave 6)
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  sources:
+    - repoURL: https://percona.github.io/percona-helm-charts
+      chart: psmdb-operator-crds
+      targetRevision: "1.22.0"
+      helm:
+        releaseName: percona-mongodb-operator-crds
+    - repoURL: https://percona.github.io/percona-helm-charts
+      chart: psmdb-operator
+      targetRevision: "1.22.0"
+      helm:
+        releaseName: percona-mongodb-operator
+        valueFiles:
+          - $values/platform/data-platform/operators/percona-mongodb/percona-mongodb.yaml
+    - repoURL: https://github.com/cristsr/homelab
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: data-platform
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

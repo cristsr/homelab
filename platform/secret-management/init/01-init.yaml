@@ -1,0 +1,162 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openbao-init
+  namespace: secret-management
+spec:
+  template:
+    spec:
+      serviceAccountName: external-secrets-sa
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: ghcr.io/openbao/openbao:2.5.3
+          command: ["/bin/sh", "-c"]
+          env:
+            - name: BAO_ADDR
+              value: "http://openbao.secret-management.svc.cluster.local:8200"
+          args:
+            - |
+              set -e
+
+              API="http://openbao.secret-management.svc.cluster.local:8200"
+              KUBE_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+              K8S="https://kubernetes.default.svc"
+              NS="vault"
+              ROOT_SECRET="openbao-root-token"
+              RECOVERY_SECRET="openbao-recovery-key"
+
+              # Trust the in-cluster Kubernetes CA so wget can speak HTTPS to the API
+              cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt >> /etc/ssl/certs/ca-certificates.crt
+
+              # Helpers using wget (available in busybox/alpine image)
+              _k8s_api() {
+                wget -qO- \
+                  --header "Authorization: Bearer ${KUBE_TOKEN}" \
+                  --header "Content-Type: application/json" \
+                  "$@" 2>/dev/null
+              }
+
+              secret_exists() {
+                _k8s_api "${K8S}/api/v1/namespaces/${NS}/secrets/$1" > /dev/null 2>&1
+              }
+
+              create_secret() {
+                name=$1
+                key=$2
+                value=$3
+                encoded=$(printf '%s' "$value" | base64)
+                _k8s_api \
+                  --post-data "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"$name\",\"namespace\":\"$NS\"},\"type\":\"Opaque\",\"data\":{\"$key\":\"$encoded\"}}" \
+                  "${K8S}/api/v1/namespaces/${NS}/secrets" > /dev/null 2>&1
+              }
+
+              read_secret_key() {
+                name=$1
+                key=$2
+                json=$(_k8s_api "${K8S}/api/v1/namespaces/${NS}/secrets/$name" 2>/dev/null)
+                b64=$(echo "$json" | grep -o "\"$key\"[ ]*:[ ]*\"[^\"]*\"" | cut -d'"' -f4)
+                printf '%s' "$b64" | base64 -d
+              }
+
+              echo "=== OpenBao init job started ==="
+
+              # Wait for OpenBao to be reachable
+              echo "Waiting for OpenBao at ${API}..."
+              for i in $(seq 1 120); do
+                set +e
+                bao status > /dev/null 2>&1
+                rc=$?
+                set -e
+                if [ $rc -eq 0 ]; then
+                  echo "OpenBao is initialized and unsealed"
+                  break
+                elif [ $rc -eq 2 ]; then
+                  echo "OpenBao is reachable but uninitialized"
+                  break
+                elif [ $rc -eq 1 ]; then
+                  echo "OpenBao is reachable but sealed (attempt $i)"
+                else
+                  echo "Waiting for OpenBao... (attempt $i, rc=$rc)"
+                fi
+                sleep 5
+              done
+
+              # Determine final state
+              set +e
+              bao status > /dev/null 2>&1
+              final_rc=$?
+              set -e
+
+              if [ $final_rc -eq 0 ]; then
+                # Already initialized and unsealed
+                if secret_exists "$ROOT_SECRET"; then
+                  echo "OpenBao already initialized and root token secret exists."
+                  BAO_TOKEN=$(read_secret_key "$ROOT_SECRET" "token")
+                  echo "Retrieved existing root token from secret"
+                else
+                  echo "ERROR: OpenBao is initialized but secret ${ROOT_SECRET} is missing. Cannot recover root token."
+                  exit 1
+                fi
+              elif [ $final_rc -eq 2 ]; then
+                # Uninitialized — proceed with init
+                echo "Initializing OpenBao..."
+                INIT_OUT=$(bao operator init -recovery-shares=1 -recovery-threshold=1 -format=json)
+
+                BAO_TOKEN=$(echo "$INIT_OUT" | tr '\n' ' ' | sed -n 's/.*"root_token":[ ]*"\([^"]*\)".*/\1/p')
+                RECOVERY_KEY=$(echo "$INIT_OUT" | tr '\n' ' ' | sed -n 's/.*"recovery_keys_b64":[ ]*\[[ ]*"\([^"]*\)".*/\1/p')
+
+                if [ -z "$BAO_TOKEN" ] || [ -z "$RECOVERY_KEY" ]; then
+                  echo "ERROR: Failed to extract root token or recovery key from init output"
+                  exit 1
+                fi
+
+                echo "Persisting root token and recovery key to Kubernetes secrets..."
+                create_secret "$ROOT_SECRET" "token" "$BAO_TOKEN"
+                create_secret "$RECOVERY_SECRET" "key" "$RECOVERY_KEY"
+                echo "Secrets created successfully"
+              else
+                echo "ERROR: OpenBao did not become reachable or unsealed (final rc=$final_rc)"
+                exit 1
+              fi
+
+              if [ -z "$BAO_TOKEN" ]; then
+                echo "ERROR: Root token is empty, cannot configure OpenBao"
+                exit 1
+              fi
+
+              # Configure OpenBao (idempotent operations)
+              echo "Configuring OpenBao..."
+              bao login "$BAO_TOKEN" > /dev/null 2>&1 || true
+
+              bao secrets enable -path=secret kv-v2 2>/dev/null || echo "kv-v2 already enabled or skipped"
+              bao auth enable kubernetes 2>/dev/null || echo "kubernetes auth already enabled or skipped"
+
+              bao write auth/kubernetes/config \
+                kubernetes_host="$K8S" \
+                kubernetes_ca_cert="$(cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)" \
+                token_reviewer_jwt="$KUBE_TOKEN" || true
+
+              bao policy write external-secrets - << 'POLICY' || true
+              path "secret/data/*"     { capabilities = ["read"] }
+              path "secret/metadata/*" { capabilities = ["list", "read"] }
+              POLICY
+
+              bao write auth/kubernetes/role/external-secrets \
+                bound_service_account_names=external-secrets-sa \
+                bound_service_account_namespaces=vault \
+                policies=external-secrets \
+                ttl=24h || true
+
+              bao policy write vault-sync-operator - << 'POLICY' || true
+              path "secret/data/*"     { capabilities = ["create", "read", "update", "delete"] }
+              path "secret/metadata/*" { capabilities = ["list", "read"] }
+              POLICY
+
+              bao write auth/kubernetes/role/vault-sync-operator \
+                bound_service_account_names=vault-sync-operator-sa \
+                bound_service_account_namespaces=vault \
+                policies=vault-sync-operator \
+                ttl=24h || true
+
+              echo "=== OpenBao init completed successfully ==="
