@@ -15,6 +15,9 @@ spec:
       targetRevision: "2.2.11"
       helm:
         releaseName: reloader
+        values: |
+          webhook:
+            enabled: true
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values
