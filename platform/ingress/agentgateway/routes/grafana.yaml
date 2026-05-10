@@ -11,5 +11,5 @@ spec:
     - grafana.cristianpuenguenan.online
   rules:
     - backendRefs:
-        - name: kube-prometheus-stack-grafana
-          port: 80
+        - name: grafana-service
+          port: 3000
