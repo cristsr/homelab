@@ -1,5 +1,5 @@
-# Argo CD 7.x — Aplicar manualmente antes de activar GitOps
-# helm install argocd argo/argo-cd -n argocd -f bootstrap/argocd/values.yaml
+# Argo CD 9.x — ArgoCD v3.4.1
+# helm upgrade --install argocd argo/argo-cd -n argocd -f bootstrap/argocd/values.yaml
 
 global:
   domain: argocd.cristianpuenguenan.online
@@ -16,6 +16,9 @@ configs:
   cm:
     # Permite sync desde repositorio Git privado
     timeout.reconciliation: 180s
+    # Temporal: mantener label-based tracking para evitar recursos huerfanos durante migracion
+    # TODO: cambiar a 'annotation' despues de forzar sync de todas las apps
+    application.resourceTrackingMethod: label
   rbac:
     policy.default: role:readonly
     # Admin: full access to all apps
@@ -30,5 +33,7 @@ configs:
       p, admin, configmaps, *, */*, allow
       p, admin, workflows, *, */*, allow
       p, admin, events, *, */*, allow
+      # v3.0+: logs RBAC enforced by default, add explicit logs permission
+      p, admin, logs, get, */*, allow
       g, admin, admin
       g, readonly, role:readonly
