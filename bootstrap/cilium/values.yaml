@@ -26,16 +26,22 @@ hubble:
     enabled: true
   ui:
     enabled: true
+  metrics:
+    enabled:
+      - dns
+      - drop
+      - tcp
+      - flow
+      - icmp
+      - http
 
-cni:
-  binPath: /opt/cni/bin
-  confPath: /etc/cni/net.d
-
-bpf:
-  masquerade: true
+prometheus:
+  enabled: true
 
 operator:
   replicas: 1
+  prometheus:
+    enabled: true
 
 daemon:
   runPath: /var/run/cilium

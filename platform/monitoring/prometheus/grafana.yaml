@@ -8,6 +8,12 @@ metadata:
   annotations:
     reloader.stakater.com/auto: "true"
 spec:
+  dashboardLabelSelector:
+    - matchLabels:
+        grafana_dashboard: "1"
+  dataSourceLabelSelector:
+    - matchLabels:
+        app: grafana
   disableDefaultAdminSecret: true
   deployment:
     spec:
