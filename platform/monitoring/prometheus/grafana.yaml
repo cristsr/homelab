@@ -8,6 +8,7 @@ metadata:
   annotations:
     reloader.stakater.com/auto: "true"
 spec:
+  disableDefaultAdminSecret: true
   deployment:
     spec:
       replicas: 1
