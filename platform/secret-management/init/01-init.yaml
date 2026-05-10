@@ -22,7 +22,7 @@ spec:
               API="http://openbao.secret-management.svc.cluster.local:8200"
               KUBE_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
               K8S="https://kubernetes.default.svc"
-              NS="vault"
+              NS="secret-management"
               ROOT_SECRET="openbao-root-token"
               RECOVERY_SECRET="openbao-recovery-key"
 
@@ -144,7 +144,7 @@ spec:
 
               bao write auth/kubernetes/role/external-secrets \
                 bound_service_account_names=external-secrets-sa \
-                bound_service_account_namespaces=vault \
+                bound_service_account_namespaces=secret-management \
                 policies=external-secrets \
                 ttl=24h || true
 
@@ -155,7 +155,7 @@ spec:
 
               bao write auth/kubernetes/role/vault-sync-operator \
                 bound_service_account_names=vault-sync-operator-sa \
-                bound_service_account_namespaces=vault \
+                bound_service_account_namespaces=secret-management \
                 policies=vault-sync-operator \
                 ttl=24h || true
 

@@ -253,13 +253,13 @@ KV v2 secrets engine como backend central de todos los secrets del cluster.
 
 ### 3.7 External Secrets Operator
 
-**Chart**: `external-secrets/external-secrets 2.4.1` — **Namespace**: `vault`
+**Chart**: `external-secrets/external-secrets 2.4.1` — **Namespace**: `secret-management`
 
 Sincroniza secrets desde OpenBao hacia Kubernetes. Todos los recursos usan `apiVersion: external-secrets.io/v1`.
 
 | Recurso | Detalle |
 |---------|---------|
-| ClusterSecretStore | `openbao` — apunta a `http://openbao.vault.svc.cluster.local:8200` |
+| ClusterSecretStore | `openbao` — apunta a `http://openbao.secret-management.svc.cluster.local:8200` |
 | KV version | v2 |
 | Auth | Kubernetes (ServiceAccount `external-secrets-sa`) |
 | Paths de KV | Sin prefijo `secret/data/` en `remoteRef.key` (ESO lo añade automáticamente) |
@@ -628,7 +628,7 @@ Crear el secret de bootstrap **antes** de activar GitOps:
 
 ```bash
 kubectl create secret generic vault-bootstrap-secrets \
-  -n vault \
+  -n secret-management \
   --from-literal=argocd_github_pat='...' \
   --from-literal=argocd_repo_url='https://github.com/cristsr/homelab' \
   --from-literal=cloudflare_api_token='...' \
@@ -665,7 +665,7 @@ kubectl -n argocd get applications -w
 ```
 cd ansible && ansible-playbook site.yaml   # k0s + kubeconfig + helm + helmfile + argocd secret
 cd bootstrap && helmfile apply             # namespaces + cilium + argocd
-kubectl create secret generic vault-bootstrap-secrets -n vault ...
+kubectl create secret generic vault-bootstrap-secrets -n secret-management ...
 kubectl apply -f gitops/root-app.yaml      # GitOps activo → ArgoCD despliega el resto
 ```
 
@@ -701,7 +701,7 @@ kubectl describe clustersecretstore openbao
 **OpenBao sellado tras restart:**
 ```bash
 # Obtener unseal key (guardada manualmente tras el primer init)
-kubectl exec -n vault openbao-0 -- bao operator unseal <UNSEAL_KEY>
+kubectl exec -n secret-management openbao-0 -- bao operator unseal <UNSEAL_KEY>
 ```
 
 **Longhorn stuck:**

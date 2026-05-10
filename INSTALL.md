@@ -215,7 +215,7 @@ Los secrets de aplicaciones (bases de datos, servicios) se gestionan directament
 La recovery key permite regenerar un root token en caso de emergencia. Sin ella, perder el acceso admin a OpenBao es **irreversible**.
 
 ```bash
-kubectl get secret openbao-recovery-key -n vault \
+kubectl get secret openbao-recovery-key -n secret-management \
   -o jsonpath='{.data.key}' | base64 -d && echo
 ```
 
@@ -235,7 +235,7 @@ openbao_recovery_key: !vault |
 ### 6.3 Eliminar la recovery key del cluster
 
 ```bash
-kubectl delete secret openbao-recovery-key -n vault
+kubectl delete secret openbao-recovery-key -n secret-management
 ```
 
 ---
@@ -244,7 +244,7 @@ kubectl delete secret openbao-recovery-key -n vault
 
 ```bash
 kubectl -n argocd get applications
-kubectl get pods -n argocd ingress networking databases monitoring vault
+kubectl get pods -n argocd ingress networking databases monitoring secret-management
 ```
 
 ---

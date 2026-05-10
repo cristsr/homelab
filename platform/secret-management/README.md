@@ -5,18 +5,18 @@ Centralized secret management using OpenBao (Vault fork) and External Secrets Op
 
 ## Components Deployed
 
-### 1. OpenBao (vault namespace)
+### 1. OpenBao (secret-management namespace)
 - StatefulSet in dev mode (single node, in-memory)
-- Accessible at `http://openbao.vault.svc.cluster.local:8200`
+- Accessible at `http://openbao.secret-management.svc.cluster.local:8200`
 - KV v2 secrets engine at `secret/`
 
-### 2. External Secrets Operator (vault namespace)
+### 2. External Secrets Operator (secret-management namespace)
 - Manages synchronization from OpenBao to Kubernetes Secrets
 - Uses ClusterSecretStore to connect to OpenBao
 
 ### 3. ClusterSecretStore (openbao)
 - Authenticates with OpenBao using Kubernetes auth
-- ServiceAccount: `external-secrets-sa` in vault namespace
+- ServiceAccount: `external-secrets-sa` in secret-management namespace
 
 ## Secret Structure in OpenBao
 
@@ -34,7 +34,7 @@ secret/data/devtools/sonarqube        -> password
 
 ### 1. Add secret to OpenBao
 ```bash
-kubectl -n vault exec openbao-0 -- /bin/bao kv put secret/<path> \
+kubectl -n secret-management exec openbao-0 -- /bin/bao kv put secret/<path> \
   key1='value1' key2='value2'
 ```
 
@@ -81,11 +81,11 @@ kubectl describe externalsecret <name> -n <namespace>
 
 ### Check ESO logs
 ```bash
-kubectl -n vault logs deployment/external-secrets --tail=50
+kubectl -n secret-management logs deployment/external-secrets --tail=50
 ```
 
 ### Test OpenBao access
 ```bash
-kubectl -n vault exec openbao-0 -- /bin/bao status
-kubectl -n vault exec openbao-0 -- /bin/bao kv list secret/
+kubectl -n secret-management exec openbao-0 -- /bin/bao status
+kubectl -n secret-management exec openbao-0 -- /bin/bao kv list secret/
 ```
