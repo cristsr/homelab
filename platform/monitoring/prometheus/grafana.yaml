@@ -7,17 +7,22 @@ metadata:
     dashboards: "grafana"
 spec:
   deployment:
-    replicas: 1
-    resources:
-      requests:
-        cpu: 100m
-        memory: 100Mi
-      limits:
-        cpu: 500m
-        memory: 256Mi
-    extraEnvFrom:
-      - secretRef:
-          name: grafana-admin-secret
+    spec:
+      replicas: 1
+      template:
+        spec:
+          containers:
+            - name: grafana
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 100Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+              envFrom:
+                - secretRef:
+                    name: grafana-admin-secret
   service:
     type: ClusterIP
     ports:
@@ -33,16 +38,16 @@ spec:
       disable_signout_menu: false
     server:
       root_url: "https://grafana.cristianpuenguenan.online"
-  ingress:
-    enabled: false
   dashboardLabelSelectors:
     - matchExpressions:
         - key: dashboards
           operator: In
           values:
             - grafana
-  persistence:
-    enabled: true
-    type: pvc
-    storageClassName: longhorn
-    size: 5Gi
+  persistentVolumeClaim:
+    spec:
+      storageClassName: longhorn
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 5Gi
