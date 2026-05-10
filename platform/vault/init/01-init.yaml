@@ -103,8 +103,8 @@ spec:
                 echo "Initializing OpenBao..."
                 INIT_OUT=$(bao operator init -recovery-shares=1 -recovery-threshold=1 -format=json)
 
-                BAO_TOKEN=$(echo "$INIT_OUT" | grep -o '"root_token"[ ]*:[ ]*"[^"]*"' | cut -d'"' -f4)
-                RECOVERY_KEY=$(echo "$INIT_OUT" | awk '/"recovery_keys_b64"/{getline; gsub(/.*"/,""); gsub(/".*/,""); print}')
+                BAO_TOKEN=$(echo "$INIT_OUT" | tr '\n' ' ' | sed -n 's/.*"root_token":[ ]*"\([^"]*\)".*/\1/p')
+                RECOVERY_KEY=$(echo "$INIT_OUT" | tr '\n' ' ' | sed -n 's/.*"recovery_keys_b64":[ ]*\[[ ]*"\([^"]*\)".*/\1/p')
 
                 if [ -z "$BAO_TOKEN" ] || [ -z "$RECOVERY_KEY" ]; then
                   echo "ERROR: Failed to extract root token or recovery key from init output"
