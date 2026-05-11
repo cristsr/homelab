@@ -16,13 +16,13 @@ spec:
       helm:
         releaseName: sonarqube
         valueFiles:
-          - $values/platform/devtools/sonarqube/sonarqube.yaml
+          - $values/platform/sonarqube/sonarqube.yaml
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: devtools
+    namespace: sonarqube
   syncPolicy:
     automated:
       prune: true
