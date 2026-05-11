@@ -17,7 +17,7 @@ postgresql:
 jdbcOverwrite:
   enable: false
 
-extraEnv:
+env:
   - name: SONAR_JDBC_URL
     value: "jdbc:postgresql://sonarqube-db-rw.sonarqube.svc.cluster.local:5432/sonarqube"
   - name: SONAR_JDBC_USERNAME
