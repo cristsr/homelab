@@ -38,6 +38,9 @@ service:
 ingress:
   enabled: false
 
+sonarProperties:
+  sonar.core.serverBaseURL: "https://sonarqube.cristianpuenguenan.online"
+
 resources:
   requests:
     cpu: 200m
