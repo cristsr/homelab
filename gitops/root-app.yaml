@@ -6,7 +6,7 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  project: homelab
+  project: default
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
