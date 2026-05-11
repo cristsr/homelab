@@ -4,7 +4,6 @@ metadata:
   name: mongodb-default-deny
   namespace: infra
 spec:
-  # Percona etiqueta sus pods con app.kubernetes.io/instance
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: percona-server-mongodb
@@ -24,7 +23,6 @@ spec:
         - ports:
             - port: "27017"
               protocol: TCP
-    # El operador Percona se ejecuta en el mismo namespace y necesita acceso al puerto de administración
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: infra
@@ -33,7 +31,6 @@ spec:
         - ports:
             - port: "27017"
               protocol: TCP
-  # MongoDB necesita resolver sus propios hostnames para el replica set
   egress:
     - toEntities:
         - cluster

@@ -6,7 +6,6 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
   annotations:
-    # Depende de longhorn (wave 1) — StorageClass va después
     argocd.argoproj.io/sync-wave: "2"
 spec:
   project: default

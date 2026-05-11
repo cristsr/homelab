@@ -1,6 +1,3 @@
-# Cilium 1.19.3 — k0s
-# Gestionado vía helmfile (bootstrap/helmfile.yaml)
-
 kubeProxyReplacement: "true"
 
 k8sServiceHost: "127.0.0.1"

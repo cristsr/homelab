@@ -26,10 +26,8 @@ spec:
               ROOT_SECRET="openbao-root-token"
               RECOVERY_SECRET="openbao-recovery-key"
 
-              # Trust the in-cluster Kubernetes CA so wget can speak HTTPS to the API
               cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt >> /etc/ssl/certs/ca-certificates.crt
 
-              # Helpers using wget (available in busybox/alpine image)
               _k8s_api() {
                 wget -qO- \
                   --header "Authorization: Bearer ${KUBE_TOKEN}" \
@@ -61,7 +59,6 @@ spec:
 
               echo "=== OpenBao init job started ==="
 
-              # Wait for OpenBao to be reachable
               echo "Waiting for OpenBao at ${API}..."
               for i in $(seq 1 120); do
                 set +e
@@ -82,14 +79,12 @@ spec:
                 sleep 5
               done
 
-              # Determine final state
               set +e
               bao status > /dev/null 2>&1
               final_rc=$?
               set -e
 
               if [ $final_rc -eq 0 ]; then
-                # Already initialized and unsealed
                 if secret_exists "$ROOT_SECRET"; then
                   echo "OpenBao already initialized and root token secret exists."
                   BAO_TOKEN=$(read_secret_key "$ROOT_SECRET" "token")
@@ -99,7 +94,6 @@ spec:
                   exit 1
                 fi
               elif [ $final_rc -eq 2 ]; then
-                # Uninitialized — proceed with init
                 echo "Initializing OpenBao..."
                 INIT_OUT=$(bao operator init -recovery-shares=1 -recovery-threshold=1 -format=json)
 
@@ -125,7 +119,6 @@ spec:
                 exit 1
               fi
 
-              # Configure OpenBao (idempotent operations)
               echo "Configuring OpenBao..."
               bao login "$BAO_TOKEN" > /dev/null 2>&1 || true
 

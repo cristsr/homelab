@@ -4,7 +4,6 @@ metadata:
   name: postgresql-default-deny
   namespace: infra
 spec:
-  # CloudNativePG etiqueta sus pods con cnpg.io/cluster
   endpointSelector:
     matchLabels:
       cnpg.io/cluster: postgresql
