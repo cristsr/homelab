@@ -1,41 +1,73 @@
 prometheus:
-  enabled: false
+  enabled: true
+  prometheusSpec:
+    retention: 15d
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
 
 alertmanager:
-  enabled: false
+  enabled: true
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
 
 grafana:
-  enabled: false
-
-prometheus-node-exporter:
   enabled: true
-
-kube-state-metrics:
-  enabled: true
+  admin:
+    existingSecret: grafana-admin-secret
+    userKey: GF_SECURITY_ADMIN_USER
+    passwordKey: GF_SECURITY_ADMIN_PASSWORD
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+    datasources:
+      enabled: true
+      searchNamespace: ALL
+  persistence:
+    enabled: true
+    storageClassName: longhorn
+    size: 5Gi
+    accessModes: ["ReadWriteOnce"]
 
 defaultRules:
-  create: false
-
-crds:
-  enabled: true
+  create: true
 
 kubeApiServer:
-  enabled: false
+  enabled: true
 
 kubelet:
-  enabled: false
+  enabled: true
 
 kubeControllerManager:
-  enabled: false
+  enabled: true
 
 coreDns:
-  enabled: false
+  enabled: true
 
 kubeEtcd:
   enabled: false
 
 kubeScheduler:
-  enabled: false
+  enabled: true
 
 kubeProxy:
   enabled: false
@@ -44,7 +76,13 @@ kubeDns:
   enabled: false
 
 kubernetesServiceMonitors:
-  enabled: false
+  enabled: true
+
+prometheus-node-exporter:
+  enabled: true
+
+kube-state-metrics:
+  enabled: true
 
 prometheus-windows-exporter:
   enabled: false
