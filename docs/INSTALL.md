@@ -166,7 +166,7 @@ El playbook `site.yaml` realiza automaticamente:
 4. **helm**: Descarga e instala Helm.
 5. **longhorn-prereqs**: Instala `open-iscsi` y habilita `iscsid`.
 6. **helmfile**: Descarga Helmfile y ejecuta `helmfile sync` desde `../bootstrap`.
-7. **argocd-secret**: Crea el secret `github-repo-creds` en namespace `argocd`.
+7. **argocd-secret**: Crea el secret `github-repo-creds` en namespace `argocd` y el `in-cluster-secret` para que ArgoCD gestione el cluster local.
 8. **vault-secrets**: Crea el namespace `secret-management` y el secret `openbao-static-unseal-key`.
 
 Verificar que el cluster esta listo:
@@ -225,29 +225,6 @@ Seguir progreso:
 
 ```bash
 kubectl -n argocd get applications -w
-```
-
-### 6.2 Solucionar aplicaciones en estado Unknown
-
-Si algunas apps quedan en `Unknown`, crea el cluster secret manualmente:
-
-```bash
-CA_DATA=$(kubectl get configmap kube-root-ca.crt -n kube-system -o jsonpath='{.data.ca\.crt}' | base64 -w0)
-
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: in-cluster-secret
-  namespace: argocd
-  labels:
-    argocd.argoproj.io/secret-type: cluster
-type: Opaque
-data:
-  server: $(echo -n "https://kubernetes.default.svc" | base64 -w0)
-  name: $(echo -n "in-cluster" | base64 -w0)
-  config: $(echo -n "{\"tlsClientConfig\":{\"insecure\":false,\"caData\":\"${CA_DATA}\"}}" | base64 -w0)
-EOF
 ```
 
 ---
@@ -348,9 +325,32 @@ kubectl get certificate -n networking
 
 ### Apps en estado Unknown
 
+El playbook de Ansible ya crea automaticamente el `in-cluster-secret` para ArgoCD. Si por algun motivo las aplicaciones quedan en estado `Unknown`, verifica que el secret existe y reinicia el controller:
+
 ```bash
 kubectl -n argocd get secrets -l argocd.argoproj.io/secret-type=cluster
 kubectl delete pod -n argocd argocd-application-controller-0
+```
+
+Si el secret no existe, recrealo manualmente:
+
+```bash
+CA_DATA=$(kubectl get configmap kube-root-ca.crt -n kube-system -o jsonpath='{.data.ca\.crt}' | base64 -w0)
+
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: in-cluster-secret
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: cluster
+type: Opaque
+data:
+  server: $(echo -n "https://kubernetes.default.svc" | base64 -w0)
+  name: $(echo -n "in-cluster" | base64 -w0)
+  config: $(echo -n "{\"tlsClientConfig\":{\"insecure\":false,\"caData\":\"${CA_DATA}\"}}" | base64 -w0)
+EOF
 ```
 
 ### ClusterSecretStore en False
