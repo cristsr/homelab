@@ -15,11 +15,21 @@ postgresql:
   enabled: false
 
 jdbcOverwrite:
-  enable: true
-  jdbcUrl: "jdbc:postgresql://postgresql-rw.infra.svc.cluster.local:5432/sonarqube"
-  jdbcUsername: sonarqube
-  jdbcSecretName: sonarqube-db-secret
-  jdbcSecretPasswordKey: password
+  enable: false
+
+extraEnv:
+  - name: SONAR_JDBC_URL
+    value: "jdbc:postgresql://sonarqube-db-rw.sonarqube.svc.cluster.local:5432/sonarqube"
+  - name: SONAR_JDBC_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: sonarqube-db-secret
+        key: username
+  - name: SONAR_JDBC_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: sonarqube-db-secret
+        key: password
 
 service:
   type: ClusterIP

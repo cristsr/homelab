@@ -25,11 +25,7 @@ spec:
       owner: admin
       secret:
         name: postgresql-app-secret
-      postInitSQL:
-        - "CREATE DATABASE sonarqube;"
-        - "CREATE ROLE sonarqube WITH LOGIN;"
-        - "GRANT ALL PRIVILEGES ON DATABASE sonarqube TO sonarqube;"
-        - "ALTER DATABASE sonarqube OWNER TO sonarqube;"
+      postInitSQL: []
 
   managed:
     roles:

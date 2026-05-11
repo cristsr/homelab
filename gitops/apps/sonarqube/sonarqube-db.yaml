@@ -1,33 +1,29 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: sonarqube-config
+  name: sonarqube-db
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
   annotations:
-    argocd.argoproj.io/sync-wave: "8"
+    argocd.argoproj.io/sync-wave: "7"
 spec:
   project: homelab
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/devtools/sonarqube
+    path: platform/sonarqube
     directory:
-      exclude: "sonarqube.yaml"
+      include: "{sonarqube-db.yaml,sonarqube-db-secret.yaml,network-policy.yaml}"
   destination:
     server: https://kubernetes.default.svc
-    namespace: devtools
+    namespace: sonarqube
   ignoreDifferences:
-    - group: gateway.networking.k8s.io
-      kind: HTTPRoute
-      jqPathExpressions:
-        - '.spec.parentRefs[].group'
-        - '.spec.parentRefs[].kind'
-        - '.spec.rules[].backendRefs[].group'
-        - '.spec.rules[].backendRefs[].kind'
-        - '.spec.rules[].backendRefs[].weight'
-        - '.spec.rules[].matches'
+    - group: postgresql.cnpg.io
+      kind: Cluster
+      jsonPointers:
+        - /status
+        - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
     - group: external-secrets.io
       kind: ExternalSecret
       jqPathExpressions:
@@ -41,4 +37,4 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-      - ServerSideApply=true
+      - RespectIgnoreDifferences=true

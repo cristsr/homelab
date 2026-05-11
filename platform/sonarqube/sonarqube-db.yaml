@@ -1,0 +1,39 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: sonarqube-db
+  namespace: sonarqube
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.6-standard-bookworm
+
+  storage:
+    size: 10Gi
+    storageClass: longhorn-retain
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  bootstrap:
+    initdb:
+      database: sonarqube
+      owner: sonarqube
+      secret:
+        name: sonarqube-db-secret
+
+  managed:
+    roles:
+      - name: sonarqube
+        ensure: present
+        login: true
+        inherit: true
+        passwordSecret:
+          name: sonarqube-db-secret
+
+  monitoring:
+    enablePodMonitor: true
