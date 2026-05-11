@@ -27,3 +27,31 @@
     - name: Reload systemd
       ansible.builtin.systemd:
         daemon_reload: true
+
+    - name: Remove k0s binaries
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/local/bin/k0s
+        - /usr/local/bin/kubectl
+        - /usr/local/bin/helm
+        - /usr/local/bin/helmfile
+
+    - name: Remove k0s configuration
+      ansible.builtin.file:
+        path: /etc/k0s/k0s.yaml
+        state: absent
+
+    - name: Remove kubeconfig for user
+      ansible.builtin.file:
+        path: "~{{ ansible_user }}/.kube/config"
+        state: absent
+
+    - name: Remove k0s and Longhorn data directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/k0s
+        - /var/lib/longhorn
