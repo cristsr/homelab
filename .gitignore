@@ -1,3 +1,4 @@
 credentials.txt
 .claude
 ansible/.vault-pass
+.idea/kubernetes
