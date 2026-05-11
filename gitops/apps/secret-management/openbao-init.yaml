@@ -18,6 +18,11 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: secret-management
+  ignoreDifferences:
+    - group: ""
+      kind: ServiceAccount
+      jqPathExpressions:
+        - '.automountServiceAccountToken'
   syncPolicy:
     automated:
       prune: true
