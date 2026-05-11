@@ -6,9 +6,13 @@ metadata:
   labels:
     app: grafana
 spec:
-  name: prometheus
-  type: prometheus
-  access: proxy
-  url: http://prometheus-kube-prometheus-operator.observability:9090
-  isDefault: true
-  editable: false
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  datasource:
+    name: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus-kube-prometheus-operator.observability:9090
+    isDefault: true
+    editable: false
