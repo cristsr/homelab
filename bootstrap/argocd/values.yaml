@@ -12,8 +12,7 @@ configs:
     server.insecure: "true"
   cm:
     timeout.reconciliation: 180s
-    # TODO: cambiar a 'annotation' despues de forzar sync de todas las apps
-    application.resourceTrackingMethod: label
+    application.resourceTrackingMethod: annotation
   rbac:
     policy.default: role:readonly
     policy.csv: |
