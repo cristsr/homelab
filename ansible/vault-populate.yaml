@@ -41,6 +41,17 @@
       become: false
       changed_when: false
 
+    - name: Wait for OpenBao to be reachable
+      ansible.builtin.uri:
+        url: "{{ bao_url }}/v1/sys/health"
+        method: GET
+        status_code: 200
+      register: bao_health
+      until: bao_health.status == 200
+      retries: 30
+      delay: 2
+      become: false
+
     - block:
         - name: Write infrastructure secrets to OpenBao KV
           ansible.builtin.uri:
