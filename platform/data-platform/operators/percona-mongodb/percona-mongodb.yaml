@@ -1,9 +1,7 @@
 # Modo cluster-wide: observa CRs en todos los namespaces
 watchAllNamespaces: true
 
-# Namespace override para deployments cuando difiere del namespace de instalación
 namespaceOverride: ""
 
-# Configuración de log
 logLevel: INFO
 logStructured: false

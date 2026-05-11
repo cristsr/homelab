@@ -4,7 +4,6 @@ crds:
 
 replicaCount: 1
 
-# Webhook y cainjector requeridos para ClusterIssuer
 webhook:
   replicaCount: 1
 

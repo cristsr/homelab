@@ -1,6 +1,3 @@
-# kube-prometheus-stack 83.x - solo operator (sin Prometheus/Grafana/Alertmanager)
-# Estos se despliegan como CRs después
-
 prometheus:
   enabled: false
 
@@ -16,7 +13,6 @@ prometheus-node-exporter:
 kube-state-metrics:
   enabled: true
 
-# Deshabilitar todo lo innecesario
 defaultRules:
   create: false
 

@@ -1,5 +1,3 @@
-# OpenBao Helm values - production mode with Static Seal auto-unseal
-
 server:
   dev:
     enabled: false
@@ -27,7 +25,6 @@ server:
         current_key    = "env://BAO_UNSEAL_KEY"
       }
 
-  # Static seal key injected from Secret created by Ansible bootstrap
   extraSecretEnvironmentVars:
     - envName: BAO_UNSEAL_KEY
       secretName: openbao-static-unseal-key
