@@ -1,5 +1,7 @@
 edition: community
 
+monitoringPasscode: "homelab"
+
 deploymentAnnotations:
   reloader.stakater.com/auto: "true"
 
