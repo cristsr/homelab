@@ -15,7 +15,7 @@ spec:
     path: platform/secret-management
     directory:
       recurse: true
-      exclude: "{openbao-statefulset.yaml,external-secrets-sa.yaml,init/**,openbao/**,external-secrets/**}"
+      exclude: "{openbao-statefulset.yaml,external-secrets-sa.yaml,openbao/**,external-secrets/**}"
   destination:
     server: https://kubernetes.default.svc
     namespace: secret-management
