@@ -2,6 +2,8 @@ apiVersion: cilium.io/v1alpha1
 kind: TracingPolicy
 metadata:
   name: "tetragon-ptrace-monitor"
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   kprobes:
   # long ptrace(enum __ptrace_request request, pid_t pid, void *addr, void *data);

@@ -2,6 +2,8 @@ apiVersion: cilium.io/v1alpha1
 kind: TracingPolicy
 metadata:
   name: "tetragon-privilege-escalation"
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   kprobes:
   - call: "commit_creds"

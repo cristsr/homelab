@@ -40,6 +40,11 @@ tetragonOperator:
     serviceMonitor:
       enabled: false
 
+# Install CRDs via Helm so they are available before ArgoCD tries to create
+# TracingPolicy resources.
+crds:
+  installMethod: "helm"
+
 # Export events to stdout so they can be collected by log aggregators
 export:
   mode: "stdout"
