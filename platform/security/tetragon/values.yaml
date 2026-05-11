@@ -1,0 +1,45 @@
+# Tetragon Helm values
+# https://github.com/cilium/tetragon/blob/main/install/kubernetes/values.yaml
+
+# Enable the Tetragon agent DaemonSet
+tetragon:
+  enabled: true
+
+  # gRPC endpoint is enabled by default to allow integration with Hubble Relay
+  # and other consumers. Hubble Relay can be configured to connect to:
+  # unix:///var/run/tetragon/tetragon.sock
+  grpc:
+    enabled: true
+    address: "unix:///var/run/tetragon/tetragon.sock"
+
+  # Export events to JSON file (rotated automatically)
+  exportFilename: "tetragon.log"
+  exportFilePerm: "600"
+  exportFileMaxSizeMB: 10
+  exportFileMaxBackups: 5
+
+  # Enable Kubernetes API integration to enrich events with pod metadata
+  enableK8sAPI: true
+
+  # Enable policy filtering by namespace and pod labels
+  enablePolicyFilter: true
+
+  # Prometheus metrics
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+
+# Enable the Tetragon Operator to manage TracingPolicy CRDs
+tetragonOperator:
+  enabled: true
+  tracingPolicy:
+    enabled: true
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+
+# Export events to stdout so they can be collected by log aggregators
+export:
+  mode: "stdout"
