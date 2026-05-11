@@ -2,7 +2,7 @@ apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: postgresql-default-deny
-  namespace: data-platform
+  namespace: infra
 spec:
   # CloudNativePG etiqueta sus pods con cnpg.io/cluster
   endpointSelector:

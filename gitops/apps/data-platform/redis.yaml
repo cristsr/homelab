@@ -15,7 +15,7 @@ spec:
     path: platform/infra/redis
   destination:
     server: https://kubernetes.default.svc
-    namespace: data-platform
+    namespace: infra
   syncPolicy:
     automated:
       prune: true

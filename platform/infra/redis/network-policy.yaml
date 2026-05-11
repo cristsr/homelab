@@ -2,7 +2,7 @@ apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: redis-default-deny
-  namespace: data-platform
+  namespace: infra
 spec:
   endpointSelector:
     matchLabels:

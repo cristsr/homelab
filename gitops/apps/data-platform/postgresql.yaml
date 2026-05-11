@@ -15,7 +15,7 @@ spec:
     path: platform/infra/postgresql
   destination:
     server: https://kubernetes.default.svc
-    namespace: data-platform
+    namespace: infra
   ignoreDifferences:
     - group: postgresql.cnpg.io
       kind: Cluster
