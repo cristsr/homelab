@@ -9,7 +9,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "5"
     argocd.argoproj.io/sync-description: "Prometheus Operator"
 spec:
-  project: default
+  project: homelab
   sources:
     - repoURL: https://prometheus-community.github.io/helm-charts
       chart: kube-prometheus-stack

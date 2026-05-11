@@ -9,7 +9,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "5"
     argocd.argoproj.io/sync-description: "Kubernetes Web UI"
 spec:
-  project: default
+  project: homelab
   sources:
     - repoURL: https://kubernetes-sigs.github.io/headlamp/
       chart: headlamp
