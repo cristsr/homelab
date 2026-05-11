@@ -1,4 +1,4 @@
-# Argo CD 9.x — ArgoCD v3.4.1
+# Argo CD 9.x — ArgoCD v2.14.x (chart 9.5.13)
 # helm upgrade --install argocd argo/argo-cd -n argocd -f bootstrap/argocd/values.yaml
 
 global:

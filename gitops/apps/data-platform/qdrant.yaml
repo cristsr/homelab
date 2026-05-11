@@ -28,6 +28,8 @@ spec:
       kind: StatefulSet
       jsonPointers:
         - /spec/volumeClaimTemplates
+    - group: apps
+      kind: StatefulSet
       jqPathExpressions:
         - .spec.podManagementPolicy
         - .spec.updateStrategy

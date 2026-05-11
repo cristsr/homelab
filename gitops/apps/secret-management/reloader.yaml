@@ -9,20 +9,17 @@ metadata:
     argocd.argoproj.io/sync-wave: "1"
 spec:
   project: default
-  sources:
-    - repoURL: https://stakater.github.io/stakater-charts
-      chart: reloader
-      targetRevision: "2.2.11"
-      helm:
-        releaseName: reloader
-        values: |
-          reloader:
-            autoReloadAll: true
-          webhook:
-            enabled: true
-    - repoURL: https://github.com/cristsr/homelab
-      targetRevision: HEAD
-      ref: values
+  source:
+    repoURL: https://stakater.github.io/stakater-charts
+    chart: reloader
+    targetRevision: "2.2.11"
+    helm:
+      releaseName: reloader
+      values: |
+        reloader:
+          autoReloadAll: true
+        webhook:
+          enabled: true
   destination:
     server: https://kubernetes.default.svc
     namespace: secret-management

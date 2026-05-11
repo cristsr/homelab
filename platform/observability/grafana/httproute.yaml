@@ -11,5 +11,5 @@ spec:
     - grafana.cristianpuenguenan.online
   rules:
     - backendRefs:
-        - name: grafana-service
+        - name: grafana
           port: 3000

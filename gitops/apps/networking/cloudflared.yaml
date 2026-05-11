@@ -13,7 +13,6 @@ spec:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
     path: platform/networking/cloudflared
-    directory:
   destination:
     server: https://kubernetes.default.svc
     namespace: networking
@@ -21,3 +20,5 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
