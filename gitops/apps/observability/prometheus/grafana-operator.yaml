@@ -9,7 +9,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "5"
     argocd.argoproj.io/sync-description: "Grafana Operator"
 spec:
-  project: default
+  project: homelab
   source:
     repoURL: oci://ghcr.io/grafana/helm-charts/grafana-operator
     chart: grafana-operator

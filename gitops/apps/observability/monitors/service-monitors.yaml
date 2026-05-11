@@ -9,7 +9,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "6"
     argocd.argoproj.io/sync-description: "ServiceMonitor CRs for prometheus"
 spec:
-  project: default
+  project: homelab
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
