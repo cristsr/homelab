@@ -504,6 +504,78 @@ remoteRef:
   property: password
 ```
 
+#### Estructura de secretos en OpenBao
+
+```
+secret/data/databases/postgresql-app     -> username, password
+secret/data/databases/redis             -> redis-password
+secret/data/databases/mongodb-app        -> password
+secret/data/apps/flow                  -> database-url, mongodb-url, redis-url
+secret/data/infra/cloudflare          -> api-token
+secret/data/devtools/openmemory        -> OPENAI_API_KEY
+secret/data/devtools/sonarqube        -> password
+```
+
+#### Añadir un nuevo secret
+
+1. Escribir el secret en OpenBao:
+   ```bash
+   kubectl -n secret-management exec openbao-0 -- /bin/bao kv put secret/<path> \
+     key1='value1' key2='value2'
+   ```
+
+2. Crear un `ExternalSecret` en el namespace destino:
+   ```yaml
+   apiVersion: external-secrets.io/v1
+   kind: ExternalSecret
+   metadata:
+     name: my-secret
+     namespace: <target-namespace>
+   spec:
+     refreshInterval: 1h
+     secretStoreRef:
+       name: openbao
+       kind: ClusterSecretStore
+     target:
+       name: my-secret
+       creationPolicy: Owner
+       deletionPolicy: Retain
+     data:
+       - secretKey: key1
+         remoteRef:
+           key: <path>
+           property: key1
+   ```
+
+3. Aplicar:
+   ```bash
+   kubectl apply -f my-externalsecret.yaml
+   ```
+
+#### Troubleshooting de secretos
+
+- **Verificar ClusterSecretStore:**
+  ```bash
+  kubectl get clustersecretstore openbao -o yaml
+  ```
+
+- **Verificar sincronización de ExternalSecrets:**
+  ```bash
+  kubectl get externalsecret -A
+  kubectl describe externalsecret <name> -n <namespace>
+  ```
+
+- **Logs de ESO:**
+  ```bash
+  kubectl -n secret-management logs deployment/external-secrets --tail=50
+  ```
+
+- **Verificar estado de OpenBao:**
+  ```bash
+  kubectl -n secret-management exec openbao-0 -- /bin/bao status
+  kubectl -n secret-management exec openbao-0 -- /bin/bao kv list secret/
+  ```
+
 ### Variables de entorno requeridas (vault-bootstrap-secrets)
 
 | Variable | Descripción |
