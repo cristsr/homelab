@@ -1,4 +1,3 @@
-# Modo cluster-wide: observa CRs en todos los namespaces
 watchAllNamespaces: true
 
 namespaceOverride: ""
