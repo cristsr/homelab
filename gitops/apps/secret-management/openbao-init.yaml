@@ -12,7 +12,9 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/secret-management/openbao/init
+    path: platform/secret-management/openbao
+    directory:
+      exclude: "{openbao.yaml,httproute.yaml}"
   destination:
     server: https://kubernetes.default.svc
     namespace: secret-management
