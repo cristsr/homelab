@@ -12,7 +12,7 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/secret-management/init
+    path: platform/secret-management/openbao/init
   destination:
     server: https://kubernetes.default.svc
     namespace: secret-management
