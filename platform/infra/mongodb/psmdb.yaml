@@ -2,7 +2,7 @@ apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
   name: mongodb
-  namespace: data-platform
+  namespace: infra
 spec:
   crVersion: "1.22.0"
   image: percona/percona-server-mongodb:8.0.20-8

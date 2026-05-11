@@ -2,7 +2,7 @@ apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: mongodb-default-deny
-  namespace: data-platform
+  namespace: infra
 spec:
   # Percona etiqueta sus pods con app.kubernetes.io/instance
   endpointSelector:
@@ -27,7 +27,7 @@ spec:
     # El operador Percona se ejecuta en el mismo namespace y necesita acceso al puerto de administración
     - fromEndpoints:
         - matchLabels:
-            k8s:io.kubernetes.pod.namespace: data-platform
+            k8s:io.kubernetes.pod.namespace: infra
             app.kubernetes.io/name: psmdb-operator
       toPorts:
         - ports:

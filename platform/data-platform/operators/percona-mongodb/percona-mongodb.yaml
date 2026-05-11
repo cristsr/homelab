@@ -1,6 +1,5 @@
-# El operador vigila el namespace donde se despliega (databases).
-# watchAllNamespaces: false es el default — no necesita permisos de cluster adicionales.
-watchAllNamespaces: false
+# Modo cluster-wide: observa CRs en todos los namespaces
+watchAllNamespaces: true
 
 # Namespace override para deployments cuando difiere del namespace de instalación
 namespaceOverride: ""
