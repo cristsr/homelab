@@ -2,6 +2,8 @@ apiVersion: cilium.io/v1alpha1
 kind: TracingPolicy
 metadata:
   name: "tetragon-file-monitoring"
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   kprobes:
   - call: "security_file_permission"
