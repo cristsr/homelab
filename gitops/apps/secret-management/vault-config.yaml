@@ -12,10 +12,9 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/secret-management
+    path: platform/secret-management/external-secrets
     directory:
-      recurse: true
-      exclude: "{openbao-statefulset.yaml,external-secrets-sa.yaml,openbao/**,external-secrets/**}"
+      exclude: "external-secrets.yaml"
   destination:
     server: https://kubernetes.default.svc
     namespace: secret-management
