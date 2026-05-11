@@ -2,3 +2,4 @@ credentials.txt
 .claude
 ansible/.vault-pass
 .idea/kubernetes
+ansible/extra-secrets.yaml
