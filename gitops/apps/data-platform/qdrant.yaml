@@ -16,7 +16,7 @@ spec:
       helm:
         releaseName: qdrant
         valueFiles:
-          - $values/platform/data-platform/qdrant/qdrant.yaml
+          - $values/platform/infra/qdrant/qdrant.yaml
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values

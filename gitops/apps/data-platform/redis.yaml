@@ -12,7 +12,7 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/data-platform/redis
+    path: platform/infra/redis
   destination:
     server: https://kubernetes.default.svc
     namespace: data-platform
