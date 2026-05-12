@@ -18,6 +18,15 @@ spec:
           image: docker.io/mcp/sonarqube
           ports:
             - containerPort: 3000
+          env:
+            - name: SONARQUBE_TRANSPORT
+              value: "http"
+            - name: SONARQUBE_HTTP_HOST
+              value: "0.0.0.0"
+            - name: SONARQUBE_HTTP_PORT
+              value: "3000"
+            - name: SONARQUBE_URL
+              value: "http://sonarqube-sonarqube.sonarqube.svc.cluster.local:9000"
           resources:
             requests:
               cpu: 50m
