@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-sonarqube
+  namespace: sonarqube
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-sonarqube
+  template:
+    metadata:
+      labels:
+        app: mcp-sonarqube
+    spec:
+      containers:
+        - name: mcp-sonarqube
+          image: docker.io/mcp/sonarqube
+          ports:
+            - containerPort: 3000
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-sonarqube
+  namespace: sonarqube
+spec:
+  selector:
+    app: mcp-sonarqube
+  ports:
+    - port: 3000
+      targetPort: 3000
+  type: ClusterIP
