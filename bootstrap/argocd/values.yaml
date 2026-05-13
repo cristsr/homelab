@@ -11,7 +11,7 @@ configs:
   params:
     server.insecure: "true"
   cm:
-    timeout.reconciliation: 600s
+    timeout.reconciliation: 0s
     application.resourceTrackingMethod: annotation
   rbac:
     policy.default: role:readonly

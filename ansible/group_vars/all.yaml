@@ -45,7 +45,6 @@ cloudflared_token: !vault |
   64666264626533623161353161326239643338336361323664353638643831306236366637386439
   63336365343165306466356136366131636664376165623037653632396364626430
 
-# OpenBao Static Seal Key — 256-bit AES key in base64
 # Generate: openssl rand -base64 32
 # Encrypt:  ansible-vault encrypt_string 'GENERATED_KEY' --name 'openbao_static_seal_key'
 openbao_static_seal_key: !vault |
@@ -56,3 +55,8 @@ openbao_static_seal_key: !vault |
   6365656630383064300a656536373935303162666566386532656230386165623831326161383262
   65663035303938366134363061323230626633363132343865303338653234653136373031336639
   3232363865386366313366303830363332323364393261336230
+
+# Generate: openssl rand -base64 32
+# Encrypt:  ansible-vault encrypt_string 'GENERATED_KEY' --name 'openbao_static_seal_key'
+argocd_webhook_secret: !vault |
+  change me

@@ -64,7 +64,7 @@ Este documento lista las tareas planificadas para mejorar la automatizacion y el
 **Archivos afectados (ya implementados):**
 - `ansible/vault-populate.yaml` — añade `webhook_secret` al path `argocd`
 - `platform/argocd/webhook-externalsecret.yaml` — ExternalSecret con `creationPolicy: Merge` sobre `argocd-secret`
-- `bootstrap/argocd/values.yaml` — `timeout.reconciliation` aumentado a `600s`
+- `bootstrap/argocd/values.yaml` — `timeout.reconciliation: 0s` deshabilita el polling
 
 ---
 
