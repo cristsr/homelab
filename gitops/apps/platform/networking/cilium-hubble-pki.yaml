@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab.git
     targetRevision: master
-    path: platform/networking/cilium/pki
+    path: platform/networking/hubble/pki
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system
