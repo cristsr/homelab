@@ -1,0 +1,400 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: portfolio-html
+  namespace: apps
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Cristian Puenguenan</title>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+      <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+          --bg: #0a0e1a;
+          --card: #111827;
+          --accent: #6366f1;
+          --accent2: #8b5cf6;
+          --text: #e2e8f0;
+          --muted: #94a3b8;
+          --border: #1e293b;
+        }
+        html { scroll-behavior: smooth; }
+        body {
+          font-family: 'Inter', system-ui, sans-serif;
+          background: var(--bg);
+          color: var(--text);
+          line-height: 1.6;
+          overflow-x: hidden;
+        }
+        .hero {
+          min-height: 100vh;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          text-align: center;
+          padding: 2rem;
+          position: relative;
+          overflow: hidden;
+        }
+        .hero::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(ellipse 80% 80% at 50% -20%, rgba(99,102,241,0.3), transparent),
+            radial-gradient(ellipse 60% 60% at 80% 80%, rgba(139,92,246,0.2), transparent);
+        }
+        .hero-content { position: relative; z-index: 1; }
+        .avatar {
+          width: 100px;
+          height: 100px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, var(--accent), var(--accent2));
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 2.5rem;
+          margin: 0 auto 1.5rem;
+          box-shadow: 0 0 40px rgba(99,102,241,0.4);
+        }
+        .badge {
+          display: inline-block;
+          background: rgba(99,102,241,0.15);
+          border: 1px solid rgba(99,102,241,0.3);
+          color: #818cf8;
+          padding: 0.25rem 0.75rem;
+          border-radius: 999px;
+          font-size: 0.75rem;
+          font-weight: 600;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          margin-bottom: 1rem;
+        }
+        .hero h1 {
+          font-size: clamp(2.5rem, 8vw, 5rem);
+          font-weight: 700;
+          letter-spacing: -0.02em;
+          line-height: 1.1;
+          margin-bottom: 0.5rem;
+          background: linear-gradient(135deg, #fff 30%, #a78bfa);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        .hero .subtitle {
+          font-size: clamp(1rem, 3vw, 1.35rem);
+          color: var(--muted);
+          margin-bottom: 1.5rem;
+          font-weight: 300;
+        }
+        .hero .tagline {
+          font-size: 1rem;
+          color: var(--text);
+          opacity: 0.7;
+          max-width: 520px;
+          margin: 0 auto 2.5rem;
+        }
+        .cta-group { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+        .btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.75rem 1.75rem;
+          border-radius: 0.5rem;
+          font-weight: 600;
+          font-size: 0.9rem;
+          text-decoration: none;
+          transition: all 0.2s;
+        }
+        .btn-primary {
+          background: linear-gradient(135deg, var(--accent), var(--accent2));
+          color: #fff;
+          box-shadow: 0 4px 20px rgba(99,102,241,0.35);
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(99,102,241,0.45); }
+        .btn-outline {
+          border: 1px solid var(--border);
+          color: var(--text);
+          background: rgba(255,255,255,0.03);
+        }
+        .btn-outline:hover { border-color: var(--accent); color: #818cf8; }
+        .scroll-hint {
+          position: absolute;
+          bottom: 2rem;
+          left: 50%;
+          transform: translateX(-50%);
+          color: var(--muted);
+          font-size: 0.75rem;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.5rem;
+          opacity: 0.6;
+          animation: bounce 2s infinite;
+        }
+        @keyframes bounce {
+          0%, 100% { transform: translateX(-50%) translateY(0); }
+          50% { transform: translateX(-50%) translateY(6px); }
+        }
+        section {
+          max-width: 900px;
+          margin: 0 auto;
+          padding: 5rem 2rem;
+        }
+        .section-label {
+          font-size: 0.75rem;
+          font-weight: 600;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          color: #818cf8;
+          margin-bottom: 0.75rem;
+        }
+        h2 {
+          font-size: clamp(1.75rem, 4vw, 2.5rem);
+          font-weight: 700;
+          letter-spacing: -0.02em;
+          margin-bottom: 1rem;
+        }
+        .divider {
+          width: 3rem;
+          height: 3px;
+          background: linear-gradient(90deg, var(--accent), var(--accent2));
+          border-radius: 999px;
+          margin-bottom: 2rem;
+        }
+        .about-text {
+          color: var(--muted);
+          font-size: 1.05rem;
+          line-height: 1.8;
+          max-width: 680px;
+        }
+        .skills-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+          gap: 1rem;
+          margin-top: 2rem;
+        }
+        .skill-card {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 0.75rem;
+          padding: 1.25rem 1.5rem;
+          transition: border-color 0.2s, transform 0.2s;
+        }
+        .skill-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+        .skill-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 0.75rem;
+        }
+        .skill-card h3 {
+          font-size: 0.8rem;
+          font-weight: 600;
+          color: #818cf8;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+        }
+        .cert-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.3rem;
+          background: rgba(251,191,36,0.1);
+          border: 1px solid rgba(251,191,36,0.3);
+          color: #fbbf24;
+          padding: 0.15rem 0.5rem;
+          border-radius: 999px;
+          font-size: 0.65rem;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+        .tags { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        .tag {
+          background: rgba(99,102,241,0.08);
+          border: 1px solid rgba(99,102,241,0.2);
+          color: var(--text);
+          padding: 0.2rem 0.6rem;
+          border-radius: 0.25rem;
+          font-size: 0.8rem;
+        }
+        .contact-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+          gap: 1rem;
+          margin-top: 2rem;
+        }
+        .contact-card {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 0.75rem;
+          padding: 1.25rem;
+          text-decoration: none;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          color: var(--text);
+        }
+        .contact-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+        .contact-icon {
+          width: 40px;
+          height: 40px;
+          border-radius: 0.5rem;
+          background: rgba(99,102,241,0.15);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.2rem;
+          flex-shrink: 0;
+        }
+        .contact-info .label { display: block; font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .contact-info strong { font-size: 0.85rem; display: block; }
+        footer {
+          text-align: center;
+          padding: 2rem;
+          border-top: 1px solid var(--border);
+          color: var(--muted);
+          font-size: 0.8rem;
+        }
+        @media (max-width: 640px) {
+          .skills-grid, .contact-grid { grid-template-columns: 1fr; }
+        }
+      </style>
+    </head>
+    <body>
+
+    <div class="hero">
+      <div class="hero-content">
+        <div class="avatar">&#x1F9D1;&#x200D;&#x1F4BB;</div>
+        <div class="badge">Disponible para proyectos</div>
+        <h1>Cristian Puenguenan</h1>
+        <p class="subtitle">Software Engineer &middot; Backend &middot; Cloud-Native</p>
+        <p class="tagline">
+          6 a&ntilde;os construyendo sistemas backend robustos con Node.js, TypeScript y Rust,
+          combinado con infraestructura cloud-native en AWS y Kubernetes.
+        </p>
+        <div class="cta-group">
+          <a href="https://github.com/cristsr" class="btn btn-primary">GitHub</a>
+          <a href="https://linkedin.com/in/cristian-puenguenan" class="btn btn-outline">LinkedIn</a>
+        </div>
+      </div>
+      <div class="scroll-hint">
+        <span>Scroll</span>
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M12 5v14M5 12l7 7 7-7"/>
+        </svg>
+      </div>
+    </div>
+
+    <section id="about">
+      <p class="section-label">Sobre m&iacute;</p>
+      <h2>Qui&eacute;n soy</h2>
+      <div class="divider"></div>
+      <p class="about-text">
+        Ingeniero de software con 6 a&ntilde;os de experiencia especializado en desarrollo backend
+        con Node.js, TypeScript y Rust. Dise&ntilde;o APIs escalables, servicios distribuidos y
+        pipelines de datos que corren tanto en AWS como en infraestructura propia con Kubernetes.
+        Me apasiona la automatizaci&oacute;n, la observabilidad y operar sistemas que funcionen bien
+        a cualquier escala.
+      </p>
+    </section>
+
+    <section id="skills">
+      <p class="section-label">Stack t&eacute;cnico</p>
+      <h2>Tecnolog&iacute;as</h2>
+      <div class="divider"></div>
+      <div class="skills-grid">
+        <div class="skill-card">
+          <div class="skill-card-header">
+            <h3>Backend</h3>
+          </div>
+          <div class="tags">
+            <span class="tag">Node.js</span>
+            <span class="tag">TypeScript</span>
+            <span class="tag">Rust</span>
+            <span class="tag">REST</span>
+            <span class="tag">GraphQL</span>
+          </div>
+        </div>
+        <div class="skill-card">
+          <div class="skill-card-header">
+            <h3>Bases de datos</h3>
+          </div>
+          <div class="tags">
+            <span class="tag">PostgreSQL</span>
+            <span class="tag">MongoDB</span>
+            <span class="tag">Redis</span>
+            <span class="tag">Qdrant</span>
+          </div>
+        </div>
+        <div class="skill-card">
+          <div class="skill-card-header">
+            <h3>AWS</h3>
+            <span class="cert-badge">&#x2713; Cloud Practitioner</span>
+          </div>
+          <div class="tags">
+            <span class="tag">EC2</span>
+            <span class="tag">VPC</span>
+            <span class="tag">S3</span>
+            <span class="tag">Lambda</span>
+            <span class="tag">ECS</span>
+            <span class="tag">ALB</span>
+          </div>
+        </div>
+        <div class="skill-card">
+          <div class="skill-card-header">
+            <h3>Infraestructura</h3>
+          </div>
+          <div class="tags">
+            <span class="tag">Kubernetes</span>
+            <span class="tag">k0s</span>
+            <span class="tag">ArgoCD</span>
+            <span class="tag">Helm</span>
+            <span class="tag">Cilium</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="contact">
+      <p class="section-label">Conecta conmigo</p>
+      <h2>Contacto</h2>
+      <div class="divider"></div>
+      <div class="contact-grid">
+        <a href="https://github.com/cristsr" class="contact-card">
+          <div class="contact-icon">&#x1F419;</div>
+          <div class="contact-info">
+            <span class="label">GitHub</span>
+            <strong>cristsr</strong>
+          </div>
+        </a>
+        <a href="https://linkedin.com/in/cristian-puenguenan" class="contact-card">
+          <div class="contact-icon">&#x1F4BC;</div>
+          <div class="contact-info">
+            <span class="label">LinkedIn</span>
+            <strong>cristian-puenguenan</strong>
+          </div>
+        </a>
+        <a href="mailto:styven21121@gmail.com" class="contact-card">
+          <div class="contact-icon">&#x2709;</div>
+          <div class="contact-info">
+            <span class="label">Email</span>
+            <strong>styven21121@gmail.com</strong>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <footer>
+      <p>Desplegado en Kubernetes &middot; &copy; 2026 Cristian Puenguenan</p>
+    </footer>
+
+    </body>
+    </html>
