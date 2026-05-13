@@ -145,7 +145,41 @@ En single-node se necesita un StorageClass que permita PVCs persistentes para ba
 
 ---
 
-## ADR-005: Ansible para aprovisionamiento del nodo
+## ADR-005: Cloudflare Tunnel para acceso externo
+
+**Estado**: Aceptado  
+**Fecha**: 2026-04
+
+### Contexto
+
+Los servicios del homelab necesitan ser accesibles desde Internet (ArgoCD, Grafana, SonarQube, etc.) sin comprometer la seguridad de la red doméstica. La red doméstica está detrás de un router con NAT y sin IP pública fija, lo que hace que la apertura de puertos sea frágil (IP cambia) e implica exponer directamente el nodo al tráfico entrante de Internet.
+
+### Opciones consideradas
+
+| Opción | Razón de descarte |
+|--------|------------------|
+| **Port forwarding en router** | Requiere IP pública estática, expone el nodo directamente a Internet, DDNS es frágil |
+| **Tailscale / WireGuard VPN** | Requiere cliente VPN en el dispositivo de acceso, no sirve para acceso web público sin cliente |
+| **VPS como reverse proxy** | Coste mensual adicional, latencia extra, otro sistema que mantener |
+
+### Decisión
+
+**Cloudflare Tunnel** (`cloudflared`): el agente establece una conexión **saliente** cifrada desde el cluster hacia Cloudflare. Todo el tráfico entrante fluye por esa conexión sin necesidad de abrir puertos en el router ni tener IP fija.
+
+Beneficios adicionales:
+- El DNS del dominio (`*.cristianpuenguenan.online`) ya está gestionado en Cloudflare, unificando DNS + túnel + certificados TLS en una sola plataforma.
+- Cloudflare actúa como WAF y DDoS protection de forma transparente.
+- El token del túnel se gestiona como secret en OpenBao y se sincroniza via ExternalSecret, por lo que `cloudflared` arranca sin credenciales en texto plano.
+
+### Consecuencias
+
+- No se abre ningún puerto en el router; el nodo no es directamente accesible desde Internet.
+- El acceso externo depende de la disponibilidad de Cloudflare (prácticamente 100% uptime).
+- Para acceso LAN sin pasar por Cloudflare, Agent Gateway sigue accesible directamente en `192.168.80.20:443`.
+
+---
+
+## ADR-006: Ansible para aprovisionamiento del nodo
 
 **Estado**: Aceptado  
 **Fecha**: 2026-04
