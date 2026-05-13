@@ -12,7 +12,7 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/sonarqube
+    path: workloads/sonarqube
     directory:
       include: "{sonarqube-db.yaml,sonarqube-db-secret.yaml,network-policy.yaml}"
   destination:
