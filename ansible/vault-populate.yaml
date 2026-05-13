@@ -69,6 +69,7 @@
                 github_pat: "{{ argocd_github_pat }}"
                 username: "x-access-token"
                 url: "{{ argocd_repo_url }}"
+                webhook_secret: "{{ argocd_webhook_secret }}"
             - path: infra/cloudflare
               data:
                 api_token: "{{ cloudflare_api_token }}"
