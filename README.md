@@ -95,6 +95,7 @@ Toda la documentacion se encuentra en la carpeta [`docs/`](./docs/):
 - **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)**: Descripcion detallada de la arquitectura, componentes, networking, seguridad y flujo de datos.
 - **[docs/INSTALL.md](./docs/INSTALL.md)**: Requisitos previos, preparacion del servidor, configuracion de Ansible Vault, instalacion del cluster y activacion de GitOps.
 - **[docs/OPERATIONS.md](./docs/OPERATIONS.md)**: Operaciones diarias, gestion de secretos, backups, actualizaciones, troubleshooting y procedimientos de emergencia.
+- **[docs/DECISIONS.md](./docs/DECISIONS.md)**: Registro de decisiones de arquitectura (ADR): k0s, Agent Gateway, Cilium, Longhorn y Ansible.
 
 ---
 
