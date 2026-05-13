@@ -62,9 +62,11 @@ homelab/
 │
 ├── gitops/                     # Aplicaciones de ArgoCD (App of Apps)
 │   ├── root-app.yaml           # Aplicacion raiz
-│   └── apps/                   # Sub-aplicaciones por dominio
+│   └── apps/
+│       ├── platform/           # ArgoCD Applications de infraestructura
+│       └── workloads/          # ArgoCD Applications de apps de usuario
 │
-├── platform/                   # Manifiestos y valores Helm de cada servicio
+├── platform/                   # Manifiestos y valores Helm de infraestructura
 │   ├── argocd/
 │   ├── networking/
 │   ├── storage/
@@ -72,6 +74,11 @@ homelab/
 │   ├── devtools/
 │   ├── observability/
 │   └── secret-management/
+│
+├── workloads/                  # Aplicaciones de usuario/negocio
+│   ├── flow/                   # Flow API
+│   ├── portfolio/              # Sitio personal
+│   └── sonarqube/              # SonarQube + MCP server
 │
 └── docs/                       # Documentacion del proyecto
     ├── ARCHITECTURE.md         # Arquitectura completa

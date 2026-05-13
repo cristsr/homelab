@@ -67,15 +67,21 @@ homelab/
 ├── gitops/                     # Aplicaciones de ArgoCD (App of Apps)
 │   ├── root-app.yaml           # Aplicacion raiz que apunta a gitops/apps/
 │   └── apps/
-│       ├── argocd/             # Configuracion adicional de ArgoCD
-│       ├── networking/         # cert-manager, cloudflared, agentgateway
-│       ├── storage/            # Longhorn
-│       ├── data-platform/      # PostgreSQL, MongoDB, Redis, Qdrant
-│       ├── devtools/           # SonarQube, OpenMemory
-│       ├── apps/               # Flow API
-│       └── observability/      # Prometheus, Grafana, Headlamp
+│       ├── platform/           # ArgoCD Applications de infraestructura
+│       │   ├── argocd/         # Configuracion adicional de ArgoCD
+│       │   ├── networking/     # cert-manager, cloudflared, agentgateway
+│       │   ├── storage/        # Longhorn
+│       │   ├── data-platform/  # PostgreSQL, MongoDB, Redis, Qdrant
+│       │   ├── devtools/       # OpenMemory
+│       │   ├── observability/  # Prometheus, Grafana, Headlamp
+│       │   ├── secret-management/ # OpenBao, External Secrets
+│       │   └── security/       # Tetragon
+│       └── workloads/          # ArgoCD Applications de apps de usuario
+│           ├── flow.yaml
+│           ├── portfolio.yaml
+│           └── sonarqube/
 │
-├── platform/                   # Manifiestos y valores Helm de cada servicio
+├── platform/                   # Manifiestos y valores Helm de infraestructura
 │   ├── argocd/
 │   ├── networking/
 │   ├── storage/
@@ -83,6 +89,11 @@ homelab/
 │   ├── devtools/
 │   ├── observability/
 │   └── secret-management/
+│
+├── workloads/                  # Aplicaciones de usuario/negocio
+│   ├── flow/                   # Flow API (Deployment, ExternalSecret, HTTPRoute)
+│   ├── portfolio/              # Sitio personal (Deployment, ConfigMap, HTTPRoute)
+│   └── sonarqube/              # SonarQube + DB + MCP server
 │
 └── docs/                       # Documentacion del proyecto
     ├── ARCHITECTURE.md
@@ -150,13 +161,15 @@ Declarados en `bootstrap/namespaces.yaml` y creados por el hook presync de Ciliu
 | Namespace | Contenido |
 |-----------|-----------|
 | `argocd` | Argo CD |
-| `apps` | Flow API |
-| `data-platform` | PostgreSQL, MongoDB, Redis, Qdrant, CloudNative-PG, Percona operators |
-| `devtools` | SonarQube, OpenMemory |
+| `apps` | Flow API, Portfolio |
+| `data-platform` | CloudNative-PG, Percona operators |
+| `infra` | PostgreSQL, MongoDB, Redis, Qdrant |
+| `devtools` | OpenMemory |
 | `longhorn-system` | Longhorn |
-| `networking` | cloudflared, cert-manager |
+| `networking` | Agent Gateway, cloudflared, cert-manager |
 | `observability` | Prometheus, Grafana, Alertmanager, Headlamp |
 | `secret-management` | OpenBao, External Secrets |
+| `sonarqube` | SonarQube, SonarQube DB, MCP server |
 
 ---
 
@@ -306,7 +319,7 @@ Secrets:  openmemory-secrets (OPENAI_API_KEY) via ExternalSecret
 
 ### 4.3 SonarQube Community
 
-**Chart**: `SonarSource/sonarqube` — **Namespace**: `devtools`
+**Chart**: `SonarSource/sonarqube` — **Namespace**: `sonarqube`
 
 Analisis estatico de calidad de codigo.
 
@@ -447,13 +460,18 @@ secret/infra/cloudflared -> token
 ```
 root-app (gitops/root-app.yaml)
   └── App of Apps (gitops/apps/)
-        ├── Wave 1:  longhorn, cert-manager, operators (cloudnative-pg, percona)
-        ├── Wave 2:  openbao, external-secrets, init jobs
-        ├── Wave 3:  agentgateway
-        ├── Wave 4:  agentgateway-config, argocd-config, cert-manager-config
-        ├── Wave 5:  monitoring, cloudflared, headlamp
-        ├── Wave 6:  postgresql, mongodb, redis, qdrant
-        └── Wave 8+: sonarqube, openmemory, flow
+        ├── platform/
+        │     ├── Wave 1:  longhorn, cert-manager, operators (cloudnative-pg, percona)
+        │     ├── Wave 2:  openbao, external-secrets, init jobs
+        │     ├── Wave 3:  agentgateway
+        │     ├── Wave 4:  agentgateway-config, argocd-config, cert-manager-config
+        │     ├── Wave 5:  monitoring, cloudflared, headlamp
+        │     ├── Wave 6:  postgresql, mongodb, redis, qdrant
+        │     └── Wave 8:  openmemory
+        └── workloads/
+              ├── Wave 7:  sonarqube-db
+              ├── Wave 8:  sonarqube, sonarqube-config, sonarqube-mcp
+              └── Wave 9:  flow, portfolio
 ```
 
 ### Dependencias implicitas
