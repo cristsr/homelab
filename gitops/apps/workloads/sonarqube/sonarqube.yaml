@@ -16,7 +16,7 @@ spec:
       helm:
         releaseName: sonarqube
         valueFiles:
-          - $values/platform/sonarqube/sonarqube.yaml
+          - $values/workloads/sonarqube/sonarqube.yaml
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values

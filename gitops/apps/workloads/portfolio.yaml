@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: flow
+  name: portfolio
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -12,13 +12,24 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/apps/flow
+    path: workloads/portfolio
   destination:
     server: https://kubernetes.default.svc
     namespace: apps
+  ignoreDifferences:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      jqPathExpressions:
+        - '.spec.parentRefs[].group'
+        - '.spec.parentRefs[].kind'
+        - '.spec.rules[].backendRefs[].group'
+        - '.spec.rules[].backendRefs[].kind'
+        - '.spec.rules[].backendRefs[].weight'
+        - '.spec.rules[].matches'
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - ServerSideApply=true

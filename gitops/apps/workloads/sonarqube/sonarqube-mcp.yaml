@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: sonarqube-config
+  name: sonarqube-mcp
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -12,9 +12,9 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/sonarqube
+    path: workloads/sonarqube
     directory:
-      include: "{httproute.yaml}"
+      include: "{sonarqube-mcp.yaml,httproute-mcp.yaml}"
   destination:
     server: https://kubernetes.default.svc
     namespace: sonarqube
