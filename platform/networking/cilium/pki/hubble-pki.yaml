@@ -1,0 +1,85 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: hubble-selfsigned-issuer
+  namespace: kube-system
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: hubble-ca
+  namespace: kube-system
+spec:
+  isCA: true
+  commonName: Hubble CA
+  secretName: hubble-ca
+  duration: 87600h  # 10 años
+  renewBefore: 720h  # 30 días antes de expirar
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  issuerRef:
+    name: hubble-selfsigned-issuer
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: hubble-ca-issuer
+  namespace: kube-system
+spec:
+  ca:
+    secretName: hubble-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: hubble-relay-client-certs
+  namespace: kube-system
+spec:
+  secretName: hubble-relay-client-certs
+  duration: 8760h   # 1 año
+  renewBefore: 2160h  # 90 días antes de expirar
+  commonName: "*.hubble-relay.cilium.io"
+  dnsNames:
+    - "*.hubble-relay.cilium.io"
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+  issuerRef:
+    name: hubble-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: hubble-server-certs
+  namespace: kube-system
+spec:
+  secretName: hubble-server-certs
+  duration: 8760h   # 1 año
+  renewBefore: 2160h  # 90 días antes de expirar
+  commonName: "*.default.hubble-grpc.cilium.io"
+  dnsNames:
+    - "*.default.hubble-grpc.cilium.io"
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+  issuerRef:
+    name: hubble-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
