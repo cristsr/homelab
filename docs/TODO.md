@@ -44,8 +44,33 @@ Este documento lista las tareas planificadas para mejorar la automatizacion y el
 
 ---
 
+## 3. Migrar ArgoCD de polling a webhook de GitHub
+
+**Motivacion:** El polling actual tiene un intervalo de 180s (ahora 600s como fallback). Un webhook de GitHub entrega notificaciones en segundos tras cada push, eliminando la latencia innecesaria.
+
+**Tareas:**
+
+- [ ] Generar un secret aleatorio: `openssl rand -hex 32`.
+- [ ] Cifrarlo con ansible-vault: `ansible-vault encrypt_string 'VALOR' --name 'argocd_webhook_secret'`.
+- [ ] Agregar `argocd_webhook_secret: !vault |` al archivo `ansible/group_vars/all.yaml`.
+- [ ] Ejecutar `vault-populate.yaml` para que escriba `webhook_secret` en el path `argocd` de OpenBao.
+- [ ] Configurar webhook en GitHub → Settings → Webhooks:
+  - URL: `https://argocd.cristianpuenguenan.online/api/webhook`
+  - Content type: `application/json`
+  - Secret: el mismo valor generado
+  - Trigger: `push`
+- [ ] Verificar en ArgoCD que el sync se dispara en segundos tras un push.
+
+**Archivos afectados (ya implementados):**
+- `ansible/vault-populate.yaml` — añade `webhook_secret` al path `argocd`
+- `platform/argocd/webhook-externalsecret.yaml` — ExternalSecret con `creationPolicy: Merge` sobre `argocd-secret`
+- `bootstrap/argocd/values.yaml` — `timeout.reconciliation` aumentado a `600s`
+
+---
+
 ## Notas
 
 - Prioridad alta: Renovate, ya que reduce el trabajo manual de mantenimiento.
 - Prioridad media: Documentar Conventional Commits, para estandarizar contribuciones.
+- Prioridad media: Migrar ArgoCD a webhook para sync inmediato tras push.
 - Fecha de creacion: 2026-05-11
