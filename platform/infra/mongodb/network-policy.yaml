@@ -12,6 +12,8 @@ spec:
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: apps
+      authentication:
+        mode: required
       toPorts:
         - ports:
             - port: "27017"
@@ -19,6 +21,8 @@ spec:
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: devtools
+      authentication:
+        mode: required
       toPorts:
         - ports:
             - port: "27017"
@@ -27,6 +31,8 @@ spec:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: infra
             app.kubernetes.io/name: psmdb-operator
+      authentication:
+        mode: required
       toPorts:
         - ports:
             - port: "27017"
