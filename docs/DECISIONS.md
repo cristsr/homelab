@@ -179,7 +179,46 @@ Beneficios adicionales:
 
 ---
 
-## ADR-006: Ansible para aprovisionamiento del nodo
+## ADR-006: OpenBao como backend de secretos
+
+
+**Estado**: Aceptado  
+**Fecha**: 2026-04
+
+### Contexto
+
+El cluster necesita un sistema centralizado para gestionar secretos (tokens de APIs, credenciales de bases de datos, claves TLS) que cumpla dos requisitos: los secretos **no deben vivir en texto plano en Git** y deben poder sincronizarse automáticamente con Kubernetes Secrets cuando un pod los necesita.
+
+La alternativa más simple —poner los secretos directamente como Kubernetes Secrets en el repositorio— es incompatible con GitOps porque requeriría cifrarlos en el repo (SOPS, sealed-secrets) o aceptar el riesgo de exposición.
+
+### Opciones consideradas
+
+| Opción | Razón de descarte |
+|--------|------------------|
+| **Sealed Secrets** | Secretos cifrados en Git pero atados a la clave del cluster; si el cluster muere se pierden los secretos originales |
+| **SOPS + age/GPG** | Cifrado en Git válido, pero requiere descifrado manual o CI/CD para aplicar; no ofrece API dinámica para rotación |
+| **HashiCorp Vault** | Solución de referencia pero con BSL (Business Source License) desde 2023; OpenBao es su fork comunitario con licencia MPL-2.0 |
+| **Doppler / Infisical** | SaaS externos; introduce dependencia de un tercero para secretos críticos del cluster |
+
+### Decisión
+
+**OpenBao** (fork comunitario de HashiCorp Vault, licencia MPL-2.0) desplegado en el cluster vía Helm:
+
+- KV v2 como engine principal: todos los secretos del cluster viven en `secret/` con versionado.
+- **Kubernetes auth**: los pods se autentican con su ServiceAccount, sin credenciales hardcodeadas.
+- **External Secrets Operator** sincroniza automáticamente desde OpenBao hacia Kubernetes Secrets; los pods solo ven Secrets nativos de Kubernetes.
+- La clave de unseal se gestiona con **Static Seal** (AES-256) cifrada con `ansible-vault` en el repositorio.
+
+### Consecuencias
+
+- Ningún secreto de producción vive en texto plano en Git.
+- Tras cada reinicio del pod `openbao-0`, el vault queda sellado y requiere unseal manual con la clave AES-256. Es el principal punto de fricción operativa.
+- External Secrets Operator añade un componente extra, pero desacopla completamente la gestión de secretos de su consumo.
+- Al ser un fork activo de Vault, la API es 100% compatible: la documentación de Vault es válida para OpenBao.
+
+---
+
+## ADR-007: Ansible para aprovisionamiento del nodo
 
 **Estado**: Aceptado  
 **Fecha**: 2026-04
