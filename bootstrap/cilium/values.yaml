@@ -1,3 +1,4 @@
+# ignoreDifferences en ArgoCD protege cilium-ca, hubble-relay-client-certs y hubble-server-certs
 kubeProxyReplacement: "true"
 
 k8sServiceHost: "127.0.0.1"
