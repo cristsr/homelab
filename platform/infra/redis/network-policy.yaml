@@ -11,6 +11,8 @@ spec:
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: apps
+      authentication:
+        mode: required
       toPorts:
         - ports:
             - port: "6379"
@@ -18,6 +20,8 @@ spec:
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: devtools
+      authentication:
+        mode: required
       toPorts:
         - ports:
             - port: "6379"
