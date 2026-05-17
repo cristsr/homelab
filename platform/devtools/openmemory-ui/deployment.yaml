@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openmemory-ui
+  namespace: devtools
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openmemory-ui
+  template:
+    metadata:
+      labels:
+        app: openmemory-ui
+    spec:
+      containers:
+        - name: openmemory-ui
+          image: ghcr.io/cristsr/openmemory-ui:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: "https://openmemory-api.cristianpuenguenan.online"
+            - name: NEXT_PUBLIC_USER_ID
+              value: "cristian"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openmemory-ui
+  namespace: devtools
+spec:
+  selector:
+    app: openmemory-ui
+  ports:
+    - port: 3000
+      targetPort: 3000
+  type: ClusterIP

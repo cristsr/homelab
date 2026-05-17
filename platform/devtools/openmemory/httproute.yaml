@@ -8,8 +8,8 @@ spec:
     - name: main
       namespace: networking
   hostnames:
-    - openmemory.cristianpuenguenan.online
+    - openmemory-api.cristianpuenguenan.online
   rules:
     - backendRefs:
         - name: openmemory
-          port: 8080
+          port: 8765
