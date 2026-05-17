@@ -17,19 +17,45 @@ spec:
     spec:
       containers:
         - name: openmemory
-          image: mem0/openmemory-mcp:latest
+          image: ghcr.io/cristsr/openmemory-mcp:latest
           ports:
-            - containerPort: 8080
+            - containerPort: 8765
           env:
+            - name: USER
+              value: "cristian"
+            - name: OPENAI_BASE_URL
+              value: "https://openrouter.ai/api/v1"
+            - name: LLM_PROVIDER
+              value: "openai"
+            - name: LLM_MODEL
+              value: "anthropic/claude-haiku-4-5"
+            - name: LLM_BASE_URL
+              value: "https://openrouter.ai/api/v1"
+            - name: EMBEDDER_PROVIDER
+              value: "openai"
+            - name: EMBEDDER_MODEL
+              value: "openai/text-embedding-3-small"
+            - name: EMBEDDER_BASE_URL
+              value: "https://openrouter.ai/api/v1"
             - name: QDRANT_HOST
               value: "qdrant.infra.svc.cluster.local"
             - name: QDRANT_PORT
               value: "6333"
+            - name: DATABASE_URL
+              value: "sqlite:////data/openmemory.db"
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: openmemory-secrets
                   key: OPENAI_API_KEY
+            - name: QDRANT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openmemory-secrets
+                  key: QDRANT_API_KEY
+          volumeMounts:
+            - name: data
+              mountPath: /data
           resources:
             requests:
               cpu: 50m
@@ -37,6 +63,22 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: openmemory-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openmemory-data
+  namespace: devtools
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn-retain
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: v1
 kind: Service
@@ -47,6 +89,6 @@ spec:
   selector:
     app: openmemory
   ports:
-    - port: 8080
-      targetPort: 8080
+    - port: 8765
+      targetPort: 8765
   type: ClusterIP
