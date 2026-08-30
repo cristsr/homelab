@@ -3,3 +3,10 @@ credentials.txt
 ansible/.vault-pass
 .idea/kubernetes
 ansible/extra-secrets.yaml
+
+# Terraform (terraform/.terraform.lock.hcl SI se commitea, fija versiones de providers)
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars
+terraform/generated/

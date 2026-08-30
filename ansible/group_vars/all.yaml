@@ -1,8 +1,12 @@
 k0s_version: v1.35.3+k0s.0
 kubectl_version: "{{ k0s_version | regex_replace('\\+k0s\\..*', '') }}"
-k0s_node_ip: 192.168.80.20
+k0s_node_ip: 192.168.122.10 # IP interna de la VM (NAT libvirt); 192.168.80.20 sigue siendo la IP del host
 k0s_pod_cidr: 10.244.0.0/16
 k0s_service_cidr: 10.96.0.0/12
+
+# Interfaz LAN real del host (solo WiFi disponible, sin cable) usada por
+# ansible/host-network.yaml para el port-forward 80/443 -> VM.
+host_lan_interface: wlp4s0f1u2
 helm_version: 3.17.3
 helmfile_version: 1.5.0
 argocd_github_username: cristsr

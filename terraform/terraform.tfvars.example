@@ -1,0 +1,14 @@
+# Copiar a terraform.tfvars (gitignored) y completar.
+
+# Obtener la URL actual desde https://fedoraproject.org/cloud/download
+# (elige el enlace .qcow2 del release vigente).
+fedora_cloud_image_url = "https://download.fedoraproject.org/pub/fedora/linux/releases/<VERSION>/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-<VERSION>-<BUILD>.x86_64.qcow2"
+
+# Ajustar si hace falta; estos son los defaults ya definidos en variables.tf
+# vm_name          = "homelab"
+# memory_mib       = 16384
+# vcpu             = 8
+# disk_size_bytes  = 128849018880 # 120 GiB
+# vm_static_ip     = "192.168.122.10"
+# vm_gateway       = "192.168.122.1"
+# vm_mac           = "52:54:00:12:34:56"
