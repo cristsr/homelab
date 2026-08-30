@@ -1,6 +1,6 @@
 # Homelab Kubernetes
 
-Infraestructura de homelab personal basada en Kubernetes, orquestada con GitOps y desplegada mediante Ansible en un unico nodo fisico/virtual.
+Infraestructura de homelab personal basada en Kubernetes, orquestada con GitOps. El nodo corre dentro de una VM libvirt provisionada con Terraform, configurada con Ansible.
 
 ---
 
@@ -18,7 +18,7 @@ Este repositorio contiene la configuracion completa para levantar un cluster Kub
 - **Herramientas**: SonarQube, OpenMemory.
 - **Acceso externo**: Cloudflare Tunnel para exponer servicios sin abrir puertos.
 
-Todo el aprovisionamiento del nodo y la gestion inicial de secretos se realiza con **Ansible**.
+La VM se crea con **Terraform** (libvirt/KVM); el aprovisionamiento del nodo y la gestion inicial de secretos se realiza con **Ansible**.
 
 ---
 
@@ -26,6 +26,7 @@ Todo el aprovisionamiento del nodo y la gestion inicial de secretos se realiza c
 
 | Capa | Tecnologia | Version |
 |------|-----------|---------|
+| VM / Hipervisor | Terraform + libvirt (KVM), Fedora Cloud Base | - |
 | Kubernetes | k0s | v1.35.3+k0s.0 |
 | CNI | Cilium | 1.19.3 |
 | GitOps | Argo CD | 9.5.13 |
@@ -44,12 +45,17 @@ Todo el aprovisionamiento del nodo y la gestion inicial de secretos se realiza c
 
 ```
 homelab/
-├── ansible/                    # Aprovisionamiento del nodo y secretos
+├── terraform/                   # Aprovisionamiento de la VM (Terraform + libvirt)
+│   ├── main.tf                  # Pool, volumenes, cloud-init, dominio
+│   └── cloud-init/              # user-data / network-config
+│
+├── ansible/                    # Aprovisionamiento del nodo (dentro de la VM) y secretos
 │   ├── site.yaml               # Playbook principal de instalacion
+│   ├── host-network.yaml       # Port-forward LAN (firewalld) del host hacia la VM
 │   ├── teardown.yaml           # Playbook para destruir el cluster
 │   ├── vault-populate.yaml     # Playbook para poblar OpenBao KV
 │   ├── group_vars/all.yaml     # Variables + secrets cifrados (ansible-vault)
-│   ├── inventory.yaml          # Inventario del nodo unico
+│   ├── inventory.yaml          # Generado por `terraform apply`
 │   ├── ansible.cfg             # Configuracion de Ansible
 │   ├── tasks/                  # Tareas individuales
 │   └── templates/              # Plantillas Jinja2

@@ -1,0 +1,41 @@
+---
+- name: Reenviar trafico LAN del host hacia la VM del nodo k0s
+  hosts: hypervisor
+  become: true
+
+  vars:
+    forward_ports: [80, 443]
+
+  tasks:
+    - name: Detectar la zona activa de firewalld para la interfaz LAN
+      ansible.builtin.command: >
+        firewall-cmd --get-zone-of-interface={{ host_lan_interface }}
+      register: fw_zone
+      changed_when: false
+
+    - name: Habilitar masquerade en la zona LAN
+      ansible.builtin.command: >
+        firewall-cmd --zone={{ fw_zone.stdout }} --add-masquerade --permanent
+      register: fw_masq
+      changed_when: "'ALREADY_ENABLED' not in fw_masq.stderr"
+      failed_when: fw_masq.rc != 0 and 'ALREADY_ENABLED' not in fw_masq.stderr
+
+    - name: Verificar si el forward-port ya existe
+      ansible.builtin.command: >
+        firewall-cmd --zone={{ fw_zone.stdout }}
+        --query-forward-port=port={{ item }}:proto=tcp:toport={{ item }}:toaddr={{ k0s_node_ip }}
+      register: fw_query
+      failed_when: false
+      changed_when: false
+      loop: "{{ forward_ports }}"
+
+    - name: Agregar forward-port hacia la VM ({{ k0s_node_ip }})
+      ansible.builtin.command: >
+        firewall-cmd --zone={{ fw_zone.stdout }} --permanent
+        --add-forward-port=port={{ item.item }}:proto=tcp:toport={{ item.item }}:toaddr={{ k0s_node_ip }}
+      when: item.rc != 0
+      loop: "{{ fw_query.results }}"
+
+    - name: Recargar firewalld
+      ansible.builtin.command: firewall-cmd --reload
+      changed_when: true
