@@ -252,3 +252,42 @@ Además, los secrets de arranque (GitHub PAT, tokens de Cloudflare, clave de Ope
 - Los secrets sensibles están cifrados en el repositorio, seguros para versionar.
 - Requiere Python y Ansible instalados en el nodo antes de ejecutar (dependencia de bootstrapping manual mínima).
 - El playbook se ejecuta localmente en el nodo (`ansible_connection: local`), no requiere SSH desde un host externo.
+
+> **Actualización (ADR-008)**: desde que el nodo corre dentro de una VM, Ansible pasó de `ansible_connection: local` a SSH contra la VM. El rol de Ansible no cambió — sigue siendo el único responsable de configurar el nodo una vez que existe; lo que cambió es *qué* nodo existe primero (ahora lo crea Terraform).
+
+---
+
+## ADR-008: VM libvirt provisionada con Terraform
+
+**Estado**: Aceptado
+**Fecha**: 2026-08-30
+
+### Contexto
+
+El nodo corría directamente sobre el hardware del laptop (bare-metal, único host). Esto ataba todo el ciclo de vida del cluster al sistema operativo del host: reinstalar el nodo significaba reinstalar la máquina completa, y no existía forma de tomar snapshots o revertir el estado del nodo en sí (solo del cluster, vía `teardown.yaml`). El propio README ya anticipaba esta posibilidad ("desplegada... en un único nodo físico/virtual").
+
+ADR-007 había evaluado y descartado Terraform para el aprovisionamiento, pero por una razón puntual: "Terraform está orientado a provisionar infraestructura cloud, no a configurar un nodo físico/VM **existente**". Esa razón dejó de aplicar en cuanto se decidió correr el nodo dentro de una VM: ahí sí hay infraestructura real que crear (disco, red, dominio libvirt), que es exactamente el dominio de Terraform.
+
+### Opciones consideradas
+
+| Opción | Razón de descarte |
+|--------|-------------------|
+| **Seguir en bare-metal** | Sin snapshots ni rollback a nivel nodo; reinstalar = reinstalar el SO del host completo |
+| **Vagrant + libvirt** | Capa extra (Ruby/Vagrantfile) sobre libvirt sin aportar sobre Terraform; peor tracking de estado que un `.tfstate` |
+| **Scripts bash + virt-install** (prototipo explorado en `~/vmconfig` durante esta sesión) | No declarativo, sin estado, sin plan/diff antes de aplicar cambios |
+
+### Decisión
+
+**Terraform con el provider `dmacvicar/libvirt`** (directorio `terraform/`) crea la VM: pool dedicado, volumen base (descarga pristina de Fedora Cloud, nunca booteada directamente) + volumen overlay copy-on-write por VM, `libvirt_cloudinit_disk` con IP estática, y el dominio libvirt en sí.
+
+Ansible **no cambia de rol** (ADR-007 sigue vigente): sigue siendo el único responsable de instalar k0s y hacer el bootstrap inicial — solo cambia el transporte, de `ansible_connection: local` a SSH contra la VM.
+
+**Red**: el host solo tiene WiFi activa (sin cable ethernet disponible), y bridging de una VM sobre WiFi es frágil en la mayoría de drivers/APs. Se optó por NAT libvirt (`192.168.122.0/24`, red `default` existente) + port-forward de `192.168.80.20:80/443` hacia la VM configurado con firewalld (`ansible/host-network.yaml`, corre contra el host, no contra la VM). Cloudflare Tunnel (ADR-005) no se ve afectado porque es una conexión saliente desde dentro de la VM.
+
+### Consecuencias
+
+- `terraform.tfstate` local pasa a ser un artefacto crítico sin backend remoto — punto único de falla conocido y aceptado por ahora (homelab de un solo operador); queda fuera de alcance de esta decisión.
+- Nueva dependencia en el host: libvirt/KVM, además de Terraform.
+- Ahora sí es posible tomar snapshots de la VM como mecanismo de recuperación ante desastres a nivel nodo — algo que bare-metal nunca ofreció.
+- Acceso LAN directo depende de las reglas de forward-port de firewalld en el host (un componente más que puede fallar); acceso WAN vía Cloudflare Tunnel no tiene overhead adicional.
+- `libvirt_domain.k0s_node` tiene `autostart = true`: a diferencia de bare-metal (donde `k0scontroller` arrancaba solo con el host), ahora la VM debe arrancar sola tras un reboot del host para que el cluster vuelva a estar disponible.

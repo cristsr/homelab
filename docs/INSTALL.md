@@ -1,12 +1,13 @@
 # Guia de Instalacion
 
-> El playbook de Ansible se ejecuta **directamente en el servidor** (no desde un host remoto).
-> Todos los comandos de esta guia se ejecutan con sesion SSH abierta en el nodo.
+> El nodo k0s corre dentro de una VM libvirt provisionada por Terraform (`terraform/`).
+> Ansible se ejecuta desde el host (equipo de control) por **SSH** hacia la VM, no localmente.
 
 ---
 
 ## Tabla de Contenidos
 
+0. [Aprovisionar la VM (Terraform)](#0-aprovisionar-la-vm-terraform)
 1. [Requisitos Previos](#1-requisitos-previos)
 2. [Preparar el Servidor](#2-preparar-el-servidor)
 3. [Configurar Ansible y Secrets](#3-configurar-ansible-y-secretos)
@@ -20,23 +21,74 @@
 
 ---
 
+## 0. Aprovisionar la VM (Terraform)
+
+> Ver [ADR-008](DECISIONS.md#adr-008-vm-libvirt-provisionada-con-terraform) para el contexto completo de esta decision.
+
+El nodo ya no se instala sobre el hardware directamente: `terraform/` crea una VM libvirt (KVM) a partir de una imagen pristina de Fedora Cloud Base, con disco overlay copy-on-write (la imagen descargada nunca se escribe) y arranque via cloud-init (usuario, llave SSH, IP estatica).
+
+### 0.1 Prerequisitos del host
+
+```bash
+sudo dnf install -y '@Virtualization' libvirt qemu-kvm
+sudo usermod -aG libvirt $USER   # requiere volver a iniciar sesion
+sudo systemctl enable --now libvirtd
+
+# Terraform (repo oficial de HashiCorp)
+sudo dnf install -y dnf-plugins-core
+sudo dnf config-manager addrepo --from-repofile=https://rpm.releases.hashicorp.com/fedora/hashicorp.repo
+sudo dnf install -y terraform
+```
+
+### 0.2 Configurar variables
+
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Edita `terraform.tfvars` y coloca la URL del qcow2 vigente desde https://fedoraproject.org/cloud/download (cambia por release; no hay un default fijo a proposito). Ajusta memoria/vcpu/disco si hace falta (defaults: 16GB RAM, 8 vCPU, 120GB disco).
+
+### 0.3 Aplicar
+
+```bash
+terraform init
+terraform plan
+terraform apply
+```
+
+Esto:
+- Descarga la imagen base de Fedora Cloud (una sola vez, se cachea en el pool `homelab`).
+- Crea el disco overlay de la VM, una llave SSH dedicada (`terraform/generated/id_ed25519`), y el dominio libvirt con IP estatica en la red NAT `default` (`192.168.122.0/24`).
+- Regenera `ansible/inventory.yaml` apuntando a la VM por SSH.
+
+Verificar que la VM arranco bien:
+
+```bash
+ssh -i terraform/generated/id_ed25519 fedora@$(terraform -chdir=terraform output -raw vm_static_ip) "cloud-init status --long"
+```
+
+Debe mostrar `status: done` sin errores.
+
+---
+
 ## 1. Requisitos Previos
 
-### Hardware minimo del nodo
+### Hardware minimo de la VM (definido en `terraform/variables.tf`)
 
-| Recurso | Minimo | Recomendado |
-|---------|--------|-------------|
-| CPU | 4 cores | 6+ cores |
+| Recurso | Minimo (ARCHITECTURE.md) | Default de este repo |
+|---------|--------------------------|-----------------------|
+| CPU | 4 cores | 8 vCPU |
 | RAM | 8 GB | 16 GB |
-| Disco | 100 GB SSD | 200+ GB SSD |
-| Red | Acceso a Internet | IP estatica preferible |
+| Disco | 100 GB SSD | 120 GB (overlay) |
+| Red | Acceso a Internet | IP estatica (`192.168.122.10`, NAT libvirt) |
 
-### Software base en el nodo
+### Software
 
-- Ubuntu 22.04 LTS (o Debian compatible)
-- Acceso SSH
-- Usuario con privilegios `sudo` sin contrasena (recomendado para Ansible)
-- Conexion a Internet estable
+- Host: Fedora con libvirt/KVM + Terraform (ver [0. Aprovisionar la VM](#0-aprovisionar-la-vm-terraform)).
+- Ansible corre desde el **host** (equipo de control), no dentro de la VM.
+- La VM (Fedora Cloud Base) no requiere preparacion manual: cloud-init crea el usuario, la llave SSH y el sudo sin contrasena.
+- Conexion a Internet estable (para descargar la imagen base y los binarios que instala Ansible).
 
 ### Cuentas y tokens externos necesarios
 
@@ -56,13 +108,15 @@ Antes de comenzar, asegurate de tener a mano los siguientes valores:
 
 ---
 
-## 2. Preparar el Servidor
+## 2. Preparar el Equipo de Control
+
+> Estos pasos son en el **host** (el mismo que corre Terraform), no dentro de la VM.
 
 ### 2.1 Instalar dependencias del sistema
 
 ```bash
-sudo apt update && sudo apt install -y git pipx curl
-pipx install ansible
+sudo dnf install -y git pipx curl
+pipx install --include-deps ansible
 pipx ensurepath
 source ~/.bashrc
 ```
@@ -86,7 +140,7 @@ cd homelab
 
 ### 3.1 Revisar inventario y variables
 
-Edita `ansible/inventory.yaml` si tu usuario o IP difieren:
+`ansible/inventory.yaml` ya no se edita a mano: lo genera `terraform apply` (ver [0. Aprovisionar la VM](#0-aprovisionar-la-vm-terraform)) con la IP estatica de la VM y la llave SSH dedicada. Si necesitas verlo:
 
 ```yaml
 all:
@@ -94,10 +148,18 @@ all:
     k0s:
       hosts:
         homelab:
-          ansible_host: 192.168.80.20
-          ansible_user: abzu
+          ansible_host: 192.168.122.10
+          ansible_user: fedora
+          ansible_connection: ssh
+          ansible_ssh_private_key_file: /ruta/a/homelab/terraform/generated/id_ed25519
+    hypervisor:
+      hosts:
+        homelab-host:
+          ansible_host: 127.0.0.1
           ansible_connection: local
 ```
+
+El grupo `hypervisor` apunta al host mismo — lo usa `ansible/host-network.yaml` (ver [8.3](#83-acceso-lan-directo)) para el port-forward LAN hacia la VM.
 
 Edita `ansible/group_vars/all.yaml` para ajustar versiones y el username de GitHub:
 
@@ -302,6 +364,23 @@ Token para Headlamp:
 kubectl create token headlamp -n observability
 ```
 
+### 8.3 Acceso LAN directo
+
+La VM vive en la red NAT de libvirt (`192.168.122.0/24`), no es alcanzable directamente desde la LAN. `ansible/host-network.yaml` configura firewalld en el **host** para reenviar `192.168.80.20:80/443` hacia la VM:
+
+```bash
+cd ansible
+ansible-playbook host-network.yaml
+```
+
+Verificar desde otro equipo de la LAN:
+
+```bash
+curl -I http://192.168.80.20
+```
+
+Cloudflare Tunnel (acceso WAN) no necesita este paso — es una conexion saliente desde dentro de la VM, no le afecta el NAT.
+
 ---
 
 ## 9. DNS
@@ -376,7 +455,7 @@ kubectl create clusterrolebinding longhorn-temp --clusterrole=cluster-admin --se
 
 ### Reinstalar desde cero
 
-Si necesitas destruir todo y empezar de nuevo:
+Para resetear solo el cluster (mantener la VM):
 
 ```bash
 cd ansible
@@ -385,26 +464,44 @@ ansible-playbook teardown.yaml
 
 > **ADVERTENCIA**: `teardown.yaml` elimina el cluster k0s, certificados, etcd y unidades systemd. Los datos de Longhorn pueden perderse dependiendo de la politica de reclaim.
 
+Para destruir tambien la VM y recrearla desde cero:
+
+```bash
+cd terraform
+terraform destroy
+terraform apply
+```
+
 ---
 
 ## Resumen de comandos
 
 ```bash
-# 1. Preparar servidor e instalar ansible
-sudo apt update && sudo apt install -y git pipx curl
-pipx install ansible && pipx ensurepath
-
-# 2. Clonar repo
+# 0. Clonar repo, preparar host (libvirt + terraform + ansible)
 git clone git@github.com:cristsr/homelab.git && cd homelab
+sudo dnf install -y '@Virtualization' libvirt qemu-kvm dnf-plugins-core git pipx curl
+sudo usermod -aG libvirt $USER   # re-login despues de esto
+sudo systemctl enable --now libvirtd
+sudo dnf config-manager addrepo --from-repofile=https://rpm.releases.hashicorp.com/fedora/hashicorp.repo
+sudo dnf install -y terraform
+pipx install --include-deps ansible && pipx ensurepath
 
-# 3. Configurar vault y secrets
-cd ansible
+# 1. Aprovisionar la VM
+cd terraform
+cp terraform.tfvars.example terraform.tfvars   # completar fedora_cloud_image_url
+terraform init && terraform apply
+
+# 2. Configurar vault y secrets
+cd ../ansible
 echo "tu-contrasena" > .vault-pass
 chmod 600 .vault-pass
 # (editar group_vars/all.yaml con valores cifrados)
 
-# 4. Instalar cluster
+# 3. Instalar cluster (via SSH a la VM)
 ansible-playbook site.yaml
+
+# 4. Port-forward LAN
+ansible-playbook host-network.yaml
 
 # 5. Activar GitOps
 cd ..

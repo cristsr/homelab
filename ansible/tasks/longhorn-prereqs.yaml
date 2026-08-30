@@ -1,9 +1,8 @@
 ---
-- name: Install open-iscsi (Longhorn requirement)
-  ansible.builtin.apt:
-    name: open-iscsi
+- name: Install iscsi-initiator-utils (Longhorn requirement)
+  ansible.builtin.dnf:
+    name: iscsi-initiator-utils
     state: present
-    update_cache: true
   tags: [longhorn]
 
 - name: Enable and start iscsid

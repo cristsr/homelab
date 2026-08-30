@@ -40,7 +40,20 @@ Homelab de un solo nodo construido sobre k0s con GitOps completo. ArgoCD gestion
 
 ```
 homelab/
-├── ansible/                    # Aprovisionamiento del nodo y secretos
+├── terraform/                  # Aprovisionamiento de la VM (Terraform + libvirt)
+│   ├── versions.tf              # Providers: dmacvicar/libvirt, tls, local
+│   ├── provider.tf               # qemu:///system
+│   ├── variables.tf               # Imagen base, sizing, red, IP estatica
+│   ├── main.tf                     # Pool, volumenes (base + overlay), cloud-init, dominio
+│   ├── outputs.tf                   # vm_static_ip, vm_mac, ssh_private_key_path
+│   ├── cloud-init/
+│   │   ├── user-data.yaml.tpl        # hostname/usuario/ssh-key/growpart (nada de k0s)
+│   │   └── network-config.yaml.tpl    # IP estatica (match por MAC + set-name)
+│   ├── templates/
+│   │   └── inventory.yaml.tftpl        # Genera ansible/inventory.yaml
+│   └── generated/                       # Llave SSH generada (gitignored)
+│
+├── ansible/                    # Aprovisionamiento del nodo (dentro de la VM) y secretos
 │   ├── tasks/
 │   │   ├── k0s.yaml            # Instalacion y configuracion de k0s
 │   │   ├── kubeconfig.yaml     # Export de kubeconfig e instalacion de kubectl
@@ -53,8 +66,9 @@ homelab/
 │   │   └── k0s-config.yaml.j2  # Configuracion de k0s (single node)
 │   ├── group_vars/all.yaml     # Variables globales + secrets cifrados (ansible-vault)
 │   ├── ansible.cfg             # Configuracion de Ansible
-│   ├── inventory.yaml          # Inventario (localhost/nodo unico)
-│   ├── site.yaml               # Playbook principal de instalacion
+│   ├── inventory.yaml          # Generado por `terraform apply` (grupos k0s + hypervisor)
+│   ├── site.yaml               # Playbook principal de instalacion (corre por SSH sobre la VM)
+│   ├── host-network.yaml       # Port-forward LAN (firewalld) del host hacia la VM
 │   ├── teardown.yaml           # Playbook para destruir el cluster
 │   └── vault-populate.yaml     # Playbook para poblar OpenBao KV
 │
@@ -109,16 +123,19 @@ homelab/
 
 **Version**: `v1.35.3+k0s.0` — **Modo**: Single node controller
 
-- Descarga el binario de k0s y lo registra como servicio systemd (`k0scontroller`).
+- Corre dentro de una VM libvirt provisionada por Terraform (`terraform/`, ver [ADR-008](DECISIONS.md#adr-008-vm-libvirt-provisionada-con-terraform)), no directamente sobre el hardware del host.
+- Descarga el binario de k0s y lo registra como servicio systemd (`k0scontroller`) — via Ansible, por SSH a la VM.
 - Configuracion en `/etc/k0s/k0s.yaml` generada desde plantilla Jinja2.
 - kube-proxy esta deshabilitado (reemplazado por Cilium eBPF).
 - CIDRs configurables via variables de Ansible.
 
 | Parametro | Valor por defecto |
 |-----------|-------------------|
-| `k0s_node_ip` | `192.168.80.20` |
+| `k0s_node_ip` | `192.168.122.10` (IP interna de la VM en la red NAT `default`) |
 | `k0s_pod_cidr` | `10.244.0.0/16` |
 | `k0s_service_cidr` | `10.96.0.0/12` |
+
+> `192.168.80.20` sigue siendo la IP del host en la LAN — ya no es la IP del nodo, es el destino del port-forward (ver §7).
 
 ### 2.2 Cilium (CNI)
 
@@ -401,25 +418,29 @@ Servicios generados: `-rw`, `-r`, `-ro`.
 ```
 Internet
   └── Cloudflare (DNS + WAF)
-        └── Cloudflare Tunnel (egreso desde cloudflared)
+        └── Cloudflare Tunnel (egreso desde cloudflared, dentro de la VM)
               └── Agent Gateway :443
                     └── Backend ClusterIP (por HTTPRoute)
 
 LAN
-  └── Agent Gateway :443
-        └── Backend ClusterIP (por HTTPRoute)
+  └── Host 192.168.80.20:80/443 (firewalld forward-port, ansible/host-network.yaml)
+        └── VM 192.168.122.10:80/443 (NAT libvirt)
+              └── Agent Gateway :443
+                    └── Backend ClusterIP (por HTTPRoute)
 ```
 
-### Puertos expuestos en el nodo
+La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo tiene WiFi activa — bridging de una VM sobre WiFi es fragil con la mayoria de drivers/APs (ver ADR-008). El acceso LAN pasa por un port-forward a nivel host; el acceso WAN via Cloudflare Tunnel no se ve afectado porque es una conexion saliente.
+
+### Puertos expuestos
 
 | Puerto | Protocolo | Descripcion |
 |--------|-----------|-------------|
-| 80 | TCP | Agent Gateway HTTP |
-| 443 | TCP | Agent Gateway HTTPS |
+| 80 | TCP | Agent Gateway HTTP (host → VM via forward-port) |
+| 443 | TCP | Agent Gateway HTTPS (host → VM via forward-port) |
 
 ### DNS y subdominios
 
-Todos apuntan a `192.168.80.20` como registro A (LAN) o via Cloudflare Tunnel (WAN).
+Todos apuntan a `192.168.80.20` (IP del host) como registro A (LAN) o via Cloudflare Tunnel (WAN) — el forward-port hace transparente que el nodo real este en `192.168.122.10`.
 
 ---
 
@@ -507,16 +528,28 @@ Qdrant ────────────────────────�
 | SonarQube | 10Gi | longhorn |
 | **Total** | **~72Gi** | |
 
-### Requerimiento minimo del host
+### Requerimiento minimo de la VM
 
-- **CPU**: 4 cores
-- **RAM**: 8 GB
-- **Disco**: 100 GB SSD (recomendado para Longhorn)
-- **OS**: Ubuntu/Debian compatible
+- **CPU**: 4 cores (default de este repo: 8 vCPU)
+- **RAM**: 8 GB (default: 16 GB)
+- **Disco**: 100 GB SSD, recomendado para Longhorn (default: 120 GB overlay)
+- **OS**: Fedora Cloud Base (imagen descargada por Terraform)
+
+El **host** (hipervisor) necesita margen adicional sobre estos numeros para SO + libvirt/KVM + overhead de la VM.
 
 ---
 
 ## 11. Flujo de Instalacion Inicial
+
+### Fase 0 — Aprovisionamiento de la VM (Terraform)
+
+Terraform crea la VM libvirt (disco overlay sobre una plantilla pristina de Fedora Cloud, cloud-init con IP estatica) y regenera `ansible/inventory.yaml` apuntando a ella.
+
+```bash
+cd terraform
+terraform init
+terraform apply
+```
 
 ### Fase 1 — Aprovisionamiento del nodo (Ansible)
 

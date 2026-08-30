@@ -18,10 +18,20 @@
     mode: "0755"
   tags: [ helmfile ]
 
+# El nodo corre en una VM aparte del control node (ver ADR-008): bootstrap/
+# vive en el repo del host, no en la VM, asi que hay que copiarlo antes de
+# invocar helmfile (que resuelve sus values.yaml relativos al chdir).
+- name: Sincronizar bootstrap/ a la VM
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../bootstrap/"
+    dest: /opt/homelab-bootstrap/
+    mode: preserve
+  tags: [ helmfile ]
+
 - name: Bootstrap Cilium and ArgoCD via helmfile
   ansible.builtin.command: helmfile sync
   args:
-    chdir: "{{ playbook_dir }}/../bootstrap"
+    chdir: /opt/homelab-bootstrap
   become: true
   environment:
     KUBECONFIG: /var/lib/k0s/pki/admin.conf
