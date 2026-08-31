@@ -291,3 +291,9 @@ Ansible **no cambia de rol** (ADR-007 sigue vigente): sigue siendo el único res
 - Ahora sí es posible tomar snapshots de la VM como mecanismo de recuperación ante desastres a nivel nodo — algo que bare-metal nunca ofreció.
 - Acceso LAN directo depende de las reglas de forward-port de firewalld en el host (un componente más que puede fallar); acceso WAN vía Cloudflare Tunnel no tiene overhead adicional.
 - `libvirt_domain.k0s_node` tiene `autostart = true`: a diferencia de bare-metal (donde `k0scontroller` arrancaba solo con el host), ahora la VM debe arrancar sola tras un reboot del host para que el cluster vuelva a estar disponible.
+
+### Hallazgos del despliegue real (no obvios de antemano)
+
+- **BIOS legacy + `i440fx`, no UEFI**: en este host, OVMF/UEFI (con o sin secure-boot, con o sin SMM) deja la VM colgada en silencio — sin salida en consola serie ni en framebuffer, CPU al 99% en un spin-loop dentro del firmware. BIOS legacy arranca de forma confiable con la misma plantilla de Fedora Cloud. Nada en k0s/Cilium/Longhorn requiere UEFI, así que `terraform/main.tf` fija `os.type_machine = "pc"` sin bloque de firmware.
+- **`memory` del provider `dmacvicar/libvirt` es KiB por defecto**, no MiB — sin `memory_unit = "MiB"` explícito, cada VM se creaba con unos pocos MB de RAM en vez de GB (causa raíz real del cuelgue de arranque, más que el firmware). Ver el comentario en `terraform/main.tf` junto al bloque `libvirt_domain`.
+- El schema de este provider (se resolvió a v0.9.9 con el constraint `~> 0.8`) es una reescritura completa frente a versiones anteriores documentadas en la comunidad: mapea el XML de libvirt casi 1:1 con atributos anidados (`disks = [...]`, `os = {...}`), no los bloques `disk {}`/`network_interface {}` clásicos. Si se actualiza el provider, revisar `terraform providers schema -json` antes de tocar `main.tf`.

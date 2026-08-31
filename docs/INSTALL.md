@@ -366,7 +366,9 @@ kubectl create token headlamp -n observability
 
 ### 8.3 Acceso LAN directo
 
-La VM vive en la red NAT de libvirt (`192.168.122.0/24`), no es alcanzable directamente desde la LAN. `ansible/host-network.yaml` configura firewalld en el **host** para reenviar `192.168.80.20:80/443` hacia la VM:
+La VM vive en la red NAT de libvirt (`192.168.122.0/24`), no es alcanzable directamente desde la LAN. `ansible/host-network.yaml` configura firewalld en el **host** para reenviar `192.168.80.20:80/443` hacia la VM.
+
+Antes de correrlo, revisa `host_lan_interface` en `ansible/group_vars/all.yaml` — tiene que coincidir con la interfaz de red real del host (`ip -br link` para verla), no es portable entre máquinas.
 
 ```bash
 cd ansible
