@@ -85,3 +85,30 @@
             rm -f {{ pf_pid_file }} /tmp/openbao-pf.log
           become: false
           changed_when: false
+
+    - name: Check if cloudflared deployment exists
+      ansible.builtin.shell: |
+        kubectl get deployment cloudflared -n networking -o name 2>/dev/null || true
+      register: cloudflared_deploy
+      become: false
+      changed_when: false
+
+    - name: Wait for ExternalSecret to sync the new cloudflared token
+      ansible.builtin.shell: |
+        kubectl get secret cloudflared-token -n networking \
+          -o jsonpath='{.data.token}' 2>/dev/null | base64 -d
+      register: synced_token
+      until: synced_token.stdout == cloudflared_token
+      retries: 20
+      delay: 5
+      become: false
+      no_log: true
+      changed_when: false
+      when: cloudflared_deploy.stdout | length > 0
+
+    - name: Restart cloudflared deployment to pick up new token
+      ansible.builtin.shell: |
+        kubectl rollout restart deployment/cloudflared -n networking
+      become: false
+      changed_when: true
+      when: cloudflared_deploy.stdout | length > 0
