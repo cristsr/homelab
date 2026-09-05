@@ -1,7 +1,7 @@
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: main
+  name: agentgateway-mcp
   namespace: networking
 spec:
   gatewayClassName: agentgateway

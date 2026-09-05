@@ -10,7 +10,7 @@ Este repositorio contiene la configuracion completa para levantar un cluster Kub
 
 - **GitOps**: ArgoCD gestiona todo el ciclo de vida de las aplicaciones desde Git.
 - **Networking**: Cilium como CNI con reemplazo completo de kube-proxy via eBPF.
-- **Ingress**: Agent Gateway como punto de entrada unico.
+- **Ingress**: Cilium Gateway API para el trafico generico, Agent Gateway retenido solo para servidores MCP (ver ADR-010).
 - **Secretos**: OpenBao como backend de secretos, sincronizado con Kubernetes via External Secrets Operator.
 - **Almacenamiento**: Longhorn como storage distribuido.
 - **Monitoreo**: Prometheus, Grafana y Headlamp.
@@ -30,7 +30,8 @@ La VM se crea con **Terraform** (libvirt/KVM); el aprovisionamiento del nodo y l
 | Kubernetes | k0s | v1.35.3+k0s.0 |
 | CNI | Cilium | 1.19.3 |
 | GitOps | Argo CD | 9.5.13 |
-| Ingress | Agent Gateway | 1.1.0 |
+| Ingress (generico) | Cilium Gateway API | 1.19.3 |
+| Ingress (MCP) | Agent Gateway | 1.1.0 |
 | Storage | Longhorn | 1.11.2 |
 | Secrets | OpenBao | 2.5.3 |
 | Secret Sync | External Secrets Operator | 2.4.1 |

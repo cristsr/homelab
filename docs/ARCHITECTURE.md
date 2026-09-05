@@ -18,7 +18,7 @@
 
 ## 1. Vision General
 
-Homelab de un solo nodo construido sobre k0s con GitOps completo. ArgoCD gestiona todas las aplicaciones desde este repositorio. Agent Gateway actua como unico punto de entrada (ingress). Cloudflare Tunnel expone servicios seleccionados a Internet sin abrir puertos en el router.
+Homelab de un solo nodo construido sobre k0s con GitOps completo. ArgoCD gestiona todas las aplicaciones desde este repositorio. El ingress esta dividido entre dos Gateway API implementations: **Cilium Gateway API** para el trafico HTTP generico y **Agent Gateway** retenido solo para las rutas de servidores MCP (ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp)). Cloudflare Tunnel expone servicios seleccionados a Internet sin abrir puertos en el router.
 
 ### Stack tecnologico
 
@@ -26,7 +26,8 @@ Homelab de un solo nodo construido sobre k0s con GitOps completo. ArgoCD gestion
 |------|-----------|
 | Kubernetes | k0s v1.35.3+k0s.0 |
 | CNI / NetworkPolicy | Cilium 1.19.3 (eBPF, kube-proxy replacement) |
-| Ingress / Gateway | Agent Gateway 1.1.0 |
+| Ingress / Gateway (generico) | Cilium Gateway API |
+| Ingress / Gateway (MCP) | Agent Gateway 1.1.0 |
 | GitOps | Argo CD 9.5.13 |
 | Certificados TLS | cert-manager + Let's Encrypt + Cloudflare DNS-01 |
 | Storage | Longhorn 1.11.2 |
@@ -83,7 +84,7 @@ homelab/
 │   └── apps/
 │       ├── platform/           # ArgoCD Applications de infraestructura
 │       │   ├── argocd/         # Configuracion adicional de ArgoCD
-│       │   ├── networking/     # cert-manager, cloudflared, agentgateway
+│       │   ├── networking/     # cert-manager, cloudflared, agentgateway, cilium-gateway
 │       │   ├── storage/        # Longhorn
 │       │   ├── data-platform/  # PostgreSQL, MongoDB, Redis, Qdrant
 │       │   ├── devtools/       # OpenMemory
@@ -165,8 +166,8 @@ Controla el ciclo de vida de todas las aplicaciones del cluster. La `root-app` a
 
 | Parametro | Valor |
 |-----------|-------|
-| `server.ingress.enabled` | `false` (gestionado por Agent Gateway) |
-| `server.insecure` | `true` (TLS termina en Agent Gateway) |
+| `server.ingress.enabled` | `false` (gestionado por HTTPRoute contra el Gateway de Cilium) |
+| `server.insecure` | `true` (sin TLS interno — el Gateway solo escucha HTTP:80, ver §7) |
 | Timeout de reconciliacion | `180s` |
 | RBAC por defecto | `role:readonly` |
 | Dominio | `argocd.cristianpuenguenan.online` |
@@ -183,7 +184,7 @@ Declarados en `bootstrap/namespaces.yaml` y creados por el hook presync de Ciliu
 | `infra` | PostgreSQL, MongoDB, Redis, Qdrant |
 | `devtools` | OpenMemory |
 | `longhorn-system` | Longhorn |
-| `networking` | Agent Gateway, cloudflared, cert-manager |
+| `networking` | Cilium Gateway, Agent Gateway (MCP), cloudflared, cert-manager |
 | `observability` | Prometheus, Grafana, Alertmanager, Headlamp |
 | `secret-management` | OpenBao, External Secrets |
 | `sonarqube` | SonarQube, SonarQube DB, MCP server |
@@ -192,28 +193,44 @@ Declarados en `bootstrap/namespaces.yaml` y creados por el hook presync de Ciliu
 
 ## 3. Componentes de Plataforma
 
-### 3.1 Agent Gateway (Ingress)
+### 3.1 Ingress: dos Gateway API, uno por responsabilidad
 
-**Chart**: `oci://cr.agentgateway.dev/charts/agentgateway` — **Namespace**: `networking`
+Ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp). Ambos `Gateway` viven en el namespace `networking` y ambos escuchan HTTP:80 unicamente (ver §7 — no hay HTTPS interno hoy, TLS real termina en el borde de Cloudflare).
 
-Punto de entrada unico al cluster. Expone los servicios internos via HTTPRoute (Gateway API).
+#### 3.1.a Cilium Gateway API (trafico HTTP generico)
 
-#### Rutas configuradas
+**`GatewayClass`**: `cilium` (creada automaticamente por Cilium al habilitar `gatewayAPI.enabled: true`) — **`Gateway`**: `main` (`platform/networking/cilium-gateway/gateway.yaml`) — **Service generado**: `cilium-gateway-main`
+
+Sirve todo el trafico HTTP que no es un servidor MCP:
 
 | Subdominio | Backend | Namespace |
 |-----------|---------|-----------|
-| `agentgateway.cristianpuenguenan.online` | agentgateway dashboard | networking |
 | `argocd.cristianpuenguenan.online` | argocd-server:80 | argocd |
-| `grafana.cristianpuenguenan.online` | grafana:3000 | observability |
+| `grafana.cristianpuenguenan.online` | prometheus-grafana:80 | observability |
 | `headlamp.cristianpuenguenan.online` | headlamp:80 | observability |
 | `hubble.cristianpuenguenan.online` | hubble-ui:80 | kube-system |
-| `openmemory.cristianpuenguenan.online` | openmemory:8080 | devtools |
-| `sonarqube.cristianpuenguenan.online` | sonarqube-sonarqube:9000 | devtools |
-| `flow.cristianpuenguenan.online` | flow:80 | apps |
+| `longhorn.cristianpuenguenan.online` | longhorn-frontend:80 | longhorn-system |
+| `openbao.cristianpuenguenan.online` | openbao:8200 | secret-management |
+| `openmemory.cristianpuenguenan.online` | openmemory-ui:3000 | devtools |
+| `sonarqube.cristianpuenguenan.online` | sonarqube-sonarqube:9000 | sonarqube |
+| `api.cristianpuenguenan.online` | flow:80 (`/flow`, `/webhooks`) | apps |
+| `portfolio.cristianpuenguenan.online` | portfolio:80 | apps |
+
+#### 3.1.b Agent Gateway (solo servidores MCP)
+
+**Chart**: `oci://cr.agentgateway.dev/charts/agentgateway` — **`GatewayClass`**: `agentgateway` — **`Gateway`**: `agentgateway-mcp` (`platform/networking/agentgateway/gateway.yaml`)
+
+Retenido unicamente para las rutas que aprovechan features reales de protocolo MCP (multiplexing, virtual MCP) que Cilium no ofrece:
+
+| Subdominio | Backend | Namespace |
+|-----------|---------|-----------|
+| `agentgateway.cristianpuenguenan.online` | agentgateway admin UI | networking |
+| `openmemory-api.cristianpuenguenan.online` | openmemory:8765 (MCP server) | devtools |
+| `mcp.cristianpuenguenan.online` | mcp-sonarqube:3000 (`/sonarqube`) | sonarqube |
 
 #### TLS
 
-Certificado wildcard `*.cristianpuenguenan.online` en secret `wildcard-home-tls` (namespace `networking`).
+Certificado wildcard `*.cristianpuenguenan.online` emitido por cert-manager en el secret `wildcard-home-tls` (namespace `networking`), pero **no esta referenciado por ningun listener de ningun Gateway** — ambos solo tienen HTTP:80. El TLS real de cara a Internet lo termina Cloudflare en el borde del tunel; el trafico dentro del cluster viaja en HTTP plano. Cerrar este gap (agregar un listener HTTPS con el certificado) queda pendiente como deuda tecnica, fuera del alcance de la migracion a Cilium.
 
 ### 3.2 cert-manager
 
@@ -266,7 +283,7 @@ Dashboard web para inspeccionar el estado del cluster.
 | Parametro | Valor |
 |-----------|-------|
 | Service | ClusterIP:80 |
-| Acceso | `headlamp.cristianpuenguenan.online` via Agent Gateway |
+| Acceso | `headlamp.cristianpuenguenan.online` via Cilium Gateway API |
 
 ### 3.6 OpenBao (Secrets Backend)
 
@@ -419,15 +436,17 @@ Servicios generados: `-rw`, `-r`, `-ro`.
 Internet
   └── Cloudflare (DNS + WAF)
         └── Cloudflare Tunnel (egreso desde cloudflared, dentro de la VM)
-              └── Agent Gateway :443
-                    └── Backend ClusterIP (por HTTPRoute)
+              ├── cilium-gateway-main:80 (rutas genericas) ──► Backend ClusterIP (por HTTPRoute)
+              └── agentgateway-mcp :80 (rutas MCP)         ──► Backend ClusterIP (por HTTPRoute)
 
 LAN
   └── Host 192.168.80.20:80/443 (firewalld forward-port, ansible/host-network.yaml)
         └── VM 192.168.122.10:80/443 (NAT libvirt)
-              └── Agent Gateway :443
-                    └── Backend ClusterIP (por HTTPRoute)
+              ├── cilium-gateway-main :80
+              └── agentgateway-mcp :80
 ```
+
+Que hostname resuelve contra que Gateway lo decide la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git) — no es un enrutamiento a nivel de puerto, ambos Gateway escuchan HTTP:80.
 
 La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo tiene WiFi activa — bridging de una VM sobre WiFi es fragil con la mayoria de drivers/APs (ver ADR-008). El acceso LAN pasa por un port-forward a nivel host; el acceso WAN via Cloudflare Tunnel no se ve afectado porque es una conexion saliente.
 
@@ -435,8 +454,8 @@ La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo ti
 
 | Puerto | Protocolo | Descripcion |
 |--------|-----------|-------------|
-| 80 | TCP | Agent Gateway HTTP (host → VM via forward-port) |
-| 443 | TCP | Agent Gateway HTTPS (host → VM via forward-port) |
+| 80 | TCP | HTTP de ambos Gateway (host → VM via forward-port) |
+| 443 | TCP | Reservado para HTTPS (forwardeado, pero ningun Gateway tiene listener HTTPS hoy — ver §3.1 TLS) |
 
 ### DNS y subdominios
 
@@ -483,9 +502,9 @@ root-app (gitops/root-app.yaml)
   └── App of Apps (gitops/apps/)
         ├── platform/
         │     ├── Wave 1:  longhorn, cert-manager, operators (cloudnative-pg, percona)
-        │     ├── Wave 2:  openbao, external-secrets, init jobs
-        │     ├── Wave 3:  agentgateway
-        │     ├── Wave 4:  agentgateway-config, argocd-config, cert-manager-config
+        │     ├── Wave 2:  openbao, external-secrets, init jobs, gateway-api-crds
+        │     ├── Wave 3:  agentgateway, cilium (con gatewayAPI.enabled)
+        │     ├── Wave 4:  agentgateway-config, cilium-gateway, argocd-config, cert-manager-config
         │     ├── Wave 5:  monitoring, cloudflared, headlamp
         │     ├── Wave 6:  postgresql, mongodb, redis, qdrant
         │     └── Wave 8:  openmemory
@@ -500,7 +519,7 @@ root-app (gitops/root-app.yaml)
 ```
 Longhorn ──────────────────────► Todas las bases de datos y PVCs
 
-cert-manager ──► Certificate ──► wildcard-home-tls ──► Agent Gateway TLS
+cert-manager ──► Certificate ──► wildcard-home-tls (emitido, pero no referenciado por ningun Gateway hoy — ver §3.1 TLS)
 
 OpenBao ──► openbao-init ──► ExternalSecrets sync ──► todos los secrets
 
