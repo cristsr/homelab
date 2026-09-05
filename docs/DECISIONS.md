@@ -287,6 +287,7 @@ Ansible **no cambia de rol** (ADR-007 sigue vigente): sigue siendo el único res
 ### Consecuencias
 
 - `terraform.tfstate` local pasa a ser un artefacto crítico sin backend remoto — punto único de falla conocido y aceptado por ahora (homelab de un solo operador); queda fuera de alcance de esta decisión.
+  > **Actualización (ADR-009)**: dejó de aplicar — el state ahora vive en un backend remoto (Cloudflare R2), requisito no opcional para correr Terraform desde un runner de CI efímero.
 - Nueva dependencia en el host: libvirt/KVM, además de Terraform.
 - Ahora sí es posible tomar snapshots de la VM como mecanismo de recuperación ante desastres a nivel nodo — algo que bare-metal nunca ofreció.
 - Acceso LAN directo depende de las reglas de forward-port de firewalld en el host (un componente más que puede fallar); acceso WAN vía Cloudflare Tunnel no tiene overhead adicional.
@@ -297,3 +298,52 @@ Ansible **no cambia de rol** (ADR-007 sigue vigente): sigue siendo el único res
 - **BIOS legacy + `i440fx`, no UEFI**: en este host, OVMF/UEFI (con o sin secure-boot, con o sin SMM) deja la VM colgada en silencio — sin salida en consola serie ni en framebuffer, CPU al 99% en un spin-loop dentro del firmware. BIOS legacy arranca de forma confiable con la misma plantilla de Fedora Cloud. Nada en k0s/Cilium/Longhorn requiere UEFI, así que `terraform/main.tf` fija `os.type_machine = "pc"` sin bloque de firmware.
 - **`memory` del provider `dmacvicar/libvirt` es KiB por defecto**, no MiB — sin `memory_unit = "MiB"` explícito, cada VM se creaba con unos pocos MB de RAM en vez de GB (causa raíz real del cuelgue de arranque, más que el firmware). Ver el comentario en `terraform/main.tf` junto al bloque `libvirt_domain`.
 - El schema de este provider (se resolvió a v0.9.9 con el constraint `~> 0.8`) es una reescritura completa frente a versiones anteriores documentadas en la comunidad: mapea el XML de libvirt casi 1:1 con atributos anidados (`disks = [...]`, `os = {...}`), no los bloques `disk {}`/`network_interface {}` clásicos. Si se actualiza el provider, revisar `terraform providers schema -json` antes de tocar `main.tf`.
+
+---
+
+## ADR-009: CI/CD con GitHub Actions hosted + Tailscale + Cloudflare R2
+
+**Estado**: Aceptado
+**Fecha**: 2026-08-31
+
+### Contexto
+
+Terraform y Ansible se ejecutaban manualmente desde el propio hipervisor (`qemu:///system` local, grupo `hypervisor` del inventario con `ansible_connection: local`). El operador dejó de querer ejecutar estas herramientas en el homeserver y pidió un flujo CI/CD real con GitHub Actions.
+
+Un runner **hosted** de GitHub Actions vive en la nube pública de GitHub: no tiene ruta de red hacia una LAN doméstica sin NAT/IP pública. Además, `terraform apply` corriendo en un runner efímero no puede depender de un `terraform.tfstate` local — se perdería en cada job. Estos dos problemas (conectividad + estado) son los que resuelve esta decisión.
+
+Durante la investigación se descartó una nota previa en la memoria de proyecto (no reflejada en código) que afirmaba la existencia de un backend nativo `"github"` en Terraform — se confirmó contra la documentación oficial de HashiCorp que **no existe tal backend**; se corrige aquí.
+
+### Opciones consideradas
+
+**Conectividad runner → hipervisor:**
+
+| Opción | Razón de descarte |
+|--------|-------------------|
+| **Self-hosted runner en el homeserver** | Es exactamente lo que el operador quería dejar de hacer — vuelve a ejecutar todo en el propio host |
+| **Puerto SSH expuesto en el router** | Expone la LAN a Internet; los rangos de IP de GitHub Actions cambian con frecuencia, no sirve para un allowlist estable |
+| **Cloudflare Tunnel dedicado a SSH (fuera del cluster)** | Viable, pero añade un segundo `cloudflared` a nivel de host solo para esto — más superficie a mantener que Tailscale |
+
+**Backend de state:**
+
+| Opción | Razón de descarte |
+|--------|-------------------|
+| **State local en el runner** | Se pierde en cada job (runner efímero) — no es una opción real, no una preferencia |
+| **HCP Terraform (Terraform Cloud) free tier** | Backend oficial y simple, pero introduce una cuenta/plataforma adicional fuera del stack ya usado (Cloudflare) |
+
+### Decisión
+
+- **Runners hosted de GitHub Actions**, sin self-hosted runner en el homeserver.
+- **Tailscale**: el hipervisor físico se une al tailnet (`tailscale up --ssh`); cada job de CI levanta un nodo efímero via `tailscale/github-action@v4` autenticado con un OAuth client, taggeado `tag:ci`, con ACL que solo permite `tag:ci` → el tag del hipervisor por SSH (puerto 22). No se abre ningún puerto en el router.
+- **`terraform/provider.tf`** pasa de `qemu:///system` a `qemu+ssh://...` (variables `hypervisor_ssh_host`/`hypervisor_ssh_user`/`hypervisor_ssh_keyfile`, sin default). Esto unifica también la ejecución manual: el operador tampoco corre Terraform en el propio host, siempre remoto por SSH — mismo code path que CI.
+- **Inventario de Ansible** (`terraform/templates/inventory.yaml.tftpl`): el grupo `hypervisor` deja de ser `ansible_connection: local` y pasa a SSH real; el grupo `k0s` (VM en la red NAT interna de libvirt, solo alcanzable desde el propio hipervisor) usa `ProxyCommand` para saltar a través del hipervisor.
+- **State remoto en Cloudflare R2** (S3-compatible) vía el backend nativo `s3` de Terraform con endpoint custom — reutiliza la cuenta Cloudflare ya usada para DNS/Tunnel en vez de sumar una plataforma nueva. Locking nativo con `use_lockfile = true` (Terraform ≥ 1.10), sin DynamoDB.
+- **Alcance del pipeline automático** (`.github/workflows/deploy.yml`, push a `master`): `terraform apply` + `ansible-playbook site.yaml` + `ansible-playbook host-network.yaml`, detrás del Environment `prod` (aprobación manual requerida). `vault-populate.yaml` y `load-extra-secrets.yaml` (bootstrapping de secretos, uno-off, requieren archivo local `extra-secrets.yaml`) y `teardown.yaml` (destructivo, interactivo) quedan fuera del pipeline — siguen siendo manuales.
+- `.github/workflows/terraform-plan.yml` corre `terraform plan` y comenta el resultado en cada PR que toque `terraform/**`, sin gate de aprobación (no muta infraestructura).
+
+### Consecuencias
+
+- El homeserver deja de tener terraform/ansible ejecutándose sobre él: solo recibe conexiones SSH entrantes por Tailscale.
+- Nueva dependencia externa: Tailscale (tailnet + OAuth client) y una cuenta/bucket de Cloudflare R2.
+- Los secrets de infraestructura crecen (`TS_OAUTH_CLIENT_ID`/`TS_OAUTH_SECRET`, `HOMESERVER_SSH_PRIVATE_KEY`, `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`, `ANSIBLE_VAULT_PASSWORD`) — todos como GitHub Secrets, ninguno en el repo.
+- El flujo manual documentado en `docs/INSTALL.md` sigue funcionando igual, ahora también remoto (misma URI `qemu+ssh://` que usa CI) en vez de local al hipervisor.
