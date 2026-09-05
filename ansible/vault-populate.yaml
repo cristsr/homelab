@@ -8,10 +8,24 @@
     pf_pid_file: "/tmp/openbao-pf.pid"
 
   tasks:
-    - name: Check if openbao-init job exists
+    - name: Wait for openbao Service to have a ready endpoint
+      ansible.builtin.shell: |
+        kubectl get endpoints openbao -n secret-management \
+          -o jsonpath='{.subsets[*].addresses}' 2>/dev/null
+      register: openbao_endpoints
+      until: openbao_endpoints.stdout | length > 0
+      retries: 60
+      delay: 10
+      become: false
+      changed_when: false
+
+    - name: Wait for openbao-init job to exist
       ansible.builtin.shell: |
         kubectl get job openbao-init -n secret-management -o name 2>/dev/null || true
       register: init_job
+      until: init_job.stdout | length > 0
+      retries: 30
+      delay: 10
       become: false
       changed_when: false
 
