@@ -90,9 +90,15 @@ resource "libvirt_cloudinit_disk" "k0s_seed" {
 # Terraform (atributo .path, read-only) - no tiene pool propio. Este volumen
 # lo sube al storage pool remoto del hipervisor, igual que fedora_base.
 resource "libvirt_volume" "k0s_seed" {
-  name   = "${var.vm_name}-seed.iso"
-  pool   = libvirt_pool.homelab.name
-  format = "raw"
+  name = "${var.vm_name}-seed.iso"
+  pool = libvirt_pool.homelab.name
+  type = "file"
+
+  target = {
+    format = {
+      type = "raw"
+    }
+  }
 
   create = {
     content = {
