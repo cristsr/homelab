@@ -1,7 +1,7 @@
 # Guia de Instalacion
 
 > El nodo k0s corre dentro de una VM libvirt provisionada por Terraform (`terraform/`).
-> Ansible se ejecuta desde el host (equipo de control) por **SSH** hacia la VM, no localmente.
+> Ni Terraform ni Ansible se ejecutan en el propio hipervisor (ver [ADR-009](DECISIONS.md#adr-009-cicd-con-github-actions-hosted--tailscale--cloudflare-r2)): ambos corren en remoto — por SSH (`qemu+ssh://`) desde tu equipo de control o, de forma automatica, desde GitHub Actions via Tailscale. Esta guia documenta el flujo **manual**; para el automatico ver [`.github/workflows/`](../.github/workflows/) y ADR-009.
 
 ---
 
@@ -27,13 +27,21 @@
 
 El nodo ya no se instala sobre el hardware directamente: `terraform/` crea una VM libvirt (KVM) a partir de una imagen pristina de Fedora Cloud Base, con disco overlay copy-on-write (la imagen descargada nunca se escribe) y arranque via cloud-init (usuario, llave SSH, IP estatica).
 
-### 0.1 Prerequisitos del host
+### 0.1 Prerequisitos del host (hipervisor)
+
+Esto se instala **en el hipervisor fisico**, no en tu equipo de control:
 
 ```bash
 sudo dnf install -y '@Virtualization' libvirt qemu-kvm
 sudo usermod -aG libvirt $USER   # requiere volver a iniciar sesion
 sudo systemctl enable --now libvirtd
+```
 
+Ademas, el hipervisor necesita estar en tu tailnet (`tailscale up --ssh`) y tener autorizada por SSH la clave dedicada que usaras para conectarte de forma remota (ver ADR-009). Terraform **no** se instala en el hipervisor: corre en tu equipo de control (o en CI).
+
+### 0.1.1 Prerequisitos del equipo de control
+
+```bash
 # Terraform (repo oficial de HashiCorp)
 sudo dnf install -y dnf-plugins-core
 sudo dnf config-manager addrepo --from-repofile=https://rpm.releases.hashicorp.com/fedora/hashicorp.repo
@@ -45,14 +53,17 @@ sudo dnf install -y terraform
 ```bash
 cd terraform
 cp terraform.tfvars.example terraform.tfvars
+cp backend.hcl.example backend.hcl
 ```
 
-Edita `terraform.tfvars` y coloca la URL del qcow2 vigente desde https://fedoraproject.org/cloud/download (cambia por release; no hay un default fijo a proposito). Ajusta memoria/vcpu/disco si hace falta (defaults: 16GB RAM, 8 vCPU, 120GB disco).
+Edita `terraform.tfvars`: la URL del qcow2 vigente desde https://fedoraproject.org/cloud/download (cambia por release; no hay un default fijo a proposito), y `hypervisor_ssh_host`/`hypervisor_ssh_user`/`hypervisor_ssh_keyfile` con los datos de tu hipervisor (IP Tailscale, usuario del grupo `libvirt`, y la clave privada dedicada). Ajusta memoria/vcpu/disco si hace falta (defaults: 16GB RAM, 8 vCPU, 120GB disco).
+
+Edita `backend.hcl` con el Account ID de tu cuenta Cloudflare (para el bucket R2 `homelab-tfstate` que guarda el state remoto — ver ADR-009).
 
 ### 0.3 Aplicar
 
 ```bash
-terraform init
+terraform init -backend-config=backend.hcl
 terraform plan
 terraform apply
 ```
@@ -62,10 +73,12 @@ Esto:
 - Crea el disco overlay de la VM, una llave SSH dedicada (`terraform/generated/id_ed25519`), y el dominio libvirt con IP estatica en la red NAT `default` (`192.168.122.0/24`).
 - Regenera `ansible/inventory.yaml` apuntando a la VM por SSH.
 
-Verificar que la VM arranco bien:
+Verificar que la VM arranco bien. La VM esta en la red NAT interna de libvirt (solo alcanzable desde el hipervisor), asi que hay que saltar por el mismo `ProxyCommand` que usa Ansible:
 
 ```bash
-ssh -i terraform/generated/id_ed25519 fedora@$(terraform -chdir=terraform output -raw vm_static_ip) "cloud-init status --long"
+ssh -i terraform/generated/id_ed25519 \
+  -o ProxyCommand="ssh -i <hypervisor_ssh_keyfile> -W %h:%p <hypervisor_ssh_user>@<hypervisor_ssh_host>" \
+  fedora@$(terraform -chdir=terraform output -raw vm_static_ip) "cloud-init status --long"
 ```
 
 Debe mostrar `status: done` sin errores.
@@ -152,14 +165,17 @@ all:
           ansible_user: fedora
           ansible_connection: ssh
           ansible_ssh_private_key_file: /ruta/a/homelab/terraform/generated/id_ed25519
+          ansible_ssh_common_args: '-o ProxyCommand="ssh -i <hypervisor_ssh_keyfile> -W %h:%p ... <hypervisor_ssh_user>@<hypervisor_ssh_host>"'
     hypervisor:
       hosts:
         homelab-host:
-          ansible_host: 127.0.0.1
-          ansible_connection: local
+          ansible_host: <hypervisor_ssh_host>
+          ansible_user: <hypervisor_ssh_user>
+          ansible_connection: ssh
+          ansible_ssh_private_key_file: <hypervisor_ssh_keyfile>
 ```
 
-El grupo `hypervisor` apunta al host mismo — lo usa `ansible/host-network.yaml` (ver [8.3](#83-acceso-lan-directo)) para el port-forward LAN hacia la VM.
+El grupo `hypervisor` apunta al hipervisor fisico por SSH remoto (ya no `ansible_connection: local` — ver ADR-009) — lo usa `ansible/host-network.yaml` (ver [8.3](#83-acceso-lan-directo)) para el port-forward LAN hacia la VM. El grupo `k0s` llega a la VM saltando por el hipervisor (`ProxyCommand`), porque la VM vive en la red NAT interna de libvirt, solo alcanzable desde el propio hipervisor.
 
 Edita `ansible/group_vars/all.yaml` para ajustar versiones y el username de GitHub:
 
