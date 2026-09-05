@@ -1,8 +1,12 @@
 credentials.txt
 .claude
+.agents
 ansible/.vault-pass
 .idea/kubernetes
+.idea/awsToolkit.xml
+.idea/active-tab-highlighter.xml
 ansible/extra-secrets.yaml
+hs_err_pid*.log
 
 # Terraform (terraform/.terraform.lock.hcl SI se commitea, fija versiones de providers)
 terraform/.terraform/
