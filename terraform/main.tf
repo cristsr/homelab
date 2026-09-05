@@ -96,7 +96,11 @@ resource "libvirt_volume" "k0s_seed" {
 
   target = {
     format = {
-      type = "raw"
+      # No "raw": el contenido es un ISO9660 real (cidata), libvirt lo
+      # detecta e informa como "iso" al leer el volumen despues de crearlo,
+      # sin importar lo declarado aca. Deben coincidir o el provider tira
+      # "Provider produced inconsistent result after apply".
+      type = "iso"
     }
   }
 
