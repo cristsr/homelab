@@ -2,6 +2,10 @@
 - name: Reenviar trafico LAN del host hacia la VM del nodo k0s
   hosts: hypervisor
   become: true
+  # No se usa ningun ansible_fact aca (solo vars propias) - desactivado para
+  # no requerir sudo tambien para el modulo de gathering (solo firewall-cmd
+  # tiene NOPASSWD en el sudoers del host).
+  gather_facts: false
 
   vars:
     forward_ports: [80, 443]
