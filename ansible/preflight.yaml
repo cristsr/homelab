@@ -1,0 +1,13 @@
+---
+# Corre antes que cualquier otro playbook (y antes de `terraform apply` en
+# CI): valida las credenciales en group_vars/all.yaml sin necesitar la VM ni
+# el inventory generado por Terraform. Si algo falta o es invalido, falla
+# aqui en segundos en vez de a mitad del bootstrap del cluster.
+- name: Preflight - validar credenciales antes de aprovisionar infraestructura
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - import_tasks: tasks/preflight-secrets.yaml
+    - import_tasks: tasks/preflight-remote-checks.yaml
