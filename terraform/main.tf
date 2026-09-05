@@ -68,7 +68,6 @@ resource "local_file" "vm_public_key" {
 
 resource "libvirt_cloudinit_disk" "k0s_seed" {
   name = "${var.vm_name}-seed.iso"
-  pool = libvirt_pool.homelab.name
 
   meta_data = "instance-id: ${var.vm_name}\nlocal-hostname: ${var.vm_name}\n"
 
@@ -85,6 +84,21 @@ resource "libvirt_cloudinit_disk" "k0s_seed" {
     gateway     = var.vm_gateway
     dns_servers = join(",", var.vm_dns_servers)
   })
+}
+
+# libvirt_cloudinit_disk solo genera el ISO en un temp local de donde corre
+# Terraform (atributo .path, read-only) - no tiene pool propio. Este volumen
+# lo sube al storage pool remoto del hipervisor, igual que fedora_base.
+resource "libvirt_volume" "k0s_seed" {
+  name   = "${var.vm_name}-seed.iso"
+  pool   = libvirt_pool.homelab.name
+  format = "raw"
+
+  create = {
+    content = {
+      url = libvirt_cloudinit_disk.k0s_seed.path
+    }
+  }
 }
 
 resource "libvirt_domain" "k0s_node" {
@@ -154,8 +168,9 @@ resource "libvirt_domain" "k0s_node" {
       {
         device = "cdrom"
         source = {
-          file = {
-            file = libvirt_cloudinit_disk.k0s_seed.path
+          volume = {
+            pool   = libvirt_pool.homelab.name
+            volume = libvirt_volume.k0s_seed.name
           }
         }
         target = {
