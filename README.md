@@ -102,6 +102,7 @@ Toda la documentacion se encuentra en la carpeta [`docs/`](./docs/):
 - **[docs/INSTALL.md](./docs/INSTALL.md)**: Requisitos previos, preparacion del servidor, configuracion de Ansible Vault, instalacion del cluster y activacion de GitOps.
 - **[docs/OPERATIONS.md](./docs/OPERATIONS.md)**: Operaciones diarias, gestion de secretos, backups, actualizaciones, troubleshooting y procedimientos de emergencia.
 - **[docs/DECISIONS.md](./docs/DECISIONS.md)**: Registro de decisiones de arquitectura (ADR): k0s, Agent Gateway, Cilium, Longhorn, Ansible, Terraform/libvirt y CI/CD.
+- **[docs/CI_CD_HYPERVISOR_SETUP.md](./docs/CI_CD_HYPERVISOR_SETUP.md)**: Runbook de setup manual del hipervisor (Tailscale, SSH, SELinux, sudo) para que CI/CD funcione.
 
 ---
 

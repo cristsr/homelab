@@ -22,6 +22,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Python for Ansible
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Write vault password
+        run: |
+          printf '%s' "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > ansible/.vault-pass
+          chmod 600 ansible/.vault-pass
+
+      # Falla en segundos si falta o es invalida una credencial, antes de
+      # gastar tiempo conectando Tailscale y aprovisionando la VM.
+      - name: Preflight - validate secrets
+        working-directory: ansible
+        run: ansible-playbook preflight.yaml
+
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
         with:
@@ -58,19 +77,6 @@ jobs:
         run: |
           terraform init -backend-config=backend.hcl
           terraform apply -auto-approve -input=false
-
-      - name: Set up Python for Ansible
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Ansible
-        run: pip install ansible
-
-      - name: Write vault password
-        run: |
-          printf '%s' "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > ansible/.vault-pass
-          chmod 600 ansible/.vault-pass
 
       - name: Bootstrap k0s
         working-directory: ansible

@@ -1,0 +1,58 @@
+---
+# Un token vacio ya fue descartado por preflight-secrets.yaml; esto valida
+# que el token efectivamente funciona contra el servicio real, no solo que
+# tiene forma de token. Corre en localhost, antes de terraform apply, asi
+# que un PAT revocado o un token de Cloudflare rotado se detecta en
+# segundos en vez de a mitad del bootstrap del cluster.
+
+- name: Verificar que el PAT de GitHub tiene acceso al repo de ArgoCD
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ argocd_repo_url | regex_replace('^https://github.com/', '') }}"
+    method: GET
+    headers:
+      Authorization: "token {{ argocd_github_pat }}"
+      Accept: "application/vnd.github+json"
+    status_code: 200
+  no_log: true
+
+- name: Verificar validez del token de Cloudflare
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/user/tokens/verify"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ cloudflare_api_token }}"
+    status_code: 200
+  register: cf_token_check
+  no_log: true
+
+- name: Confirmar que el token de Cloudflare esta activo
+  ansible.builtin.assert:
+    that:
+      - cf_token_check.json.result.status == "active"
+    fail_msg: >-
+      El token de Cloudflare respondio pero no esta activo
+      (status: {{ cf_token_check.json.result.status | default('desconocido') }}).
+    quiet: true
+
+# El token de tunel de cloudflared no tiene un endpoint de "verify" publico:
+# se valida decodificando su payload (base64 -> JSON con AccountTag/TunnelID/
+# Secret). Confirmado contra un token real generado con `cloudflared tunnel
+# token`; si una version futura de cloudflared cambia el esquema, este
+# assert es el primer lugar a ajustar.
+- name: Decodificar el token de cloudflared
+  ansible.builtin.set_fact:
+    cloudflared_token_payload: "{{ cloudflared_token | b64decode | from_json }}"
+  no_log: true
+
+- name: Verificar que el token de cloudflared trae los campos esperados del tunel
+  ansible.builtin.assert:
+    that:
+      - cloudflared_token_payload.a is defined
+      - cloudflared_token_payload.t is defined
+      - cloudflared_token_payload.s is defined
+    fail_msg: >-
+      El token de cloudflared no decodifica al formato esperado
+      (AccountTag/TunnelID/Secret) - vuelve a generarlo con
+      `cloudflared tunnel token <tunnel>`.
+    quiet: true
+  no_log: true
