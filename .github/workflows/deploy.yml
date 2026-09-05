@@ -79,3 +79,7 @@ jobs:
       - name: Configure host networking (LAN port-forward)
         working-directory: ansible
         run: ansible-playbook host-network.yaml
+
+      - name: Populate OpenBao secrets
+        working-directory: ansible
+        run: ansible-playbook vault-populate.yaml
