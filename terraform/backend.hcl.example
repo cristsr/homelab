@@ -1,0 +1,8 @@
+# Copiar a backend.hcl (gitignored) y completar.
+# Usar con: terraform init -backend-config=backend.hcl
+#
+# Account ID de Cloudflare (Dashboard > R2 > cualquier bucket > "Account ID"
+# en la barra lateral, o desde `wrangler whoami`).
+endpoints = {
+  s3 = "https://<ACCOUNT_ID>.r2.cloudflarestorage.com"
+}

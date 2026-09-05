@@ -80,3 +80,18 @@ variable "timezone" {
   type        = string
   default     = "UTC"
 }
+
+variable "hypervisor_ssh_host" {
+  description = "IP/hostname (Tailscale) del hipervisor fisico, para llegar a libvirt y a la VM (NAT interna) via SSH remoto. Sin default: nunca hardcodear infraestructura de red en el repo."
+  type        = string
+}
+
+variable "hypervisor_ssh_user" {
+  description = "Usuario SSH del hipervisor (debe estar en el grupo libvirt)"
+  type        = string
+}
+
+variable "hypervisor_ssh_keyfile" {
+  description = "Path absoluto, en la maquina donde corre Terraform/Ansible, a la clave privada SSH dedicada para llegar al hipervisor"
+  type        = string
+}

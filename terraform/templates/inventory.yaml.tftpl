@@ -9,8 +9,13 @@ all:
           ansible_user: ${ssh_user}
           ansible_connection: ssh
           ansible_ssh_private_key_file: ${ssh_key_path}
+          # La VM vive en la red NAT interna de libvirt, solo alcanzable
+          # desde el propio hipervisor: saltamos por SSH a traves de el.
+          ansible_ssh_common_args: '-o ProxyCommand="ssh -i ${hypervisor_keyfile} -W %h:%p -o StrictHostKeyChecking=no ${hypervisor_user}@${hypervisor_host}"'
     hypervisor:
       hosts:
         homelab-host:
-          ansible_host: 127.0.0.1
-          ansible_connection: local
+          ansible_host: ${hypervisor_host}
+          ansible_user: ${hypervisor_user}
+          ansible_connection: ssh
+          ansible_ssh_private_key_file: ${hypervisor_keyfile}
