@@ -68,6 +68,7 @@ resource "local_file" "vm_public_key" {
 
 resource "libvirt_cloudinit_disk" "k0s_seed" {
   name = "${var.vm_name}-seed.iso"
+  pool = libvirt_pool.homelab.name
 
   meta_data = "instance-id: ${var.vm_name}\nlocal-hostname: ${var.vm_name}\n"
 
