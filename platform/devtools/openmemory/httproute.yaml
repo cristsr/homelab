@@ -5,7 +5,7 @@ metadata:
   namespace: devtools
 spec:
   parentRefs:
-    - name: main
+    - name: agentgateway-mcp
       namespace: networking
   hostnames:
     - openmemory-api.cristianpuenguenan.online

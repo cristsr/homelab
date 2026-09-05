@@ -5,7 +5,7 @@ metadata:
   namespace: sonarqube
 spec:
   parentRefs:
-    - name: main
+    - name: agentgateway-mcp
       namespace: networking
   hostnames:
     - mcp.cristianpuenguenan.online

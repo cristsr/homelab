@@ -347,3 +347,38 @@ Durante la investigación se descartó una nota previa en la memoria de proyecto
 - Nueva dependencia externa: Tailscale (tailnet + OAuth client) y una cuenta/bucket de Cloudflare R2.
 - Los secrets de infraestructura crecen (`TS_OAUTH_CLIENT_ID`/`TS_OAUTH_SECRET`, `HOMESERVER_SSH_PRIVATE_KEY`, `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`, `ANSIBLE_VAULT_PASSWORD`) — todos como GitHub Secrets, ninguno en el repo.
 - El flujo manual documentado en `docs/INSTALL.md` sigue funcionando igual, ahora también remoto (misma URI `qemu+ssh://` que usa CI) en vez de local al hipervisor.
+
+## ADR-010: Cilium Gateway API para ingress genérico, Agent Gateway solo para MCP
+
+**Estado**: Aceptado — reduce el alcance de Agent Gateway (ver [ADR-002](#adr-002-agent-gateway-como-ingress))  
+**Fecha**: 2026-09-05
+
+### Contexto
+
+El ADR-002 adoptó Agent Gateway como único ingress por dos razones: (a) ser Gateway API nativo (vs. la Admin API de APISIX) y (b) soporte nativo para AI workloads y protocolo MCP. Revisando el uso real en el repo: de los 13 `HTTPRoute` existentes, solo 2 sirven servidores MCP de verdad (SonarQube MCP, OpenMemory) — el resto es tráfico HTTP genérico (ArgoCD, Grafana, Longhorn, OpenBao, Hubble, Headlamp, Flow API, Portfolio, SonarQube UI) que no usa ninguna feature diferencial de Agent Gateway, solo `Gateway`/`HTTPRoute` estándar.
+
+Cilium (ya desplegado como CNI del cluster) implementa su propio Gateway API controller sobre Envoy/eBPF, con conformance Gateway API v1.6.1, pero sin ningún entendimiento del protocolo MCP: no hace multiplexing de servidores MCP, tool namespacing ni virtual MCP — eso sí lo hace Agent Gateway de forma nativa (confirmado contra la documentación oficial de agentgateway.dev). Mantener Agent Gateway como único gateway significa sostener un proyecto joven, con comunidad menor, para tráfico que no aprovecha su diferencial.
+
+### Opciones consideradas
+
+| Opción | Razón de descarte |
+|--------|-------------------|
+| **Mantener solo Agent Gateway** | Sostiene un segundo proxy/CRD para tráfico que Cilium ya puede servir igual de bien vía Gateway API estándar |
+| **Migrar todo a Cilium, retirar Agent Gateway** | Pierde la única capacidad diferencial real (multiplexing/virtual MCP) que sí se planea seguir usando/explorando a futuro |
+
+### Decisión
+
+**Híbrido**: dos `Gateway` conviviendo en el namespace `networking`, cada uno con su propósito:
+
+- **Cilium Gateway API** (`gatewayClassName: cilium`, `Gateway` `main`) sirve el tráfico HTTP genérico — 10 de los 13 `HTTPRoute` actuales.
+- **Agent Gateway** (`gatewayClassName: agentgateway`, `Gateway` `agentgateway-mcp`) queda retenido solo para las rutas que dependen de servidores MCP (SonarQube MCP, OpenMemory) y su propia admin UI.
+
+Los CRDs de Gateway API ya estaban instalados por una Application separada (`gateway-api-crds`, no forma parte del chart de Cilium ni del de Agent Gateway), así que ambos controllers los comparten sin duplicación.
+
+### Consecuencias
+
+- `bootstrap/cilium/values.yaml` pasa `gatewayAPI.enabled` a `true` — Cilium crea automáticamente la `GatewayClass cilium` y, por cada `Gateway`, un `Service` `cilium-gateway-<nombre>`.
+- El tunel de Cloudflare (config remota, fuera de Git) debe reapuntar manualmente los hostnames migrados hacia el nuevo Service de Cilium — no hay forma de versionar ese cambio.
+- Queda abierta la puerta a seguir experimentando con features de protocolo MCP (nuevos servidores, virtual MCP) sin tener que reintroducir Agent Gateway desde cero.
+- El TLS interno (listener HTTPS en cualquiera de los dos Gateway) sigue sin resolverse — ninguno de los dos tiene un listener HTTPS ni referencia el certificado wildcard; deuda técnica preexistente al ADR-002, no introducida ni resuelta por este cambio.
+

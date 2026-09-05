@@ -15,7 +15,7 @@ autoDirectNodeRoutes: true
 ipv4NativeRoutingCIDR: "10.244.0.0/16"
 
 gatewayAPI:
-  enabled: false
+  enabled: true
 
 hubble:
   enabled: true
