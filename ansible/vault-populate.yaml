@@ -34,8 +34,8 @@
 
     - name: Start port-forward to OpenBao
       ansible.builtin.shell: |
-        kubectl port-forward svc/openbao 8200:8200 -n secret-management \
-          > /tmp/openbao-pf.log 2>&1 &
+        setsid nohup kubectl port-forward svc/openbao 8200:8200 -n secret-management \
+          < /dev/null > /tmp/openbao-pf.log 2>&1 &
         echo $! > {{ pf_pid_file }}
         sleep 2
       become: false
