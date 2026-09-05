@@ -12,3 +12,10 @@ fedora_cloud_image_url = "https://download.fedoraproject.org/pub/fedora/linux/re
 # vm_static_ip     = "192.168.122.10"
 # vm_gateway       = "192.168.122.1"
 # vm_mac           = "52:54:00:12:34:56"
+
+# Obligatorias, sin default a proposito (dependen de tu red/maquina, ver
+# ADR-009). En CI se inyectan por TF_VAR_*; en local podes descomentarlas
+# aca o exportarlas como env vars.
+# hypervisor_ssh_host    = "100.x.x.x" # IP Tailscale del hipervisor
+# hypervisor_ssh_user    = "cpuenguenan"
+# hypervisor_ssh_keyfile = "/home/tu-usuario/.ssh/homeserver_ci_ed25519"

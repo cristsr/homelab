@@ -1,0 +1,81 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "terraform/**"
+      - "ansible/**"
+  workflow_dispatch: {}
+
+concurrency:
+  group: homelab-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  provision-and-configure:
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Write CI SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.HOMESERVER_SSH_PRIVATE_KEY }}" > ~/.ssh/ci_ed25519
+          chmod 600 ~/.ssh/ci_ed25519
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Write R2 backend config
+        working-directory: terraform
+        run: |
+          cat > backend.hcl <<EOF
+          endpoints = {
+            s3 = "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          }
+          EOF
+
+      - name: Terraform apply
+        working-directory: terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          TF_VAR_hypervisor_ssh_host: ${{ vars.HYPERVISOR_TAILSCALE_IP }}
+          TF_VAR_hypervisor_ssh_user: ${{ vars.HYPERVISOR_SSH_USER }}
+          TF_VAR_hypervisor_ssh_keyfile: /home/runner/.ssh/ci_ed25519
+          TF_VAR_fedora_cloud_image_url: ${{ vars.FEDORA_CLOUD_IMAGE_URL }}
+        run: |
+          terraform init -backend-config=backend.hcl
+          terraform apply -auto-approve -input=false
+
+      - name: Set up Python for Ansible
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Write vault password
+        run: |
+          printf '%s' "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > ansible/.vault-pass
+          chmod 600 ansible/.vault-pass
+
+      - name: Bootstrap k0s
+        working-directory: ansible
+        run: ansible-playbook site.yaml
+
+      - name: Configure host networking (LAN port-forward)
+        working-directory: ansible
+        run: ansible-playbook host-network.yaml

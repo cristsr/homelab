@@ -198,9 +198,12 @@ resource "libvirt_domain" "k0s_node" {
 # Handoff a Ansible: regenera el inventario apuntando a la VM por SSH.
 resource "local_file" "ansible_inventory" {
   content = templatefile("${path.module}/templates/inventory.yaml.tftpl", {
-    vm_ip        = var.vm_static_ip
-    ssh_user     = var.ssh_user
-    ssh_key_path = abspath(local_file.vm_private_key.filename)
+    vm_ip              = var.vm_static_ip
+    ssh_user           = var.ssh_user
+    ssh_key_path       = abspath(local_file.vm_private_key.filename)
+    hypervisor_host    = var.hypervisor_ssh_host
+    hypervisor_user    = var.hypervisor_ssh_user
+    hypervisor_keyfile = var.hypervisor_ssh_keyfile
   })
   filename = "${path.module}/../ansible/inventory.yaml"
 }
