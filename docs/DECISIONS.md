@@ -418,3 +418,29 @@ Solución persistente: `ansible/host-network.yaml` instala `/etc/libvirt/hooks/n
 
 **Actualización (2026-09-06): dominio propio para lo privado (`cristianpuenguenan.internal`).** Con todo lo anterior funcionando, seguía apareciendo un `404` confuso al probar una ruta privada sin el DNS interno configurado en el dispositivo: `argocd.cristianpuenguenan.online` resuelve igual contra el registro público real de Cloudflare (el wildcard), cayendo en el Gateway `public` — un `404` que parece un bug de la app pero en realidad es "nunca llegaste al CoreDNS privado". Fix: los 11 `HTTPRoute` de `main`/`agentgateway-mcp` pasan a `*.cristianpuenguenan.internal` (`.internal` no es un TLD delegado en el DNS público, nunca puede colisionar), y el `Corefile` de `platform/networking/private-dns/configmap.yaml` sirve ese dominio en vez de `.online`. `portfolio`/`api` (Gateway `public`) siguen en `.online`, sin cambios. Con esto, sin el DNS privado configurado el hostname privado directamente no resuelve (NXDOMAIN) — un error inequívoco de "falta configurar DNS", no un `404` ambiguo.
 
+## ADR-012: TLS para las rutas internas con CA privada del cluster
+
+**Estado**: Aceptado
+**Fecha**: 2026-09-06
+
+### Contexto
+
+Las rutas privadas servían todo por HTTP plano (puerto 80). Además, el acceso "LAN física sin Tailscale" exigía mantención permanente (hosts file por dispositivo, puertos explícitos `:8080`, excepciones de firewall) para un caso de uso que en la práctica no se usa: todos los dispositivos reales del usuario están en el tailnet.
+
+Restricción dura para el TLS: `.internal` es un TLD reservado — el CA/Browser Forum prohíbe a las CAs públicas emitir certificados para él. Let's Encrypt no es opción para `*.cristianpuenguenan.internal`.
+
+### Decisión
+
+- **CA privada dentro del cluster** (`platform/networking/cert-manager/internal-tls.yaml`), replicando el patrón ya existente de la PKI de Hubble: Issuer `selfSigned` → `Certificate` `internal-root-ca` (isCA, 10 años) → `ClusterIssuer` `internal-ca` → leaf. Sin dependencia de ninguna CA externa; la renovación es automática vía cert-manager.
+- **Wildcard único** `*.cristianpuenguenan.internal` (+ apex) en el secret `wildcard-internal-tls` (namespace `networking`), referenciado por los listeners `https` (TLS terminate) de `main` y `agentgateway-mcp`. Un solo certificado que renovar, no 11.
+- **Redirect 301 HTTP→HTTPS**: el puerto 80 de ambos Gateways queda restringido (`allowedRoutes` solo namespace `networking`) a una `HTTPRoute` catch-all con filter `RequestRedirect`. Las 11 rutas de contenido fijan `sectionName: https` en sus `parentRefs` — sin eso se adjuntarían a ambos listeners y servirían contenido por HTTP igual.
+- **Tailscale como única vía soportada** para dispositivos: la LAN física sin Tailscale queda declarada fuera de alcance (el redirect a HTTPS apunta a IPs internas inalcanzables desde la LAN — falla explícita, no degradada). Los forward-ports y el hook de libvirt se mantienen porque el tráfico Tailscale→cluster que atraviesa el hipervisor los sigue necesitando.
+
+### Consecuencias
+
+- La CA debe confiarse a mano una vez por dispositivo del tailnet (`docs/OPERATIONS.md` §11.5) — aceptable porque el usuario controla todos los dispositivos; un visitante en la LAN no puede usar estas rutas de ninguna forma.
+- Si el secret `internal-root-ca` se pierde, la CA regenerada no será confiable por los dispositivos hasta repetir la instalación (hoy no hay backup específico del secret; el certificado dura 10 años).
+- El plano público no cambia: Cloudflare sigue terminando TLS en el borde para `portfolio`/`api`; `wildcard-home-tls` (Let's Encrypt) sigue emitido pero sin referenciar.
+- Apps sin cambios: ArgoCD ya corría `--insecure` (TLS delegado al edge es el patrón previsto); Grafana/Headlamp no usan cookies `secure`.
+
+
