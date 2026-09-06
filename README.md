@@ -55,6 +55,7 @@ homelab/
 │   ├── host-network.yaml       # Port-forward LAN (firewalld) del host hacia la VM
 │   ├── teardown.yaml           # Playbook para destruir el cluster
 │   ├── vault-populate.yaml     # Playbook para poblar OpenBao KV
+│   ├── update-vm-packages.yaml # Actualizar paquetes del SO de la VM (manual, no en CI)
 │   ├── group_vars/all.yaml     # Variables + secrets cifrados (ansible-vault)
 │   ├── inventory.yaml          # Generado por `terraform apply`
 │   ├── ansible.cfg             # Configuracion de Ansible

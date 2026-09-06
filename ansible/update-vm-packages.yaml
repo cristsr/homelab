@@ -1,0 +1,41 @@
+---
+# Playbook manual, fuera de deploy.yml a proposito: actualizar el SO de la
+# VM implica potencialmente un nuevo kernel, y reiniciar el unico nodo del
+# cluster no es algo que deba pasar sin supervision en cada push a master.
+#
+# Uso:
+#   ansible-playbook update-vm-packages.yaml
+#   ansible-playbook update-vm-packages.yaml -e reboot_if_needed=true
+- name: Update VM system packages
+  hosts: k0s
+  become: true
+
+  vars:
+    reboot_if_needed: false
+
+  tasks:
+    - name: Actualizar todos los paquetes del sistema (dnf upgrade)
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+      register: dnf_upgrade_result
+
+    - name: Verificar si el sistema requiere reboot (kernel u otros paquetes criticos)
+      ansible.builtin.command: dnf needs-restarting -r
+      register: needs_restart
+      changed_when: false
+      failed_when: needs_restart.rc not in [0, 1]
+
+    - name: Avisar que el sistema requiere reboot para aplicar todo
+      ansible.builtin.debug:
+        msg: >-
+          El sistema requiere un reboot para aplicar completamente las
+          actualizaciones (ej. nuevo kernel). Esto reinicia el unico nodo
+          del cluster - corre de nuevo con -e reboot_if_needed=true cuando
+          quieras aplicarlo, o hacelo manualmente en tu propia ventana.
+      when: needs_restart.rc == 1 and not reboot_if_needed
+
+    - name: Reiniciar la VM (kernel/paquetes criticos actualizados)
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+      when: needs_restart.rc == 1 and reboot_if_needed
