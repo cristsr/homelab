@@ -12,7 +12,13 @@ spec:
   source:
     repoURL: https://github.com/kubernetes-sigs/gateway-api
     targetRevision: v1.5.1
-    path: config/crd/standard
+    # Cilium 1.19.3 requiere el CRD experimental TLSRoute (v1alpha2) para
+    # arrancar su reconciler de Gateway API, aunque no se use TLSRoute en
+    # ningun HTTPRoute (github.com/cilium/cilium/issues/38420). El canal
+    # "experimental" es superset del "standard": incluye GatewayClass,
+    # Gateway, HTTPRoute, ReferenceGrant + GRPCRoute, TCPRoute, UDPRoute,
+    # TLSRoute, BackendTLSPolicy.
+    path: config/crd/experimental
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system
