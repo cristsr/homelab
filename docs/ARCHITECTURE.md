@@ -445,10 +445,11 @@ Ver ADR-011 en [DECISIONS.md](DECISIONS.md). Solo 2 de las 13 rutas son publicas
 
 Cada Gateway tiene una IP LAN fija, asignada via Cilium L2 Announcements (`CiliumLoadBalancerIPPool` + `CiliumL2AnnouncementPolicy` en `platform/networking/cilium-gateway/`, `spec.addresses` en cada `Gateway`):
 
-| Gateway | IP fija |
+| Gateway / Servicio | IP fija |
 |---------|---------|
 | `cilium-gateway-main` (rutas genericas) | `192.168.122.240` |
 | `agentgateway-mcp` (rutas MCP) | `192.168.122.250` |
+| `private-dns` (CoreDNS, resuelve `cristianpuenguenan.online` para LAN/Tailscale) | `192.168.122.253` |
 
 ```
 Internet (solo portfolio + api /webhooks)
@@ -459,15 +460,17 @@ Internet (solo portfolio + api /webhooks)
 LAN fisica (sin Tailscale)
   └── Host 192.168.80.20 (firewalld forward-port, ansible/host-network.yaml)
         ├── 80/443   → 192.168.122.240:80/443 (cilium-gateway-main)
-        └── 8080/8443 → 192.168.122.250:80/443 (agentgateway-mcp)
+        ├── 8080/8443 → 192.168.122.250:80/443 (agentgateway-mcp)
+        └── 53/udp+tcp → 192.168.122.253:53 (private-dns)
 
 Tailscale (cualquier dispositivo del usuario, desde cualquier lado)
   └── Subnet router en el hipervisor (`tailscale up --advertise-routes=192.168.122.0/24`)
         ├── 192.168.122.240:80 (cilium-gateway-main)
-        └── 192.168.122.250:80 (agentgateway-mcp)
+        ├── 192.168.122.250:80 (agentgateway-mcp)
+        └── 192.168.122.253:53 (private-dns, via Tailscale Split DNS)
 ```
 
-Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git); para LAN/Tailscale, el usuario apunta el hostname a la IP correspondiente (`hosts` file local — sin Split DNS de Tailscale por ahora).
+Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git); para LAN/Tailscale, `private-dns` (CoreDNS, `platform/networking/private-dns/`) resuelve `cristianpuenguenan.online` a la IP fija correspondiente — ver §11 en `docs/OPERATIONS.md` para configurar Tailscale Split DNS o el DNS de la LAN.
 
 La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo tiene WiFi activa — bridging de una VM sobre WiFi es fragil con la mayoria de drivers/APs (ver ADR-008).
 
@@ -477,6 +480,7 @@ La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo ti
 |--------|-----------|-------------|
 | 80/443 | TCP | HTTP de `cilium-gateway-main` (host → IP fija via forward-port) |
 | 8080/8443 | TCP | HTTP de `agentgateway-mcp` (host → IP fija via forward-port) |
+| 53 | UDP/TCP | DNS de `private-dns` (host → IP fija via forward-port) |
 | — | — | Reservado para HTTPS (forwardeado, pero ningun Gateway tiene listener HTTPS hoy — ver §3.1 TLS) |
 
 ### DNS y subdominios
@@ -526,7 +530,7 @@ root-app (gitops/root-app.yaml)
         │     ├── Wave 1:  longhorn, cert-manager, operators (cloudnative-pg, percona)
         │     ├── Wave 2:  openbao, external-secrets, init jobs, gateway-api-crds
         │     ├── Wave 3:  agentgateway, cilium (con gatewayAPI.enabled)
-        │     ├── Wave 4:  agentgateway-config, cilium-gateway, argocd-config, cert-manager-config
+        │     ├── Wave 4:  agentgateway-config, cilium-gateway, private-dns, argocd-config, cert-manager-config
         │     ├── Wave 5:  monitoring, cloudflared, headlamp
         │     ├── Wave 6:  postgresql, mongodb, redis, qdrant
         │     └── Wave 8:  openmemory

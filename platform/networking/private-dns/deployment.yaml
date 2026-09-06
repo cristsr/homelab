@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: private-dns
+  namespace: networking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: private-dns
+  template:
+    metadata:
+      labels:
+        app: private-dns
+    spec:
+      containers:
+        - name: coredns
+          image: coredns/coredns:1.14.6
+          args: ["-conf", "/etc/coredns/Corefile"]
+          ports:
+            - name: dns-udp
+              containerPort: 53
+              protocol: UDP
+            - name: dns-tcp
+              containerPort: 53
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/coredns
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      volumes:
+        - name: config
+          configMap:
+            name: private-dns-corefile
