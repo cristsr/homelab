@@ -384,3 +384,28 @@ Los CRDs de Gateway API ya estaban instalados por una Application separada (`gat
 - Queda abierta la puerta a seguir experimentando con features de protocolo MCP (nuevos servidores, virtual MCP) sin tener que reintroducir Agent Gateway desde cero.
 - El TLS interno (listener HTTPS en cualquiera de los dos Gateway) sigue sin resolverse — ninguno de los dos tiene un listener HTTPS ni referencia el certificado wildcard; deuda técnica preexistente al ADR-002, no introducida ni resuelta por este cambio.
 
+## ADR-011: Segmentar acceso público (Cloudflare) vs privado (LAN + Tailscale)
+
+**Estado**: Aceptado  
+**Fecha**: 2026-09-06
+
+### Contexto
+
+De las 13 rutas del cluster, la mayoría son herramientas de administración/observabilidad (ArgoCD, Grafana, Headlamp, Hubble, Longhorn, OpenBao, SonarQube UI, admin UI de Agent Gateway, OpenMemory UI/API, SonarQube MCP) que nunca deberían haber sido alcanzables desde Internet — solo `portfolio` (sitio personal) y `api.cristianpuenguenan.online` (`/webhooks`, consumida por servicios externos) son públicas de verdad.
+
+Qué está expuesto a Internet o no se decide enteramente en el dashboard de Cloudflare (Zero Trust → Public Hostnames) — no requiere tocar ningún `HTTPRoute`. Pero faltaba una vía de acceso privada real: investigando, `ansible/host-network.yaml` (forward de puertos LAN → VM) ya estaba roto — hacía forward al puerto 80/443 de la VM, pero ningún proceso escuchaba ahí (los Services de ambos Gateways son `LoadBalancer` sin IP asignada, sin ningún MetalLB u otro controlador que los resolviera; solo existían sus `NodePort` aleatorios).
+
+### Decisión
+
+- **Cilium L2 Announcements + LB IPAM** (nativo desde Cilium 1.20, sin instalar MetalLB aparte): `CiliumLoadBalancerIPPool` (`192.168.122.240/28`, al final de la subred NAT de libvirt) + `CiliumL2AnnouncementPolicy` sobre `eth0` de la VM. Cada `Gateway` fija su IP con `spec.addresses` (campo estándar de Gateway API v1): `192.168.122.240` para Cilium, `192.168.122.241` para Agent Gateway.
+- **`ansible/host-network.yaml`** reescrito: en vez de un forward a la IP de la VM, dos juegos de reglas — `80/443` → IP de Cilium, `8080/8443` → IP de Agent Gateway (puerto 80/443 real ahí). Cubre la LAN física (dispositivos sin Tailscale).
+- **Tailscale subnet router**: el hipervisor (ya en el tailnet, hasta ahora solo para SSH de CI) pasa a anunciar `192.168.122.0/24` (`tailscale up --advertise-routes=192.168.122.0/24`, aprobado una vez en el admin de Tailscale) — cualquier dispositivo del usuario en su tailnet llega directo a las IPs de los Gateways, sin pasar por el forward del host, desde cualquier lado (no solo en casa).
+- **Cloudflare dashboard**: se sacan manualmente las 11 rutas privadas de Public Hostnames, dejando solo `portfolio` y `api` (`/webhooks`).
+
+### Consecuencias
+
+- Riesgo aceptado: el bloque `192.168.122.240/28` cae dentro del rango DHCP *configurado* de libvirt (`.2`–`.254`), aunque hoy solo la VM usa esa red (`.10`). Colisionaría si se agregan más VMs a la misma red NAT sin antes reducir el rango DHCP de libvirt.
+- No confirmado si el controller de Agent Gateway respeta `spec.addresses` de Gateway API igual que Cilium — a verificar contra el cluster real; si no lo respeta, requeriría fijar la IP a nivel de `Service` en su lugar.
+- Acceso privado sin Split DNS por ahora: se accede por IP directa (con el header `Host` correcto) o agregando entradas al `hosts` file local. Tailscale Split DNS queda como mejora futura, no resuelta acá.
+- El acceso LAN "sin Tailscale" (dispositivos que el usuario no controla o no quiere sumar al tailnet) queda limitado a quien tenga acceso físico a la LAN de casa — el resto del mundo, incluido el propio usuario fuera de casa, entra por Tailscale.
+

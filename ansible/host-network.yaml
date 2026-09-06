@@ -8,7 +8,15 @@
   gather_facts: false
 
   vars:
-    forward_ports: [80, 443]
+    # Puerto de entrada en el host -> puerto:IP real del Gateway dentro de
+    # la red NAT de libvirt (IPs fijas via Cilium L2 Announcements, ver
+    # platform/networking/cilium-gateway/). No se puede forwardear 80/443
+    # dos veces al host, por eso Agent Gateway usa 8080/8443.
+    forward_rules:
+      - { port: 80, toport: 80, toaddr: "{{ cilium_gateway_lb_ip }}" }
+      - { port: 443, toport: 443, toaddr: "{{ cilium_gateway_lb_ip }}" }
+      - { port: 8080, toport: 80, toaddr: "{{ agentgateway_lb_ip }}" }
+      - { port: 8443, toport: 443, toaddr: "{{ agentgateway_lb_ip }}" }
 
   tasks:
     - name: Detectar la zona activa de firewalld para la interfaz LAN
@@ -27,16 +35,16 @@
     - name: Verificar si el forward-port ya existe
       ansible.builtin.command: >
         firewall-cmd --zone={{ fw_zone.stdout }}
-        --query-forward-port=port={{ item }}:proto=tcp:toport={{ item }}:toaddr={{ k0s_node_ip }}
+        --query-forward-port=port={{ item.port }}:proto=tcp:toport={{ item.toport }}:toaddr={{ item.toaddr }}
       register: fw_query
       failed_when: false
       changed_when: false
-      loop: "{{ forward_ports }}"
+      loop: "{{ forward_rules }}"
 
-    - name: Agregar forward-port hacia la VM ({{ k0s_node_ip }})
+    - name: Agregar forward-port hacia el Gateway correspondiente
       ansible.builtin.command: >
         firewall-cmd --zone={{ fw_zone.stdout }} --permanent
-        --add-forward-port=port={{ item.item }}:proto=tcp:toport={{ item.item }}:toaddr={{ k0s_node_ip }}
+        --add-forward-port=port={{ item.item.port }}:proto=tcp:toport={{ item.item.toport }}:toaddr={{ item.item.toaddr }}
       when: item.rc != 0
       loop: "{{ fw_query.results }}"
 

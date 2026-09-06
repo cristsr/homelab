@@ -430,36 +430,49 @@ Servicios generados: `-rw`, `-r`, `-ro`.
 
 ## 7. Networking y Acceso
 
-### Flujo de trafico externo
+### Acceso segmentado: publico (Cloudflare) vs privado (LAN + Tailscale)
+
+Ver ADR-011 en [DECISIONS.md](DECISIONS.md). Solo 2 de las 13 rutas son publicas de verdad (`portfolio`, `api` `/webhooks`) — el resto (ArgoCD, Grafana, Headlamp, Hubble, Longhorn, OpenBao, SonarQube UI, admin UI de Agent Gateway, OpenMemory UI/API, SonarQube MCP) son herramientas de administracion, accesibles solo desde la LAN de casa o el tailnet del usuario.
+
+Cada Gateway tiene una IP LAN fija, asignada via Cilium L2 Announcements (`CiliumLoadBalancerIPPool` + `CiliumL2AnnouncementPolicy` en `platform/networking/cilium-gateway/`, `spec.addresses` en cada `Gateway`):
+
+| Gateway | IP fija |
+|---------|---------|
+| `cilium-gateway-main` (rutas genericas) | `192.168.122.240` |
+| `agentgateway-mcp` (rutas MCP) | `192.168.122.241` |
 
 ```
-Internet
+Internet (solo portfolio + api /webhooks)
   └── Cloudflare (DNS + WAF)
-        └── Cloudflare Tunnel (egreso desde cloudflared, dentro de la VM)
-              ├── cilium-gateway-main:80 (rutas genericas) ──► Backend ClusterIP (por HTTPRoute)
-              └── agentgateway-mcp :80 (rutas MCP)         ──► Backend ClusterIP (por HTTPRoute)
+        └── Cloudflare Tunnel (egreso desde cloudflared, dentro del cluster)
+              └── cilium-gateway-main:80 ──► Backend ClusterIP (por HTTPRoute)
 
-LAN
-  └── Host 192.168.80.20:80/443 (firewalld forward-port, ansible/host-network.yaml)
-        └── VM 192.168.122.10:80/443 (NAT libvirt)
-              ├── cilium-gateway-main :80
-              └── agentgateway-mcp :80
+LAN fisica (sin Tailscale)
+  └── Host 192.168.80.20 (firewalld forward-port, ansible/host-network.yaml)
+        ├── 80/443   → 192.168.122.240:80/443 (cilium-gateway-main)
+        └── 8080/8443 → 192.168.122.241:80/443 (agentgateway-mcp)
+
+Tailscale (cualquier dispositivo del usuario, desde cualquier lado)
+  └── Subnet router en el hipervisor (`tailscale up --advertise-routes=192.168.122.0/24`)
+        ├── 192.168.122.240:80 (cilium-gateway-main)
+        └── 192.168.122.241:80 (agentgateway-mcp)
 ```
 
-Que hostname resuelve contra que Gateway lo decide la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git) — no es un enrutamiento a nivel de puerto, ambos Gateway escuchan HTTP:80.
+Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git); para LAN/Tailscale, el usuario apunta el hostname a la IP correspondiente (`hosts` file local — sin Split DNS de Tailscale por ahora).
 
-La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo tiene WiFi activa — bridging de una VM sobre WiFi es fragil con la mayoria de drivers/APs (ver ADR-008). El acceso LAN pasa por un port-forward a nivel host; el acceso WAN via Cloudflare Tunnel no se ve afectado porque es una conexion saliente.
+La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo tiene WiFi activa — bridging de una VM sobre WiFi es fragil con la mayoria de drivers/APs (ver ADR-008).
 
 ### Puertos expuestos
 
 | Puerto | Protocolo | Descripcion |
 |--------|-----------|-------------|
-| 80 | TCP | HTTP de ambos Gateway (host → VM via forward-port) |
-| 443 | TCP | Reservado para HTTPS (forwardeado, pero ningun Gateway tiene listener HTTPS hoy — ver §3.1 TLS) |
+| 80/443 | TCP | HTTP de `cilium-gateway-main` (host → IP fija via forward-port) |
+| 8080/8443 | TCP | HTTP de `agentgateway-mcp` (host → IP fija via forward-port) |
+| — | — | Reservado para HTTPS (forwardeado, pero ningun Gateway tiene listener HTTPS hoy — ver §3.1 TLS) |
 
 ### DNS y subdominios
 
-Todos apuntan a `192.168.80.20` (IP del host) como registro A (LAN) o via Cloudflare Tunnel (WAN) — el forward-port hace transparente que el nodo real este en `192.168.122.10`.
+`portfolio`/`api` resuelven via Cloudflare Tunnel (WAN). El resto de las rutas no tiene DNS publico — se accede por IP directa (`192.168.122.240`/`.241`) o agregando el hostname al `hosts` file local, desde la LAN o desde Tailscale.
 
 ---
 

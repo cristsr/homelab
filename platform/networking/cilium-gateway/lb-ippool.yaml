@@ -1,0 +1,11 @@
+# Bloque al final de la subred NAT de libvirt (192.168.122.0/24), fuera del
+# uso actual (solo la VM en .10). Dentro del rango DHCP *configurado* de
+# libvirt (.2-.254) pero sin colision mientras no se agreguen mas VMs a
+# esta red - riesgo aceptado, documentado en docs/DECISIONS.md.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: homelab-lan
+spec:
+  blocks:
+    - cidr: "192.168.122.240/28"
