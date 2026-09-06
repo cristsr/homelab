@@ -8,3 +8,13 @@ authentication:
         server:
           dataStorage:
             enabled: true
+          # El volumen persistente ya tiene datastore.sqlite3/keys.json
+          # creados por root:root (modo 640). La imagen que trae Cilium
+          # 1.20 (ghcr.io/spiffe/spire-server:1.15.2) corre como un UID
+          # no-root por defecto, sin securityContext explicito del chart -
+          # rompe con "attempt to write a readonly database" contra los
+          # archivos existentes. Forzar root restaura el propietario que
+          # ya tienen esos archivos en el volumen.
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
