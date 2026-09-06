@@ -56,3 +56,25 @@
     - name: Recargar firewalld
       ansible.builtin.command: firewall-cmd --reload
       changed_when: true
+
+    # La politica de seguridad por defecto de libvirt para redes NAT
+    # (tabla `ip libvirt_network`, cadena `guest_input`) rechaza cualquier
+    # conexion NUEVA entrante hacia la red virtual, incluso ya aplicado el
+    # DNAT de arriba - descubierto troubleshooteando el forward-port en
+    # produccion (ver docs/DECISIONS.md ADR-011). Sin esto, firewalld hace
+    # bien su parte pero libvirt lo rechaza despues.
+    - name: Crear el directorio de hooks de libvirt
+      ansible.builtin.file:
+        path: /etc/libvirt/hooks
+        state: directory
+        mode: "0755"
+
+    - name: Instalar el hook de red de libvirt (excepcion de firewall)
+      ansible.builtin.template:
+        src: templates/libvirt-network-hook.sh.j2
+        dest: /etc/libvirt/hooks/network
+        mode: "0755"
+
+    - name: Aplicar el hook ahora (sin esperar al proximo restart de la red)
+      ansible.builtin.command: /etc/libvirt/hooks/network default started - -
+      changed_when: true

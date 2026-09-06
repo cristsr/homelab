@@ -554,6 +554,8 @@ curl -H "Host: argocd.cristianpuenguenan.online" http://192.168.122.240/
 
 Ya resuelto por `ansible/host-network.yaml` — `80/443` del host (`192.168.80.20`) reenvía a `192.168.122.240` (Cilium), `8080/8443` a `192.168.122.250` (Agent Gateway).
 
+El mismo playbook también instala `/etc/libvirt/hooks/network` en el hipervisor — sin este hook, libvirt rechaza por defecto cualquier conexión nueva entrante hacia su red NAT, incluso con el forward-port de firewalld bien configurado (ver [ADR-011](DECISIONS.md), actualización de troubleshooting). Si algún día el forward-port deja de andar después de un reboot del hipervisor o de reiniciar `libvirtd`, sospechá primero de este hook (`cat /etc/libvirt/hooks/network`, y `sudo nft list chain ip libvirt_network guest_input` para confirmar que las excepciones siguen ahí).
+
 ### 11.3 Resolver los hostnames (DNS privado)
 
 Hay un `CoreDNS` propio (`platform/networking/private-dns/`, IP fija `192.168.122.253`) que resuelve *solo* `cristianpuenguenan.online` — todo lo demás lo reenvía al DNS público real, no reemplaza tu DNS habitual.
