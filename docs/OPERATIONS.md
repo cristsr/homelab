@@ -563,9 +563,16 @@ No hay DNS interno configurado todavía — agregá el hostname a tu `hosts` fil
 192.168.122.250 agentgateway.cristianpuenguenan.online mcp.cristianpuenguenan.online openmemory-api.cristianpuenguenan.online
 ```
 
-### 11.4 Quitar una ruta de Cloudflare (hacerla privada)
+### 11.4 Qué es público y qué no (sin lista que mantener)
 
-En [dash.cloudflare.com](https://dash.cloudflare.com) → Zero Trust → Networks → Tunnels → tunel del homelab → Public Hostnames: eliminar la entrada del hostname. Deja de resolver desde Internet inmediatamente; sigue funcionando por LAN/Tailscale sin cambios.
+Cloudflare no tiene una entrada por ruta — hay un único wildcard (`*.cristianpuenguenan.online`) apuntando a `cilium-gateway-public.networking.svc.cluster.local:80`. Lo que es público lo decide **dónde vive el `HTTPRoute`** en el código, no una lista en el dashboard:
+
+- `HTTPRoute` con `parentRefs: [{name: public}]` → alcanzable desde Internet.
+- `HTTPRoute` con `parentRefs: [{name: main}]` o `[{name: agentgateway-mcp}]` → nunca alcanzado por el wildcard, solo por LAN/Tailscale (§11.1-11.3).
+
+Para hacer pública una ruta nueva: agregar su `HTTPRoute` con `parentRefs: [{name: public, namespace: networking}]` (ver `workloads/portfolio/httproute.yaml` como ejemplo) — no hace falta tocar nada en Cloudflare. Para hacer privada una que hoy es pública: cambiar su `parentRefs` a `main` (o `agentgateway-mcp` si depende de MCP).
+
+En [dash.cloudflare.com](https://dash.cloudflare.com) → Zero Trust → Networks → Tunnels → túnel del homelab → Public Hostnames, la única entrada a mantener es el wildcard apuntando a `cilium-gateway-public` — no se toca al agregar o quitar rutas privadas.
 
 ---
 

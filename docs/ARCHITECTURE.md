@@ -193,15 +193,26 @@ Declarados en `bootstrap/namespaces.yaml` y creados por el hook presync de Ciliu
 
 ## 3. Componentes de Plataforma
 
-### 3.1 Ingress: dos Gateway API, uno por responsabilidad
+### 3.1 Ingress: tres Gateway API, uno por audiencia
 
-Ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp). Ambos `Gateway` viven en el namespace `networking` y ambos escuchan HTTP:80 unicamente (ver §7 — no hay HTTPS interno hoy, TLS real termina en el borde de Cloudflare).
+Ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp) y ADR-011 en [DECISIONS.md](DECISIONS.md). Los tres `Gateway` viven en el namespace `networking` y escuchan HTTP:80 unicamente (ver §7 — no hay HTTPS interno hoy, TLS real termina en el borde de Cloudflare). La separacion entre `public` y `main` no es por tipo de trafico sino por **audiencia**: `public` es el unico Gateway al que apunta el wildcard de Cloudflare — lo que es publico queda decidido por que `HTTPRoute` vive ahi, no por una lista aparte.
 
-#### 3.1.a Cilium Gateway API (trafico HTTP generico)
+#### 3.1.a Cilium Gateway API — público (`public`)
 
-**`GatewayClass`**: `cilium` (creada automaticamente por Cilium al habilitar `gatewayAPI.enabled: true`) — **`Gateway`**: `main` (`platform/networking/cilium-gateway/gateway.yaml`) — **Service generado**: `cilium-gateway-main`
+**`Gateway`**: `public` (`platform/networking/cilium-gateway/gateway-public.yaml`) — **Service generado**: `cilium-gateway-public` — sin IP LAN fija (solo lo consume `cloudflared`, via `ClusterIP`)
 
-Sirve todo el trafico HTTP que no es un servidor MCP:
+Único Gateway alcanzable desde Internet — las únicas dos rutas que deben serlo:
+
+| Subdominio | Backend | Namespace |
+|-----------|---------|-----------|
+| `api.cristianpuenguenan.online` | flow:80 (`/flow`, `/webhooks`) | apps |
+| `portfolio.cristianpuenguenan.online` | portfolio:80 | apps |
+
+#### 3.1.b Cilium Gateway API — privado (`main`)
+
+**`GatewayClass`**: `cilium` (creada automaticamente por Cilium al habilitar `gatewayAPI.enabled: true`) — **`Gateway`**: `main` (`platform/networking/cilium-gateway/gateway.yaml`) — **Service generado**: `cilium-gateway-main` — IP LAN fija `192.168.122.240` (Cilium L2 Announcements, ver §7)
+
+Herramientas de administracion/observabilidad — solo alcanzables por LAN/Tailscale, nunca por el wildcard de Cloudflare:
 
 | Subdominio | Backend | Namespace |
 |-----------|---------|-----------|
@@ -213,10 +224,8 @@ Sirve todo el trafico HTTP que no es un servidor MCP:
 | `openbao.cristianpuenguenan.online` | openbao:8200 | secret-management |
 | `openmemory.cristianpuenguenan.online` | openmemory-ui:3000 | devtools |
 | `sonarqube.cristianpuenguenan.online` | sonarqube-sonarqube:9000 | sonarqube |
-| `api.cristianpuenguenan.online` | flow:80 (`/flow`, `/webhooks`) | apps |
-| `portfolio.cristianpuenguenan.online` | portfolio:80 | apps |
 
-#### 3.1.b Agent Gateway (solo servidores MCP)
+#### 3.1.c Agent Gateway (solo servidores MCP)
 
 **Chart**: `oci://cr.agentgateway.dev/charts/agentgateway` — **`GatewayClass`**: `agentgateway` — **`Gateway`**: `agentgateway-mcp` (`platform/networking/agentgateway/gateway.yaml`)
 
@@ -445,7 +454,7 @@ Cada Gateway tiene una IP LAN fija, asignada via Cilium L2 Announcements (`Ciliu
 Internet (solo portfolio + api /webhooks)
   └── Cloudflare (DNS + WAF)
         └── Cloudflare Tunnel (egreso desde cloudflared, dentro del cluster)
-              └── cilium-gateway-main:80 ──► Backend ClusterIP (por HTTPRoute)
+              └── cilium-gateway-public:80 ──► Backend ClusterIP (portfolio/flow-api, por HTTPRoute)
 
 LAN fisica (sin Tailscale)
   └── Host 192.168.80.20 (firewalld forward-port, ansible/host-network.yaml)

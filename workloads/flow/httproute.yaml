@@ -5,7 +5,7 @@ metadata:
   namespace: apps
 spec:
   parentRefs:
-    - name: main
+    - name: public
       namespace: networking
   hostnames:
     - api.cristianpuenguenan.online
