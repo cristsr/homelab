@@ -564,11 +564,20 @@ Hay un `CoreDNS` propio (`platform/networking/private-dns/`, IP fija `192.168.12
 
 **Desde la LAN física (sin Tailscale):** configurá `192.168.80.20` (el hipervisor) como DNS del dispositivo — `ansible/host-network.yaml` reenvía el puerto 53 (UDP/TCP) hacia el CoreDNS interno.
 
-**Alternativa manual, sin tocar ninguna config de red:** agregar el hostname a tu `hosts` file local (`/etc/hosts` o `C:\Windows\System32\drivers\etc\hosts`):
+**Alternativa manual, sin tocar ninguna config de red:** agregar el hostname a tu `hosts` file local (`/etc/hosts` o `C:\Windows\System32\drivers\etc\hosts`) — la IP correcta depende de si tu dispositivo está en Tailscale (con el subnet router activo, §11.1) o solo en la LAN física:
+
+**Si estás en Tailscale** (alcanza la red interna `192.168.122.0/24` directo, sin pasar por el hipervisor): usá las IPs fijas de los Gateways tal cual, puerto 80 normal:
 
 ```
 192.168.122.240 argocd.cristianpuenguenan.online grafana.cristianpuenguenan.online longhorn.cristianpuenguenan.online
 192.168.122.250 agentgateway.cristianpuenguenan.online mcp.cristianpuenguenan.online openmemory-api.cristianpuenguenan.online
+```
+
+**Si estás solo en la LAN física, sin Tailscale**: la IP interna `192.168.122.240`/`.250` **no es alcanzable directo** — hay que pasar por el forward del hipervisor. Usá `192.168.80.20` para todos los hostnames, pero las rutas de Agent Gateway necesitan el puerto `8080` explícito en la URL (`http://mcp.cristianpuenguenan.online:8080/`), porque el forward-port no puede distinguir a qué Gateway ir solo por el hostname:
+
+```
+192.168.80.20 argocd.cristianpuenguenan.online grafana.cristianpuenguenan.online longhorn.cristianpuenguenan.online headlamp.cristianpuenguenan.online hubble.cristianpuenguenan.online openbao.cristianpuenguenan.online openmemory.cristianpuenguenan.online sonarqube.cristianpuenguenan.online
+192.168.80.20 agentgateway.cristianpuenguenan.online mcp.cristianpuenguenan.online openmemory-api.cristianpuenguenan.online
 ```
 
 Para agregar una ruta privada nueva: sumarla al `Corefile` en `platform/networking/private-dns/configmap.yaml` y hacer `git push` — Reloader reinicia el pod solo, no hace falta ningún paso manual adicional.
