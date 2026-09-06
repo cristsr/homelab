@@ -338,7 +338,25 @@ kubectl get secret openbao-recovery-key -n secret-management \
 
 **Guardala de forma segura** (gestor de contrasenas o vault fisico).
 
-Opcionalmente, puedes cifrarla y guardarla en `group_vars/all.yaml`:
+### 7.3 Secrets de aplicaciones (extra-secrets.yaml)
+
+`ansible/extra-secrets.yaml` cubre los secrets *por aplicación* (redis, postgresql-app, mongodb-app, grafana admin, sonarqube-db, openmemory, GHCR pull secret) — a diferencia de `secret/argocd`/`secret/infra/*` de arriba, que son core de infraestructura. Vive cifrado con `ansible-vault` (mismo patrón que `group_vars/all.yaml`) y corre automáticamente en `deploy.yml` (ver [ADR-009 en DECISIONS.md](DECISIONS.md), actualización 2026-09-06) — no hace falta correrlo a mano salvo para probar un cambio antes de pushear:
+
+```bash
+cd ansible
+ansible-playbook load-extra-secrets.yaml
+```
+
+Para agregar o rotar un valor (ej. completar `OPENAI_API_KEY` o el `dockerconfigjson` de GHCR, dejados vacíos a propósito):
+
+```bash
+cd ansible
+ansible-vault edit extra-secrets.yaml
+```
+
+Un valor vacío (`""`) es válido — significa "no uso esta app todavía", no rompe el playbook. Tras un cambio, el `ExternalSecret` correspondiente lo recoge en minutos (`refreshInterval: 5m` en los que dependen de este archivo) y Reloader reinicia el pod solo.
+
+Opcionalmente, puedes cifrar la recovery key de OpenBao y guardarla en `group_vars/all.yaml`:
 
 ```bash
 cd ansible

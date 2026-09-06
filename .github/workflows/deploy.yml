@@ -89,3 +89,7 @@ jobs:
       - name: Populate OpenBao secrets
         working-directory: ansible
         run: ansible-playbook vault-populate.yaml
+
+      - name: Populate extra secrets
+        working-directory: ansible
+        run: ansible-playbook load-extra-secrets.yaml
