@@ -7,7 +7,7 @@ spec:
   gatewayClassName: agentgateway
   addresses:
     - type: IPAddress
-      value: 192.168.122.50
+      value: 192.168.122.250
   infrastructure:
     parametersRef:
       name: main

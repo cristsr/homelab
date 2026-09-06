@@ -532,7 +532,7 @@ sudo find /var/log/pods -type f -mtime +7 -delete
 
 ## 11. Acceso Privado: LAN + Tailscale
 
-Ver [ADR-011](DECISIONS.md). Las rutas de administración (todas menos `portfolio` y `api` `/webhooks`) no son públicas — se accede por IP fija de cada Gateway (`192.168.122.240` Cilium, `192.168.122.50` Agent Gateway), desde la LAN física o desde Tailscale.
+Ver [ADR-011](DECISIONS.md). Las rutas de administración (todas menos `portfolio` y `api` `/webhooks`) no son públicas — se accede por IP fija de cada Gateway (`192.168.122.240` Cilium, `192.168.122.250` Agent Gateway), desde la LAN física o desde Tailscale.
 
 ### 11.1 Configurar el subnet router de Tailscale (una sola vez)
 
@@ -552,7 +552,7 @@ curl -H "Host: argocd.cristianpuenguenan.online" http://192.168.122.240/
 
 ### 11.2 Acceso desde la LAN física (sin Tailscale)
 
-Ya resuelto por `ansible/host-network.yaml` — `80/443` del host (`192.168.80.20`) reenvía a `192.168.122.240` (Cilium), `8080/8443` a `192.168.122.50` (Agent Gateway).
+Ya resuelto por `ansible/host-network.yaml` — `80/443` del host (`192.168.80.20`) reenvía a `192.168.122.240` (Cilium), `8080/8443` a `192.168.122.250` (Agent Gateway).
 
 ### 11.3 Resolver los hostnames sin Split DNS
 
@@ -560,7 +560,7 @@ No hay DNS interno configurado todavía — agregá el hostname a tu `hosts` fil
 
 ```
 192.168.122.240 argocd.cristianpuenguenan.online grafana.cristianpuenguenan.online longhorn.cristianpuenguenan.online
-192.168.122.50 agentgateway.cristianpuenguenan.online mcp.cristianpuenguenan.online openmemory-api.cristianpuenguenan.online
+192.168.122.250 agentgateway.cristianpuenguenan.online mcp.cristianpuenguenan.online openmemory-api.cristianpuenguenan.online
 ```
 
 ### 11.4 Quitar una ruta de Cloudflare (hacerla privada)
