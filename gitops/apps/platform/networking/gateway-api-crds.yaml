@@ -11,13 +11,16 @@ spec:
   project: homelab
   source:
     repoURL: https://github.com/kubernetes-sigs/gateway-api
-    targetRevision: v1.5.1
-    # Cilium 1.19.3 requiere el CRD experimental TLSRoute (v1alpha2) para
-    # arrancar su reconciler de Gateway API, aunque no se use TLSRoute en
-    # ningun HTTPRoute (github.com/cilium/cilium/issues/38420). El canal
-    # "experimental" es superset del "standard": incluye GatewayClass,
-    # Gateway, HTTPRoute, ReferenceGrant + GRPCRoute, TCPRoute, UDPRoute,
-    # TLSRoute, BackendTLSPolicy.
+    # v1.5.x gradua TLSRoute a v1 y deja de SERVIR v1alpha2 en su CRD, pero
+    # Cilium 1.19.3 registra un field indexer contra TLSRoute/v1alpha2 de
+    # forma incondicional al arrancar su reconciler de Gateway API (aunque
+    # no se use TLSRoute en ningun HTTPRoute) y crashea si esa version no
+    # esta servida (cilium/cilium#38420, #44920, #45139 - corregido recien
+    # en 1.20). v1.4.x es la ultima serie que todavia sirve v1alpha2.
+    targetRevision: v1.4.1
+    # El canal "experimental" es superset del "standard": incluye
+    # GatewayClass, Gateway, HTTPRoute, ReferenceGrant + GRPCRoute,
+    # TCPRoute, UDPRoute, TLSRoute, BackendTLSPolicy.
     path: config/crd/experimental
   destination:
     server: https://kubernetes.default.svc
