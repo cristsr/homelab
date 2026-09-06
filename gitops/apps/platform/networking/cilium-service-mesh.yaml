@@ -9,7 +9,12 @@ spec:
   project: homelab
   sources:
     - repoURL: https://helm.cilium.io
-      targetRevision: 1.19.3
+      # 1.19.3 requiere que el CRD TLSRoute este servido en v1alpha2 para
+      # arrancar su reconciler de Gateway API, incompatible con Gateway API
+      # v1.5+ que ya solo sirve v1 (cilium/cilium#44920, #45139). 1.20
+      # mueve el soporte de Cilium a Gateway API v1.6.1 con TLSRoute en v1,
+      # eliminando esa dependencia.
+      targetRevision: 1.20.1
       chart: cilium
       helm:
         releaseName: cilium
