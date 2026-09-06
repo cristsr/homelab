@@ -13,10 +13,15 @@
     # platform/networking/cilium-gateway/). No se puede forwardear 80/443
     # dos veces al host, por eso Agent Gateway usa 8080/8443.
     forward_rules:
-      - { port: 80, toport: 80, toaddr: "{{ cilium_gateway_lb_ip }}" }
-      - { port: 443, toport: 443, toaddr: "{{ cilium_gateway_lb_ip }}" }
-      - { port: 8080, toport: 80, toaddr: "{{ agentgateway_lb_ip }}" }
-      - { port: 8443, toport: 443, toaddr: "{{ agentgateway_lb_ip }}" }
+      - { port: 80, toport: 80, toaddr: "{{ cilium_gateway_lb_ip }}", proto: tcp }
+      - { port: 443, toport: 443, toaddr: "{{ cilium_gateway_lb_ip }}", proto: tcp }
+      - { port: 8080, toport: 80, toaddr: "{{ agentgateway_lb_ip }}", proto: tcp }
+      - { port: 8443, toport: 443, toaddr: "{{ agentgateway_lb_ip }}", proto: tcp }
+      # DNS privado (platform/networking/private-dns/) - un dispositivo LAN
+      # configura este host (192.168.80.20) como su DNS y llega al CoreDNS
+      # interno que resuelve las rutas privadas.
+      - { port: 53, toport: 53, toaddr: "{{ private_dns_ip }}", proto: udp }
+      - { port: 53, toport: 53, toaddr: "{{ private_dns_ip }}", proto: tcp }
 
   tasks:
     - name: Detectar la zona activa de firewalld para la interfaz LAN
@@ -35,7 +40,7 @@
     - name: Verificar si el forward-port ya existe
       ansible.builtin.command: >
         firewall-cmd --zone={{ fw_zone.stdout }}
-        --query-forward-port=port={{ item.port }}:proto=tcp:toport={{ item.toport }}:toaddr={{ item.toaddr }}
+        --query-forward-port=port={{ item.port }}:proto={{ item.proto }}:toport={{ item.toport }}:toaddr={{ item.toaddr }}
       register: fw_query
       failed_when: false
       changed_when: false
@@ -44,7 +49,7 @@
     - name: Agregar forward-port hacia el Gateway correspondiente
       ansible.builtin.command: >
         firewall-cmd --zone={{ fw_zone.stdout }} --permanent
-        --add-forward-port=port={{ item.item.port }}:proto=tcp:toport={{ item.item.toport }}:toaddr={{ item.item.toaddr }}
+        --add-forward-port=port={{ item.item.port }}:proto={{ item.item.proto }}:toport={{ item.item.toport }}:toaddr={{ item.item.toaddr }}
       when: item.rc != 0
       loop: "{{ fw_query.results }}"
 

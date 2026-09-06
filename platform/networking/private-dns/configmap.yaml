@@ -1,0 +1,32 @@
+# Registros A estaticos solo para las rutas privadas del cluster (las que
+# viven en `main` y `agentgateway-mcp`, ver docs/DECISIONS.md ADR-011).
+# portfolio/api no entran acá - son publicas, resuelven via el DNS real de
+# Cloudflare. `fallthrough` + `forward` evitan que esto se convierta en un
+# agujero negro si algo lo usa como DNS primario por error.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: private-dns-corefile
+  namespace: networking
+data:
+  Corefile: |
+    . {
+        hosts {
+            192.168.122.240 argocd.cristianpuenguenan.online
+            192.168.122.240 grafana.cristianpuenguenan.online
+            192.168.122.240 headlamp.cristianpuenguenan.online
+            192.168.122.240 hubble.cristianpuenguenan.online
+            192.168.122.240 longhorn.cristianpuenguenan.online
+            192.168.122.240 openbao.cristianpuenguenan.online
+            192.168.122.240 openmemory.cristianpuenguenan.online
+            192.168.122.240 sonarqube.cristianpuenguenan.online
+            192.168.122.250 agentgateway.cristianpuenguenan.online
+            192.168.122.250 mcp.cristianpuenguenan.online
+            192.168.122.250 openmemory-api.cristianpuenguenan.online
+            fallthrough
+        }
+        forward . 1.1.1.1 1.0.0.1
+        cache 30
+        errors
+        log
+    }

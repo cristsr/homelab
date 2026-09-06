@@ -554,14 +554,22 @@ curl -H "Host: argocd.cristianpuenguenan.online" http://192.168.122.240/
 
 Ya resuelto por `ansible/host-network.yaml` — `80/443` del host (`192.168.80.20`) reenvía a `192.168.122.240` (Cilium), `8080/8443` a `192.168.122.250` (Agent Gateway).
 
-### 11.3 Resolver los hostnames sin Split DNS
+### 11.3 Resolver los hostnames (DNS privado)
 
-No hay DNS interno configurado todavía — agregá el hostname a tu `hosts` file local (`/etc/hosts` o `C:\Windows\System32\drivers\etc\hosts`) apuntando a la IP correspondiente, por ejemplo:
+Hay un `CoreDNS` propio (`platform/networking/private-dns/`, IP fija `192.168.122.253`) que resuelve *solo* `cristianpuenguenan.online` — todo lo demás lo reenvía al DNS público real, no reemplaza tu DNS habitual.
+
+**Desde Tailscale (recomendado, una sola vez):** en [login.tailscale.com/admin/dns](https://login.tailscale.com/admin/dns) agregar un Nameserver custom `192.168.122.253` con "Restrict to domain: `cristianpuenguenan.online`". A partir de ahí, cualquier dispositivo tuyo en el tailnet resuelve los hostnames privados solo, sin tocar nada más.
+
+**Desde la LAN física (sin Tailscale):** configurá `192.168.80.20` (el hipervisor) como DNS del dispositivo — `ansible/host-network.yaml` reenvía el puerto 53 (UDP/TCP) hacia el CoreDNS interno.
+
+**Alternativa manual, sin tocar ninguna config de red:** agregar el hostname a tu `hosts` file local (`/etc/hosts` o `C:\Windows\System32\drivers\etc\hosts`):
 
 ```
 192.168.122.240 argocd.cristianpuenguenan.online grafana.cristianpuenguenan.online longhorn.cristianpuenguenan.online
 192.168.122.250 agentgateway.cristianpuenguenan.online mcp.cristianpuenguenan.online openmemory-api.cristianpuenguenan.online
 ```
+
+Para agregar una ruta privada nueva: sumarla al `Corefile` en `platform/networking/private-dns/configmap.yaml` y hacer `git push` — Reloader reinicia el pod solo, no hace falta ningún paso manual adicional.
 
 ### 11.4 Qué es público y qué no (sin lista que mantener)
 
