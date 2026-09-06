@@ -8,7 +8,7 @@ spec:
     - name: main
       namespace: networking
   hostnames:
-    - openmemory.cristianpuenguenan.online
+    - openmemory.cristianpuenguenan.internal
   rules:
     - backendRefs:
         - name: openmemory-ui

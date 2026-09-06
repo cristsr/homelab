@@ -472,7 +472,7 @@ ansible-playbook vault-populate.yaml
 
 ### Dashboards de Grafana
 
-Accede a `https://grafana.cristianpuenguenan.online` y revisa:
+Accede a `https://grafana.cristianpuenguenan.internal` y revisa:
 - **Node Exporter Full**: Metricas del host.
 - **Kubernetes / Compute Resources / Cluster**: Uso de recursos del cluster.
 - **Longhorn**: Estado de volumenes.
@@ -547,7 +547,7 @@ Luego aprobar la ruta en [login.tailscale.com/admin/machines](https://login.tail
 Verificar desde cualquier dispositivo en tu tailnet (podés estar en cualquier lado, no hace falta estar en la LAN de casa):
 
 ```bash
-curl -H "Host: argocd.cristianpuenguenan.online" http://192.168.122.240/
+curl -H "Host: argocd.cristianpuenguenan.internal" http://192.168.122.240/
 ```
 
 ### 11.2 Acceso desde la LAN física (sin Tailscale)
@@ -560,7 +560,7 @@ El mismo playbook también instala `/etc/libvirt/hooks/network` en el hipervisor
 
 Hay un `CoreDNS` propio (`platform/networking/private-dns/`, IP fija `192.168.122.253`) que resuelve *solo* `cristianpuenguenan.online` — todo lo demás lo reenvía al DNS público real, no reemplaza tu DNS habitual.
 
-**Desde Tailscale (recomendado, una sola vez):** en [login.tailscale.com/admin/dns](https://login.tailscale.com/admin/dns) agregar un Nameserver custom `192.168.122.253` con "Restrict to domain: `cristianpuenguenan.online`". A partir de ahí, cualquier dispositivo tuyo en el tailnet resuelve los hostnames privados solo, sin tocar nada más.
+**Desde Tailscale (recomendado, una sola vez):** en [login.tailscale.com/admin/dns](https://login.tailscale.com/admin/dns) agregar un Nameserver custom `192.168.122.253` con "Restrict to domain: `cristianpuenguenan.internal`". A partir de ahí, cualquier dispositivo tuyo en el tailnet resuelve los hostnames privados solo, sin tocar nada más.
 
 **Desde la LAN física (sin Tailscale):** configurá `192.168.80.20` (el hipervisor) como DNS del dispositivo — `ansible/host-network.yaml` reenvía el puerto 53 (UDP/TCP) hacia el CoreDNS interno.
 
@@ -569,15 +569,15 @@ Hay un `CoreDNS` propio (`platform/networking/private-dns/`, IP fija `192.168.12
 **Si estás en Tailscale** (alcanza la red interna `192.168.122.0/24` directo, sin pasar por el hipervisor): usá las IPs fijas de los Gateways tal cual, puerto 80 normal:
 
 ```
-192.168.122.240 argocd.cristianpuenguenan.online grafana.cristianpuenguenan.online longhorn.cristianpuenguenan.online
-192.168.122.250 agentgateway.cristianpuenguenan.online mcp.cristianpuenguenan.online openmemory-api.cristianpuenguenan.online
+192.168.122.240 argocd.cristianpuenguenan.internal grafana.cristianpuenguenan.internal longhorn.cristianpuenguenan.internal
+192.168.122.250 agentgateway.cristianpuenguenan.internal mcp.cristianpuenguenan.internal openmemory-api.cristianpuenguenan.internal
 ```
 
-**Si estás solo en la LAN física, sin Tailscale**: la IP interna `192.168.122.240`/`.250` **no es alcanzable directo** — hay que pasar por el forward del hipervisor. Usá `192.168.80.20` para todos los hostnames, pero las rutas de Agent Gateway necesitan el puerto `8080` explícito en la URL (`http://mcp.cristianpuenguenan.online:8080/`), porque el forward-port no puede distinguir a qué Gateway ir solo por el hostname:
+**Si estás solo en la LAN física, sin Tailscale**: la IP interna `192.168.122.240`/`.250` **no es alcanzable directo** — hay que pasar por el forward del hipervisor. Usá `192.168.80.20` para todos los hostnames, pero las rutas de Agent Gateway necesitan el puerto `8080` explícito en la URL (`http://mcp.cristianpuenguenan.internal:8080/`), porque el forward-port no puede distinguir a qué Gateway ir solo por el hostname:
 
 ```
-192.168.80.20 argocd.cristianpuenguenan.online grafana.cristianpuenguenan.online longhorn.cristianpuenguenan.online headlamp.cristianpuenguenan.online hubble.cristianpuenguenan.online openbao.cristianpuenguenan.online openmemory.cristianpuenguenan.online sonarqube.cristianpuenguenan.online
-192.168.80.20 agentgateway.cristianpuenguenan.online mcp.cristianpuenguenan.online openmemory-api.cristianpuenguenan.online
+192.168.80.20 argocd.cristianpuenguenan.internal grafana.cristianpuenguenan.internal longhorn.cristianpuenguenan.internal headlamp.cristianpuenguenan.internal hubble.cristianpuenguenan.internal openbao.cristianpuenguenan.internal openmemory.cristianpuenguenan.internal sonarqube.cristianpuenguenan.internal
+192.168.80.20 agentgateway.cristianpuenguenan.internal mcp.cristianpuenguenan.internal openmemory-api.cristianpuenguenan.internal
 ```
 
 Para agregar una ruta privada nueva: sumarla al `Corefile` en `platform/networking/private-dns/configmap.yaml` y hacer `git push` — Reloader reinicia el pod solo, no hace falta ningún paso manual adicional.
