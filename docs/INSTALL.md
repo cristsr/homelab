@@ -354,7 +354,7 @@ cd ansible
 ansible-vault edit extra-secrets.yaml
 ```
 
-Un valor vacío (`""`) es válido — significa "no uso esta app todavía", no rompe el playbook. Tras un cambio, el `ExternalSecret` correspondiente lo recoge en minutos (`refreshInterval: 5m` en los que dependen de este archivo) y Reloader reinicia el pod solo.
+Un valor vacío (`""`) es válido — significa "no uso esta app todavía", no rompe el playbook. Tras un cambio, el `ExternalSecret` correspondiente lo recoge en menos de un minuto (`refreshInterval: 1m` en los que dependen de este archivo) y Reloader reinicia el pod solo.
 
 Opcionalmente, puedes cifrar la recovery key de OpenBao y guardarla en `group_vars/all.yaml`:
 
