@@ -432,8 +432,9 @@ Restricción dura para el TLS: `.internal` es un TLD reservado — el CA/Browser
 ### Decisión
 
 - **CA privada dentro del cluster** (`platform/networking/cert-manager/internal-tls.yaml`), replicando el patrón ya existente de la PKI de Hubble: Issuer `selfSigned` → `Certificate` `internal-root-ca` (isCA, 10 años) → `ClusterIssuer` `internal-ca` → leaf. Sin dependencia de ninguna CA externa; la renovación es automática vía cert-manager.
-- **Wildcard único** `*.cristianpuenguenan.internal` (+ apex) en el secret `wildcard-internal-tls` (namespace `networking`), referenciado por los listeners `https` (TLS terminate) de `main` y `agentgateway-mcp`. Un solo certificado que renovar, no 11.
-- **Redirect 301 HTTP→HTTPS**: el puerto 80 de ambos Gateways queda restringido (`allowedRoutes` solo namespace `networking`) a una `HTTPRoute` catch-all con filter `RequestRedirect`. Las 11 rutas de contenido fijan `sectionName: https` en sus `parentRefs` — sin eso se adjuntarían a ambos listeners y servirían contenido por HTTP igual.
+- **Wildcard único** `*.cristianpuenguenan.internal` (+ apex) en el secret `wildcard-internal-tls` (namespace `networking`), referenciado por el listener `https` (TLS terminate) de `main`. Un solo certificado que renovar, no 11.
+- **Redirect 301 HTTP→HTTPS en `main`**: el puerto 80 queda restringido (`allowedRoutes` solo namespace `networking`) a una `HTTPRoute` catch-all con filter `RequestRedirect`. Las 8 rutas de contenido de `main` fijan `sectionName: https` en sus `parentRefs` — sin eso se adjuntarían a ambos listeners y servirían contenido por HTTP igual.
+- **`agentgateway-mcp` se queda en HTTP plano** (excepción documentada): su controller (v1.1.0) ignora silenciosamente los listeners HTTPS — no crea el listener en `status`, ni el puerto 443 en el Service, ni reporta error/evento alguno. Las 3 rutas MCP (`mcp`, `openmemory-api`, `agentgateway` UI) sirven por el puerto 80 del tailnet privado; el transporte ya está cifrado por WireGuard en el plano de Tailscale. Reevaluar cuando Agent Gateway soporte TLS termination.
 - **Tailscale como única vía soportada** para dispositivos: la LAN física sin Tailscale queda declarada fuera de alcance (el redirect a HTTPS apunta a IPs internas inalcanzables desde la LAN — falla explícita, no degradada). Los forward-ports y el hook de libvirt se mantienen porque el tráfico Tailscale→cluster que atraviesa el hipervisor los sigue necesitando.
 
 ### Consecuencias
@@ -441,6 +442,7 @@ Restricción dura para el TLS: `.internal` es un TLD reservado — el CA/Browser
 - La CA debe confiarse a mano una vez por dispositivo del tailnet (`docs/OPERATIONS.md` §11.5) — aceptable porque el usuario controla todos los dispositivos; un visitante en la LAN no puede usar estas rutas de ninguna forma.
 - Si el secret `internal-root-ca` se pierde, la CA regenerada no será confiable por los dispositivos hasta repetir la instalación (hoy no hay backup específico del secret; el certificado dura 10 años).
 - El plano público no cambia: Cloudflare sigue terminando TLS en el borde para `portfolio`/`api`; `wildcard-home-tls` (Let's Encrypt) sigue emitido pero sin referenciar.
+- Las URLs de las 3 rutas de Agent Gateway quedan `http://` (puerto 80): `http://mcp.cristianpuenguenan.internal/sonarqube`, `http://openmemory-api...`, `http://agentgateway...` — el resto de las privadas son `https://`.
 - Apps sin cambios: ArgoCD ya corría `--insecure` (TLS delegado al edge es el patrón previsto); Grafana/Headlamp no usan cookies `secure`.
 
 

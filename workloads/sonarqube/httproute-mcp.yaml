@@ -7,7 +7,6 @@ spec:
   parentRefs:
     - name: agentgateway-mcp
       namespace: networking
-      sectionName: https
   hostnames:
     - mcp.cristianpuenguenan.internal
   rules:
