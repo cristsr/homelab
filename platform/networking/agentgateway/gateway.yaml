@@ -5,9 +5,6 @@ metadata:
   namespace: networking
 spec:
   gatewayClassName: agentgateway
-  addresses:
-    - type: IPAddress
-      value: 192.168.122.250
   infrastructure:
     parametersRef:
       name: main
@@ -16,8 +13,11 @@ spec:
   listeners:
     # HTTP plano a proposito: el controller de Agent Gateway (v1.1.0) ignora
     # silenciosamente los listeners HTTPS (no crea el listener en status ni
-    # el puerto en el Service) — ver ADR-012. Las rutas MCP sirven por el
-    # tailnet privado, TLS terminado por Tailscale mismo (WireGuard).
+    # el puerto en el Service) — ver ADR-012. Este listener ya no se expone
+    # con IP externa (Service ClusterIP, agentgateway.yaml): el unico que lo
+    # alcanza es el proxy interno de `main`, que termina TLS con la CA
+    # interna y reenvia para aca (platform/networking/cilium-gateway/
+    # httproute-agentgateway-proxy.yaml).
     - name: http
       protocol: HTTP
       port: 80

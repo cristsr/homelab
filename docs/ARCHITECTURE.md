@@ -195,7 +195,7 @@ Declarados en `bootstrap/namespaces.yaml` y creados por el hook presync de Ciliu
 
 ### 3.1 Ingress: tres Gateway API, uno por audiencia
 
-Ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp), ADR-011 y ADR-012 en [DECISIONS.md](DECISIONS.md). Los tres `Gateway` viven en el namespace `networking`. `main` termina TLS en HTTPS:443 con la CA interna del cluster (ver TLS abajo); su puerto 80 solo hace redirect a HTTPS. `agentgateway-mcp` sirve HTTP:80 plano (su controller no soporta listeners HTTPS, ADR-012 — el transporte va cifrado por WireGuard dentro del tailnet). `public` escucha HTTP:80 plano — el TLS de cara a Internet lo termina Cloudflare en el borde del tunel. La separacion entre `public` y `main` no es por tipo de trafico sino por **audiencia**: `public` es el unico Gateway al que apunta el wildcard de Cloudflare — lo que es publico queda decidido por que `HTTPRoute` vive ahi, no por una lista aparte.
+Ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp), ADR-011 y ADR-012 en [DECISIONS.md](DECISIONS.md). Los tres `Gateway` viven en el namespace `networking`. `main` termina TLS en HTTPS:443 con la CA interna del cluster (ver TLS abajo); su puerto 80 solo hace redirect a HTTPS. `agentgateway-mcp` sirve HTTP:80 plano puertas adentro (su controller no soporta listeners HTTPS, ADR-012) pero no tiene IP externa propia: sus 3 rutas entran igual por HTTPS, vía `main` haciendo de proxy TLS hacia su Service. `public` escucha HTTP:80 plano — el TLS de cara a Internet lo termina Cloudflare en el borde del tunel. La separacion entre `public` y `main` no es por tipo de trafico sino por **audiencia**: `public` es el unico Gateway al que apunta el wildcard de Cloudflare — lo que es publico queda decidido por que `HTTPRoute` vive ahi, no por una lista aparte.
 
 #### 3.1.a Cilium Gateway API — público (`public`)
 
@@ -227,9 +227,9 @@ Herramientas de administracion/observabilidad — solo alcanzables por LAN/Tails
 
 #### 3.1.c Agent Gateway (solo servidores MCP)
 
-**Chart**: `oci://cr.agentgateway.dev/charts/agentgateway` — **`GatewayClass`**: `agentgateway` — **`Gateway`**: `agentgateway-mcp` (`platform/networking/agentgateway/gateway.yaml`) — listener unico `http` (80, HTTP plano — el controller v1.1.0 no soporta listeners HTTPS, ver ADR-012; el cifrado del transporte lo aporta WireGuard dentro del tailnet)
+**Chart**: `oci://cr.agentgateway.dev/charts/agentgateway` — **`GatewayClass`**: `agentgateway` — **`Gateway`**: `agentgateway-mcp` (`platform/networking/agentgateway/gateway.yaml`) — listener unico `http` (80, HTTP plano — el controller v1.1.0 no soporta listeners HTTPS, ver ADR-012) — **Service generado**: `agentgateway-mcp`, `ClusterIP` (sin IP LAN fija: el unico que lo alcanza es el proxy interno de `main`, ver TLS abajo)
 
-Retenido unicamente para las rutas que aprovechan features reales de protocolo MCP (multiplexing, virtual MCP) que Cilium no ofrece:
+Retenido unicamente para las rutas que aprovechan features reales de protocolo MCP (multiplexing, virtual MCP) que Cilium no ofrece; sigue haciendo su propio ruteo/rewrite/multiplexing con estas `HTTPRoute` (sin cambios):
 
 | Subdominio | Backend | Namespace |
 |-----------|---------|-----------|
@@ -241,7 +241,7 @@ Retenido unicamente para las rutas que aprovechan features reales de protocolo M
 
 Dos planos separados (ver ADR-012):
 
-- **Interno (`*.cristianpuenguenan.internal`)**: `.internal` es un TLD reservado — ninguna CA publica puede emitir para el. El cluster corre su propia CA (`internal-root-ca`, `platform/networking/cert-manager/internal-tls.yaml`, patron selfSigned → CA → ClusterIssuer `internal-ca`) que firma un wildcard unico `wildcard-internal-tls` referenciado por el listener HTTPS de `main`. La CA hay que confiarla a mano en cada dispositivo del tailnet (ver `docs/OPERATIONS.md` §11.5). El puerto 80 de `main` solo responde 301 → HTTPS. Excepcion: `agentgateway-mcp` sirve HTTP plano (controller sin soporte de listeners HTTPS, ADR-012).
+- **Interno (`*.cristianpuenguenan.internal`)**: `.internal` es un TLD reservado — ninguna CA publica puede emitir para el. El cluster corre su propia CA (`internal-root-ca`, `platform/networking/cert-manager/internal-tls.yaml`, patron selfSigned → CA → ClusterIssuer `internal-ca`) que firma un wildcard unico `wildcard-internal-tls` referenciado por el listener HTTPS de `main`. La CA hay que confiarla a mano en cada dispositivo del tailnet (ver `docs/OPERATIONS.md` §11.5). El puerto 80 de `main` solo responde 301 → HTTPS. Las 3 rutas de `agentgateway-mcp` tambien quedan HTTPS de cara al cliente: su controller sigue sin soportar listeners HTTPS (ADR-012), asi que `main` termina el TLS y reenvia en HTTP plano, puertas adentro del cluster, al Service `agentgateway-mcp` (`platform/networking/cilium-gateway/httproute-agentgateway-proxy.yaml`).
 - **Publico (`*.cristianpuenguenan.online`)**: el TLS de cara a Internet lo termina Cloudflare en el borde del tunel; cloudflared habla HTTP al `Gateway public`. El wildcard `wildcard-home-tls` emitido por cert-manager (Let's Encrypt, DNS-01) sigue sin estar referenciado por ningun listener — se mantiene emitido para uso futuro, no es necesario para el flujo actual.
 
 ### 3.2 cert-manager
@@ -452,9 +452,10 @@ Cada Gateway tiene una IP LAN fija, asignada via Cilium L2 Announcements (`Ciliu
 
 | Gateway / Servicio | IP fija |
 |---------|---------|
-| `cilium-gateway-main` (rutas genericas) | `192.168.122.240` |
-| `agentgateway-mcp` (rutas MCP) | `192.168.122.250` |
+| `cilium-gateway-main` (rutas genericas, incluidas las 3 de Agent Gateway via proxy) | `192.168.122.240` |
 | `private-dns` (CoreDNS, resuelve `cristianpuenguenan.internal` para LAN/Tailscale) | `192.168.122.253` |
+
+`agentgateway-mcp` ya no tiene IP LAN fija — es `ClusterIP`, solo alcanzable por el proxy interno de `main` (ver TLS en §3.1).
 
 ```
 Internet (solo portfolio + api /webhooks)
@@ -467,13 +468,13 @@ forward-port siguen existiendo pero el puerto 80 responde solo redirect
 hacia IPs internas inalcanzables desde la LAN
   └── Host 192.168.80.20 (firewalld forward-port, ansible/host-network.yaml)
         ├── 80/443   → 192.168.122.240:80/443 (cilium-gateway-main)
-        ├── 8080/8443 → 192.168.122.250:80/443 (agentgateway-mcp)
         └── 53/udp+tcp → 192.168.122.253:53 (private-dns)
 
 Tailscale (cualquier dispositivo del usuario, desde cualquier lado) — via prioritaria
   └── Subnet router en el hipervisor (`tailscale up --advertise-routes=192.168.122.0/24`)
-        ├── 192.168.122.240:443 TLS / :80 redirect (cilium-gateway-main)
-        ├── 192.168.122.250:80 HTTP plano (agentgateway-mcp, ADR-012)
+        ├── 192.168.122.240:443 TLS / :80 redirect (cilium-gateway-main,
+        │   incluidas las 3 rutas de agentgateway-mcp, reenviadas puertas
+        │   adentro en HTTP plano hacia su Service ClusterIP)
         └── 192.168.122.253:53 (private-dns, via Tailscale Split DNS)
 ```
 
@@ -485,8 +486,7 @@ La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo ti
 
 | Puerto | Protocolo | Descripcion |
 |--------|-----------|-------------|
-| 80/443 | TCP | 80 = redirect a HTTPS, 443 = TLS de `cilium-gateway-main` (host → IP fija via forward-port) |
-| 8080/8443 | TCP | HTTP de `agentgateway-mcp` (host → IP fija via forward-port; HTTP plano, ADR-012) |
+| 80/443 | TCP | 80 = redirect a HTTPS, 443 = TLS de `cilium-gateway-main` (host → IP fija via forward-port); incluye las 3 rutas de `agentgateway-mcp`, reenviadas puertas adentro |
 | 53 | UDP/TCP | DNS de `private-dns` (host → IP fija via forward-port) |
 
 ### DNS y subdominios

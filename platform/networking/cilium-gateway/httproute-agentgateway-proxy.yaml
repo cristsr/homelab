@@ -1,0 +1,24 @@
+# TLS para las rutas de Agent Gateway: su controller (v1.1.0) ignora los
+# listeners HTTPS (ver ADR-012), asi que la terminacion TLS se hace aca, en
+# `main`, y se reenvia en HTTP plano - dentro del cluster - al Service que
+# ya expone el listener de Agent Gateway. Sin matching de path ni rewrite:
+# Agent Gateway hace su propio ruteo/rewrite/multiplexing puertas adentro
+# con las HTTPRoutes que tiene contra su propio Gateway (sectionName http).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: agentgateway-mcp-proxy
+  namespace: networking
+spec:
+  parentRefs:
+    - name: main
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - mcp.cristianpuenguenan.internal
+    - agentgateway.cristianpuenguenan.internal
+    - openmemory-api.cristianpuenguenan.internal
+  rules:
+    - backendRefs:
+        - name: agentgateway-mcp
+          port: 80

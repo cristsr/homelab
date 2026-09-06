@@ -1,14 +1,10 @@
 # Dos pools de 1 IP cada uno, cada uno atado a un Service especifico via
 # serviceSelector (io.kubernetes.service.name/namespace son selectores
-# especiales de metadata, no labels reales del Service).
-#
-# Necesario porque el controller de Agent Gateway NO traduce el
-# `spec.addresses` del recurso Gateway a una peticion real de IP fija en el
-# Service que genera (a diferencia del controller de Cilium, que si lo
-# hace via la annotation io.cilium/lb-ipam-ips) - con un pool compartido sin
-# selector, Cilium LB IPAM le daba la primera IP libre a lo primero que
-# pedia sin especificar cual, pisando la IP que le correspondia al otro
-# Gateway. Verificado contra el cluster real.
+# especiales de metadata, no labels reales del Service) en vez de un pool
+# compartido sin filtro - evita que Cilium LB IPAM le de a un Service la IP
+# que le correspondia a otro (ver ADR-012 en docs/DECISIONS.md, incluida su
+# actualizacion: agentgateway-mcp tenia un tercer pool aca hasta que paso a
+# ClusterIP - TLS ahora lo termina `main` y reenvia puertas adentro).
 apiVersion: cilium.io/v2alpha1
 kind: CiliumLoadBalancerIPPool
 metadata:
@@ -20,18 +16,6 @@ spec:
     matchLabels:
       "io.kubernetes.service.namespace": networking
       "io.kubernetes.service.name": cilium-gateway-main
----
-apiVersion: cilium.io/v2alpha1
-kind: CiliumLoadBalancerIPPool
-metadata:
-  name: agentgateway-mcp
-spec:
-  blocks:
-    - cidr: "192.168.122.250/32"
-  serviceSelector:
-    matchLabels:
-      "io.kubernetes.service.namespace": networking
-      "io.kubernetes.service.name": agentgateway-mcp
 ---
 apiVersion: cilium.io/v2alpha1
 kind: CiliumLoadBalancerIPPool
