@@ -1,6 +1,12 @@
 k0s_version: v1.35.3+k0s.0
 kubectl_version: "{{ k0s_version | regex_replace('\\+k0s\\..*', '') }}"
 k0s_node_ip: 192.168.122.10 # IP interna de la VM (NAT libvirt); 192.168.80.20 sigue siendo la IP del host
+# IPs fijas asignadas via Cilium L2 Announcements (spec.addresses en cada
+# Gateway, ver platform/networking/cilium-gateway/ y
+# platform/networking/agentgateway/gateway.yaml) - usadas por
+# ansible/host-network.yaml para el forward-port LAN.
+cilium_gateway_lb_ip: 192.168.122.240
+agentgateway_lb_ip: 192.168.122.241
 k0s_pod_cidr: 10.244.0.0/16
 k0s_service_cidr: 10.96.0.0/12
 

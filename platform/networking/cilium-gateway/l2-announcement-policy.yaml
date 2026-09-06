@@ -1,0 +1,11 @@
+# Sin nodeSelector a proposito: el unico nodo del cluster es control-plane,
+# y los ejemplos tipicos de esta policy lo excluyen - acá no aplica.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: homelab-lan
+spec:
+  interfaces:
+    - "^eth0$"
+  externalIPs: true
+  loadBalancerIPs: true

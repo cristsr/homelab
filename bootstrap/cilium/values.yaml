@@ -17,6 +17,13 @@ ipv4NativeRoutingCIDR: "10.244.0.0/16"
 gatewayAPI:
   enabled: true
 
+# Asigna IPs LAN reales a los Services LoadBalancer de los Gateways (ver
+# platform/networking/cilium-gateway/lb-ippool.yaml y
+# l2-announcement-policy.yaml) - sin esto quedan en <pending> para siempre,
+# sin ningun controlador externo (MetalLB) que los resuelva.
+l2announcements:
+  enabled: true
+
 hubble:
   enabled: true
   relay:
