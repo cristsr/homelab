@@ -12,6 +12,12 @@
 #
 # Se re-ejecuta en cada arranque de la red (incluido tras un reboot del
 # hipervisor) porque libvirt regenera esa cadena desde cero cada vez.
+# OJO: un `firewall-cmd --reload` tambien dispara esa regeneracion (libvirt
+# se suscribe a los reloads de firewalld) y las reglas insertadas quedan
+# debajo del reject - inutilizadas. Por eso host-network.yaml corre este
+# hook SIEMPRE despues de su reload, y cualquier reload manual de firewalld
+# en el host debe re-ejecutarlo despues:
+#   /etc/libvirt/hooks/network default started - -
 
 NETWORK_NAME="${1:-}"
 OPERATION="${2:-}"
@@ -24,5 +30,10 @@ nft insert rule ip libvirt_network guest_input oif "virbr0" ip daddr {{ agentgat
 nft insert rule ip libvirt_network guest_input oif "virbr0" ip daddr {{ agentgateway_lb_ip }} tcp dport 443 accept 2>/dev/null || true
 nft insert rule ip libvirt_network guest_input oif "virbr0" ip daddr {{ private_dns_ip }} tcp dport 53 accept 2>/dev/null || true
 nft insert rule ip libvirt_network guest_input oif "virbr0" ip daddr {{ private_dns_ip }} udp dport 53 accept 2>/dev/null || true
+# ICMP para diagnostico (ping) hacia los mismos destinos - los clientes de
+# Tailscale y la LAN lo usan como primera prueba de conectividad.
+nft insert rule ip libvirt_network guest_input oif "virbr0" ip daddr {{ cilium_gateway_lb_ip }} icmp type echo-request accept 2>/dev/null || true
+nft insert rule ip libvirt_network guest_input oif "virbr0" ip daddr {{ agentgateway_lb_ip }} icmp type echo-request accept 2>/dev/null || true
+nft insert rule ip libvirt_network guest_input oif "virbr0" ip daddr {{ private_dns_ip }} icmp type echo-request accept 2>/dev/null || true
 
 exit 0
