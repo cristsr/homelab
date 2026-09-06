@@ -8,7 +8,7 @@ spec:
     - name: main
       namespace: networking
   hostnames:
-    - sonarqube.cristianpuenguenan.online
+    - sonarqube.cristianpuenguenan.internal
   rules:
     - backendRefs:
         - name: sonarqube-sonarqube

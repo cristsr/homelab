@@ -8,7 +8,7 @@ spec:
     - name: main
       namespace: networking
   hostnames:
-    - argocd.cristianpuenguenan.online
+    - argocd.cristianpuenguenan.internal
   rules:
     - backendRefs:
         - name: argocd-server

@@ -170,7 +170,7 @@ Controla el ciclo de vida de todas las aplicaciones del cluster. La `root-app` a
 | `server.insecure` | `true` (sin TLS interno — el Gateway solo escucha HTTP:80, ver §7) |
 | Timeout de reconciliacion | `180s` |
 | RBAC por defecto | `role:readonly` |
-| Dominio | `argocd.cristianpuenguenan.online` |
+| Dominio | `argocd.cristianpuenguenan.internal` |
 
 ### 2.4 Namespaces
 
@@ -216,14 +216,14 @@ Herramientas de administracion/observabilidad — solo alcanzables por LAN/Tails
 
 | Subdominio | Backend | Namespace |
 |-----------|---------|-----------|
-| `argocd.cristianpuenguenan.online` | argocd-server:80 | argocd |
-| `grafana.cristianpuenguenan.online` | prometheus-grafana:80 | observability |
-| `headlamp.cristianpuenguenan.online` | headlamp:80 | observability |
-| `hubble.cristianpuenguenan.online` | hubble-ui:80 | kube-system |
-| `longhorn.cristianpuenguenan.online` | longhorn-frontend:80 | longhorn-system |
-| `openbao.cristianpuenguenan.online` | openbao:8200 | secret-management |
-| `openmemory.cristianpuenguenan.online` | openmemory-ui:3000 | devtools |
-| `sonarqube.cristianpuenguenan.online` | sonarqube-sonarqube:9000 | sonarqube |
+| `argocd.cristianpuenguenan.internal` | argocd-server:80 | argocd |
+| `grafana.cristianpuenguenan.internal` | prometheus-grafana:80 | observability |
+| `headlamp.cristianpuenguenan.internal` | headlamp:80 | observability |
+| `hubble.cristianpuenguenan.internal` | hubble-ui:80 | kube-system |
+| `longhorn.cristianpuenguenan.internal` | longhorn-frontend:80 | longhorn-system |
+| `openbao.cristianpuenguenan.internal` | openbao:8200 | secret-management |
+| `openmemory.cristianpuenguenan.internal` | openmemory-ui:3000 | devtools |
+| `sonarqube.cristianpuenguenan.internal` | sonarqube-sonarqube:9000 | sonarqube |
 
 #### 3.1.c Agent Gateway (solo servidores MCP)
 
@@ -233,9 +233,9 @@ Retenido unicamente para las rutas que aprovechan features reales de protocolo M
 
 | Subdominio | Backend | Namespace |
 |-----------|---------|-----------|
-| `agentgateway.cristianpuenguenan.online` | agentgateway admin UI | networking |
-| `openmemory-api.cristianpuenguenan.online` | openmemory:8765 (MCP server) | devtools |
-| `mcp.cristianpuenguenan.online` | mcp-sonarqube:3000 (`/sonarqube`) | sonarqube |
+| `agentgateway.cristianpuenguenan.internal` | agentgateway admin UI | networking |
+| `openmemory-api.cristianpuenguenan.internal` | openmemory:8765 (MCP server) | devtools |
+| `mcp.cristianpuenguenan.internal` | mcp-sonarqube:3000 (`/sonarqube`) | sonarqube |
 
 #### TLS
 
@@ -292,7 +292,7 @@ Dashboard web para inspeccionar el estado del cluster.
 | Parametro | Valor |
 |-----------|-------|
 | Service | ClusterIP:80 |
-| Acceso | `headlamp.cristianpuenguenan.online` via Cilium Gateway API |
+| Acceso | `headlamp.cristianpuenguenan.internal` via Cilium Gateway API |
 
 ### 3.6 OpenBao (Secrets Backend)
 

@@ -8,7 +8,7 @@ spec:
     - name: main
       namespace: networking
   hostnames:
-    - hubble.cristianpuenguenan.online
+    - hubble.cristianpuenguenan.internal
   rules:
     - backendRefs:
         - name: hubble-ui
