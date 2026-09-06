@@ -29,7 +29,7 @@ Homelab de un solo nodo construido sobre k0s con GitOps completo. ArgoCD gestion
 | Ingress / Gateway (generico) | Cilium Gateway API |
 | Ingress / Gateway (MCP) | Agent Gateway 1.1.0 |
 | GitOps | Argo CD 9.5.13 |
-| Certificados TLS | cert-manager + Let's Encrypt + Cloudflare DNS-01 |
+| Certificados TLS | cert-manager: Let's Encrypt (publico, DNS-01) + CA interna (rutas `.internal`) |
 | Storage | Longhorn 1.11.2 |
 | Tunel Internet | Cloudflare Tunnel (cloudflared) |
 | Monitoreo | kube-prometheus-stack + Grafana Operator |
@@ -167,7 +167,7 @@ Controla el ciclo de vida de todas las aplicaciones del cluster. La `root-app` a
 | Parametro | Valor |
 |-----------|-------|
 | `server.ingress.enabled` | `false` (gestionado por HTTPRoute contra el Gateway de Cilium) |
-| `server.insecure` | `true` (sin TLS interno — el Gateway solo escucha HTTP:80, ver §7) |
+| `server.insecure` | `true` (TLS terminado en el Gateway `main` con la CA interna — el backend siempre habla HTTP plano, ver §3.1 TLS) |
 | Timeout de reconciliacion | `180s` |
 | RBAC por defecto | `role:readonly` |
 | Dominio | `argocd.cristianpuenguenan.internal` |
@@ -195,7 +195,7 @@ Declarados en `bootstrap/namespaces.yaml` y creados por el hook presync de Ciliu
 
 ### 3.1 Ingress: tres Gateway API, uno por audiencia
 
-Ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp) y ADR-011 en [DECISIONS.md](DECISIONS.md). Los tres `Gateway` viven en el namespace `networking` y escuchan HTTP:80 unicamente (ver §7 — no hay HTTPS interno hoy, TLS real termina en el borde de Cloudflare). La separacion entre `public` y `main` no es por tipo de trafico sino por **audiencia**: `public` es el unico Gateway al que apunta el wildcard de Cloudflare — lo que es publico queda decidido por que `HTTPRoute` vive ahi, no por una lista aparte.
+Ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp), ADR-011 y ADR-012 en [DECISIONS.md](DECISIONS.md). Los tres `Gateway` viven en el namespace `networking`. `main` y `agentgateway-mcp` terminan TLS en HTTPS:443 con la CA interna del cluster (ver TLS abajo); su puerto 80 solo hace redirect a HTTPS. `public` escucha HTTP:80 plano — el TLS de cara a Internet lo termina Cloudflare en el borde del tunel. La separacion entre `public` y `main` no es por tipo de trafico sino por **audiencia**: `public` es el unico Gateway al que apunta el wildcard de Cloudflare — lo que es publico queda decidido por que `HTTPRoute` vive ahi, no por una lista aparte.
 
 #### 3.1.a Cilium Gateway API — público (`public`)
 
@@ -210,7 +210,7 @@ Ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-age
 
 #### 3.1.b Cilium Gateway API — privado (`main`)
 
-**`GatewayClass`**: `cilium` (creada automaticamente por Cilium al habilitar `gatewayAPI.enabled: true`) — **`Gateway`**: `main` (`platform/networking/cilium-gateway/gateway.yaml`) — **Service generado**: `cilium-gateway-main` — IP LAN fija `192.168.122.240` (Cilium L2 Announcements, ver §7)
+**`GatewayClass`**: `cilium` (creada automaticamente por Cilium al habilitar `gatewayAPI.enabled: true`) — **`Gateway`**: `main` (`platform/networking/cilium-gateway/gateway.yaml`) — **Service generado**: `cilium-gateway-main` — IP LAN fija `192.168.122.240` (Cilium L2 Announcements, ver §7) — listeners: `https` (443, TLS terminate con `wildcard-internal-tls`) y `http` (80, solo redirect)
 
 Herramientas de administracion/observabilidad — solo alcanzables por LAN/Tailscale, nunca por el wildcard de Cloudflare:
 
@@ -227,7 +227,7 @@ Herramientas de administracion/observabilidad — solo alcanzables por LAN/Tails
 
 #### 3.1.c Agent Gateway (solo servidores MCP)
 
-**Chart**: `oci://cr.agentgateway.dev/charts/agentgateway` — **`GatewayClass`**: `agentgateway` — **`Gateway`**: `agentgateway-mcp` (`platform/networking/agentgateway/gateway.yaml`)
+**Chart**: `oci://cr.agentgateway.dev/charts/agentgateway` — **`GatewayClass`**: `agentgateway` — **`Gateway`**: `agentgateway-mcp` (`platform/networking/agentgateway/gateway.yaml`) — listeners: `https` (443, TLS terminate con `wildcard-internal-tls`) y `http` (80, solo redirect)
 
 Retenido unicamente para las rutas que aprovechan features reales de protocolo MCP (multiplexing, virtual MCP) que Cilium no ofrece:
 
@@ -239,7 +239,10 @@ Retenido unicamente para las rutas que aprovechan features reales de protocolo M
 
 #### TLS
 
-Certificado wildcard `*.cristianpuenguenan.online` emitido por cert-manager en el secret `wildcard-home-tls` (namespace `networking`), pero **no esta referenciado por ningun listener de ningun Gateway** — ambos solo tienen HTTP:80. El TLS real de cara a Internet lo termina Cloudflare en el borde del tunel; el trafico dentro del cluster viaja en HTTP plano. Cerrar este gap (agregar un listener HTTPS con el certificado) queda pendiente como deuda tecnica, fuera del alcance de la migracion a Cilium.
+Dos planos separados (ver ADR-012):
+
+- **Interno (`*.cristianpuenguenan.internal`)**: `.internal` es un TLD reservado — ninguna CA publica puede emitir para el. El cluster corre su propia CA (`internal-root-ca`, `platform/networking/cert-manager/internal-tls.yaml`, patron selfSigned → CA → ClusterIssuer `internal-ca`) que firma un wildcard unico `wildcard-internal-tls` referenciado por los listeners HTTPS de `main` y `agentgateway-mcp`. La CA hay que confiarla a mano en cada dispositivo del tailnet (ver `docs/OPERATIONS.md` §11.5). El puerto 80 de ambos Gateways solo responde 301 → HTTPS.
+- **Publico (`*.cristianpuenguenan.online`)**: el TLS de cara a Internet lo termina Cloudflare en el borde del tunel; cloudflared habla HTTP al `Gateway public`. El wildcard `wildcard-home-tls` emitido por cert-manager (Let's Encrypt, DNS-01) sigue sin estar referenciado por ningun listener — se mantiene emitido para uso futuro, no es necesario para el flujo actual.
 
 ### 3.2 cert-manager
 
@@ -254,6 +257,8 @@ Automatiza la emision y renovacion de certificados TLS.
 | Certificado | Wildcard `*.cristianpuenguenan.online` + apex |
 | Secret del token | `cloudflare-api-token` en namespace `networking` (via ExternalSecret) |
 | Secret del certificado | `wildcard-home-tls` en namespace `networking` |
+| CA interna | `internal-root-ca` (10 años) → ClusterIssuer `internal-ca` (`internal-tls.yaml`) |
+| Certificado interno | Wildcard `*.cristianpuenguenan.internal` → `wildcard-internal-tls`, usado por `main` y `agentgateway-mcp` |
 
 ### 3.3 Longhorn (Storage)
 
@@ -449,7 +454,7 @@ Cada Gateway tiene una IP LAN fija, asignada via Cilium L2 Announcements (`Ciliu
 |---------|---------|
 | `cilium-gateway-main` (rutas genericas) | `192.168.122.240` |
 | `agentgateway-mcp` (rutas MCP) | `192.168.122.250` |
-| `private-dns` (CoreDNS, resuelve `cristianpuenguenan.online` para LAN/Tailscale) | `192.168.122.253` |
+| `private-dns` (CoreDNS, resuelve `cristianpuenguenan.internal` para LAN/Tailscale) | `192.168.122.253` |
 
 ```
 Internet (solo portfolio + api /webhooks)
@@ -457,20 +462,22 @@ Internet (solo portfolio + api /webhooks)
         └── Cloudflare Tunnel (egreso desde cloudflared, dentro del cluster)
               └── cilium-gateway-public:80 ──► Backend ClusterIP (portfolio/flow-api, por HTTPRoute)
 
-LAN fisica (sin Tailscale)
+LAN fisica (sin Tailscale) — via de acceso NO soportada (ADR-012); los
+forward-port siguen existiendo pero el puerto 80 responde solo redirect
+hacia IPs internas inalcanzables desde la LAN
   └── Host 192.168.80.20 (firewalld forward-port, ansible/host-network.yaml)
         ├── 80/443   → 192.168.122.240:80/443 (cilium-gateway-main)
         ├── 8080/8443 → 192.168.122.250:80/443 (agentgateway-mcp)
         └── 53/udp+tcp → 192.168.122.253:53 (private-dns)
 
-Tailscale (cualquier dispositivo del usuario, desde cualquier lado)
+Tailscale (cualquier dispositivo del usuario, desde cualquier lado) — via prioritaria
   └── Subnet router en el hipervisor (`tailscale up --advertise-routes=192.168.122.0/24`)
-        ├── 192.168.122.240:80 (cilium-gateway-main)
-        ├── 192.168.122.250:80 (agentgateway-mcp)
+        ├── 192.168.122.240:443 TLS / :80 redirect (cilium-gateway-main)
+        ├── 192.168.122.250:443 TLS / :80 redirect (agentgateway-mcp)
         └── 192.168.122.253:53 (private-dns, via Tailscale Split DNS)
 ```
 
-Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git); para LAN/Tailscale, `private-dns` (CoreDNS, `platform/networking/private-dns/`) resuelve `cristianpuenguenan.online` a la IP fija correspondiente — ver §11 en `docs/OPERATIONS.md` para configurar Tailscale Split DNS o el DNS de la LAN.
+Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git); para LAN/Tailscale, `private-dns` (CoreDNS, `platform/networking/private-dns/`) resuelve `cristianpuenguenan.internal` a la IP fija correspondiente — ver §11 en `docs/OPERATIONS.md` para configurar Tailscale Split DNS.
 
 La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo tiene WiFi activa — bridging de una VM sobre WiFi es fragil con la mayoria de drivers/APs (ver ADR-008).
 
@@ -478,14 +485,13 @@ La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo ti
 
 | Puerto | Protocolo | Descripcion |
 |--------|-----------|-------------|
-| 80/443 | TCP | HTTP de `cilium-gateway-main` (host → IP fija via forward-port) |
-| 8080/8443 | TCP | HTTP de `agentgateway-mcp` (host → IP fija via forward-port) |
+| 80/443 | TCP | 80 = redirect a HTTPS, 443 = TLS de `cilium-gateway-main` (host → IP fija via forward-port) |
+| 8080/8443 | TCP | 8080 = redirect a HTTPS, 8443 = TLS de `agentgateway-mcp` (host → IP fija via forward-port) |
 | 53 | UDP/TCP | DNS de `private-dns` (host → IP fija via forward-port) |
-| — | — | Reservado para HTTPS (forwardeado, pero ningun Gateway tiene listener HTTPS hoy — ver §3.1 TLS) |
 
 ### DNS y subdominios
 
-`portfolio`/`api` resuelven via Cloudflare Tunnel (WAN). El resto de las rutas no tiene DNS publico — se accede por IP directa (`192.168.122.240`/`192.168.122.250`) o agregando el hostname al `hosts` file local, desde la LAN o desde Tailscale.
+`portfolio`/`api` resuelven via Cloudflare Tunnel (WAN). El resto de las rutas no tiene DNS publico — resuelven via `private-dns` con Tailscale Split DNS restringido a `cristianpuenguenan.internal` (ver §11 en `docs/OPERATIONS.md`).
 
 ---
 
@@ -545,7 +551,8 @@ root-app (gitops/root-app.yaml)
 ```
 Longhorn ──────────────────────► Todas las bases de datos y PVCs
 
-cert-manager ──► Certificate ──► wildcard-home-tls (emitido, pero no referenciado por ningun Gateway hoy — ver §3.1 TLS)
+cert-manager ──► internal-root-ca (CA interna) ──► wildcard-internal-tls ──► listeners HTTPS de main / agentgateway-mcp
+            └──► wildcard-home-tls (emitido, no referenciado — ver §3.1 TLS)
 
 OpenBao ──► openbao-init ──► ExternalSecrets sync ──► todos los secrets
 

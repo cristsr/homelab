@@ -9,9 +9,25 @@ spec:
     - type: IPAddress
       value: 192.168.122.240
   listeners:
+    # 80 queda exclusivamente para el redirect HTTP->HTTPS
+    # (httproute-redirect.yaml); por eso solo admite rutas del namespace
+    # `networking`. El contenido vive en el listener https.
     - name: http
       protocol: HTTP
       port: 80
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: wildcard-internal-tls
       allowedRoutes:
         namespaces:
           from: All

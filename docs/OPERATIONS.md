@@ -530,9 +530,9 @@ sudo find /var/log/pods -type f -mtime +7 -delete
 
 ---
 
-## 11. Acceso Privado: LAN + Tailscale
+## 11. Acceso Privado: Tailscale
 
-Ver [ADR-011](DECISIONS.md). Las rutas de administración (todas menos `portfolio` y `api` `/webhooks`) no son públicas — se accede por IP fija de cada Gateway (`192.168.122.240` Cilium, `192.168.122.250` Agent Gateway), desde la LAN física o desde Tailscale.
+Ver [ADR-011](DECISIONS.md) y [ADR-012](DECISIONS.md). Las rutas de administración (todas menos `portfolio` y `api` `/webhooks`) no son públicas — se accede desde Tailscale (la vía prioritaria y única soportada, ver §11.2), con TLS terminado en los Gateways por la CA interna del cluster (§11.5 para confiar la CA en tus dispositivos).
 
 ### 11.1 Configurar el subnet router de Tailscale (una sola vez)
 
@@ -544,40 +544,33 @@ sudo tailscale up --ssh --advertise-routes=192.168.122.0/24 --accept-routes
 
 Luego aprobar la ruta en [login.tailscale.com/admin/machines](https://login.tailscale.com/admin/machines) → `homelab` → Edit route settings → habilitar `192.168.122.0/24`. Sin este paso manual, Tailscale acepta el anuncio pero no rutea tráfico por él.
 
+Además, firewalld del hipervisor necesita la policy `ts_to_libvirt` (trusted → libvirt) y `tailscale0` en la zona `trusted` — `ansible/host-network.yaml` ya lo configura todo.
+
 Verificar desde cualquier dispositivo en tu tailnet (podés estar en cualquier lado, no hace falta estar en la LAN de casa):
 
 ```bash
-curl -H "Host: argocd.cristianpuenguenan.internal" http://192.168.122.240/
+curl -k https://argocd.cristianpuenguenan.internal/
 ```
 
-### 11.2 Acceso desde la LAN física (sin Tailscale)
+(`-k` hasta que instales la CA del cluster en el dispositivo, §11.5.)
 
-Ya resuelto por `ansible/host-network.yaml` — `80/443` del host (`192.168.80.20`) reenvía a `192.168.122.240` (Cilium), `8080/8443` a `192.168.122.250` (Agent Gateway).
+### 11.2 LAN física sin Tailscale: no soportada
 
-El mismo playbook también instala `/etc/libvirt/hooks/network` en el hipervisor — sin este hook, libvirt rechaza por defecto cualquier conexión nueva entrante hacia su red NAT, incluso con el forward-port de firewalld bien configurado (ver [ADR-011](DECISIONS.md), actualización de troubleshooting). Si algún día el forward-port deja de andar después de un reboot del hipervisor o de reiniciar `libvirtd`, sospechá primero de este hook (`cat /etc/libvirt/hooks/network`, y `sudo nft list chain ip libvirt_network guest_input` para confirmar que las excepciones siguen ahí).
+Decisión de ADR-012: Tailscale es la vía de acceso; un dispositivo solo en la LAN física (sin cliente Tailscale) **no puede usar las rutas privadas** — el puerto 80 de los Gateways ahora solo responde redirect 301 a HTTPS, y la IP interna a la que redirige no es alcanzable desde la LAN. No es un bug: para eso está Tailscale.
+
+`ansible/host-network.yaml` sigue manteniendo los forward-ports (`80/443`, `8080/8443`, `53`) y el hook `/etc/libvirt/hooks/network` — este último sigue siendo crítico para el tráfico Tailscale que atraviesa el hipervisor: sin él, libvirt rechaza por defecto cualquier conexión nueva entrante hacia su red NAT (ver [ADR-011](DECISIONS.md), actualización de troubleshooting). Si algo deja de andar después de un reboot del hipervisor o de reiniciar `libvirtd`, sospechá primero de ese hook (`cat /etc/libvirt/hooks/network`, y `sudo nft list chain ip libvirt_network guest_input` para confirmar que las excepciones siguen ahí). Ojo: un `firewall-cmd --reload` manual también regenera la cadena y requiere re-ejecutar el hook (`/etc/libvirt/hooks/network default started - -`).
 
 ### 11.3 Resolver los hostnames (DNS privado)
 
-Hay un `CoreDNS` propio (`platform/networking/private-dns/`, IP fija `192.168.122.253`) que resuelve *solo* `cristianpuenguenan.online` — todo lo demás lo reenvía al DNS público real, no reemplaza tu DNS habitual.
+Hay un `CoreDNS` propio (`platform/networking/private-dns/`, IP fija `192.168.122.253`) que resuelve *solo* `cristianpuenguenan.internal` — todo lo demás lo reenvía al DNS público real, no reemplaza tu DNS habitual.
 
-**Desde Tailscale (recomendado, una sola vez):** en [login.tailscale.com/admin/dns](https://login.tailscale.com/admin/dns) agregar un Nameserver custom `192.168.122.253` con "Restrict to domain: `cristianpuenguenan.internal`". A partir de ahí, cualquier dispositivo tuyo en el tailnet resuelve los hostnames privados solo, sin tocar nada más.
+**Desde Tailscale (la vía soportada, una sola vez):** en [login.tailscale.com/admin/dns](https://login.tailscale.com/admin/dns) agregar un Nameserver custom `192.168.122.253` con "Restrict to domain: `cristianpuenguenan.internal`". A partir de ahí, cualquier dispositivo tuyo en el tailnet resuelve los hostnames privados solo, sin tocar nada más.
 
-**Desde la LAN física (sin Tailscale):** configurá `192.168.80.20` (el hipervisor) como DNS del dispositivo — `ansible/host-network.yaml` reenvía el puerto 53 (UDP/TCP) hacia el CoreDNS interno.
-
-**Alternativa manual, sin tocar ninguna config de red:** agregar el hostname a tu `hosts` file local (`/etc/hosts` o `C:\Windows\System32\drivers\etc\hosts`) — la IP correcta depende de si tu dispositivo está en Tailscale (con el subnet router activo, §11.1) o solo en la LAN física:
-
-**Si estás en Tailscale** (alcanza la red interna `192.168.122.0/24` directo, sin pasar por el hipervisor): usá las IPs fijas de los Gateways tal cual, puerto 80 normal:
+**Alternativa manual, sin Split DNS:** agregar los hostnames al `hosts` file local (`/etc/hosts` o `C:\Windows\System32\drivers\etc\hosts`) apuntando a las IPs fijas de los Gateways (requiere estar en Tailscale, §11.1):
 
 ```
-192.168.122.240 argocd.cristianpuenguenan.internal grafana.cristianpuenguenan.internal longhorn.cristianpuenguenan.internal
+192.168.122.240 argocd.cristianpuenguenan.internal grafana.cristianpuenguenan.internal longhorn.cristianpuenguenan.internal headlamp.cristianpuenguenan.internal hubble.cristianpuenguenan.internal openbao.cristianpuenguenan.internal openmemory.cristianpuenguenan.internal sonarqube.cristianpuenguenan.internal
 192.168.122.250 agentgateway.cristianpuenguenan.internal mcp.cristianpuenguenan.internal openmemory-api.cristianpuenguenan.internal
-```
-
-**Si estás solo en la LAN física, sin Tailscale**: la IP interna `192.168.122.240`/`.250` **no es alcanzable directo** — hay que pasar por el forward del hipervisor. Usá `192.168.80.20` para todos los hostnames, pero las rutas de Agent Gateway necesitan el puerto `8080` explícito en la URL (`http://mcp.cristianpuenguenan.internal:8080/`), porque el forward-port no puede distinguir a qué Gateway ir solo por el hostname:
-
-```
-192.168.80.20 argocd.cristianpuenguenan.internal grafana.cristianpuenguenan.internal longhorn.cristianpuenguenan.internal headlamp.cristianpuenguenan.internal hubble.cristianpuenguenan.internal openbao.cristianpuenguenan.internal openmemory.cristianpuenguenan.internal sonarqube.cristianpuenguenan.internal
-192.168.80.20 agentgateway.cristianpuenguenan.internal mcp.cristianpuenguenan.internal openmemory-api.cristianpuenguenan.internal
 ```
 
 Para agregar una ruta privada nueva: sumarla al `Corefile` en `platform/networking/private-dns/configmap.yaml` y hacer `git push` — Reloader reinicia el pod solo, no hace falta ningún paso manual adicional.
@@ -592,6 +585,25 @@ Cloudflare no tiene una entrada por ruta — hay un único wildcard (`*.cristian
 Para hacer pública una ruta nueva: agregar su `HTTPRoute` con `parentRefs: [{name: public, namespace: networking}]` (ver `workloads/portfolio/httproute.yaml` como ejemplo) — no hace falta tocar nada en Cloudflare. Para hacer privada una que hoy es pública: cambiar su `parentRefs` a `main` (o `agentgateway-mcp` si depende de MCP).
 
 En [dash.cloudflare.com](https://dash.cloudflare.com) → Zero Trust → Networks → Tunnels → túnel del homelab → Public Hostnames, la única entrada a mantener es el wildcard apuntando a `cilium-gateway-public` — no se toca al agregar o quitar rutas privadas.
+
+### 11.5 TLS interno: confiar la CA del cluster en tus dispositivos
+
+`.internal` es un TLD reservado — ninguna CA pública emite certificados para él, así que el cluster firma los suyos con su propia CA (`internal-root-ca`, ver [ADR-012](DECISIONS.md)). Una única vez por dispositivo, exportar e instalar esa CA:
+
+**Exportar el certificado** (desde cualquier máquina con acceso `kubectl` a la VM, o por SSH — §0):
+
+```bash
+kubectl get secret internal-root-ca -n networking -o jsonpath='{.data.ca\.crt}' | base64 -d > homelab-internal-ca.crt
+```
+
+Pasar el archivo al dispositivo y:
+
+- **Windows** (PowerShell como admin): `certutil -addstore -f Root homelab-internal-ca.crt`
+- **Linux**: copiar a `/usr/local/share/ca-certificates/homelab-internal-ca.crt` y `sudo update-ca-certificates`
+- **Android**: Ajustes → Seguridad → Cifrado y credenciales → Instalar un certificado → Certificado de CA
+- **iOS**: abrir el archivo → permitir el perfil → luego Ajustes → General → Información → Configuración de confianza de certificados → habilitar "Homelab Internal CA"
+
+Notas: Firefox usa su propio store (Configuración → Privacidad y seguridad → Certificados → Importar). Si la CA se regenera algún día (vence en 10 años, o se borra el secret `internal-root-ca`), hay que repetir este paso en todos los dispositivos.
 
 ---
 

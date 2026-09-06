@@ -1,0 +1,20 @@
+# Redirect HTTP->HTTPS para el Gateway `agentgateway-mcp`. Sin `hostnames` a
+# proposito: cualquier request que llegue al puerto 80 de la IP de este
+# Gateway se manda al 443. Las rutas de contenido viven todas en el listener
+# `https` (sectionName: https en cada HTTPRoute).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: redirect-to-https
+  namespace: networking
+spec:
+  parentRefs:
+    - name: agentgateway-mcp
+      namespace: networking
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
