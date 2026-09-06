@@ -55,6 +55,8 @@ homelab/
 │   ├── host-network.yaml       # Port-forward LAN (firewalld) del host hacia la VM
 │   ├── teardown.yaml           # Playbook para destruir el cluster
 │   ├── vault-populate.yaml     # Playbook para poblar OpenBao KV
+│   ├── load-extra-secrets.yaml # Secrets de apps (redis, sonarqube-db, etc.) - corre en CI
+│   ├── extra-secrets.yaml      # Cifrado (ansible-vault) - `ansible-vault edit` para rotar/agregar
 │   ├── update-vm-packages.yaml # Actualizar paquetes del SO de la VM (manual, no en CI)
 │   ├── group_vars/all.yaml     # Variables + secrets cifrados (ansible-vault)
 │   ├── inventory.yaml          # Generado por `terraform apply`
@@ -130,9 +132,10 @@ ansible-playbook site.yaml
 cd ..
 kubectl apply -f gitops/root-app.yaml
 
-# 6. Poblar OpenBao
+# 6. Poblar OpenBao (infraestructura + secrets de apps)
 cd ansible
 ansible-playbook vault-populate.yaml
+ansible-playbook load-extra-secrets.yaml
 ```
 
 Para una guia detallada, consulta [docs/INSTALL.md](./docs/INSTALL.md).
