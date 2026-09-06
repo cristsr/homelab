@@ -9,14 +9,12 @@
 
   vars:
     # Puerto de entrada en el host -> puerto:IP real del Gateway dentro de
-    # la red NAT de libvirt (IPs fijas via Cilium L2 Announcements, ver
-    # platform/networking/cilium-gateway/). No se puede forwardear 80/443
-    # dos veces al host, por eso Agent Gateway usa 8080/8443.
+    # la red NAT de libvirt (IP fija via Cilium L2 Announcements, ver
+    # platform/networking/cilium-gateway/). agentgateway-mcp ya no tiene IP
+    # propia - sus rutas se reenvian puertas adentro desde `main` (ADR-012).
     forward_rules:
       - { port: 80, toport: 80, toaddr: "{{ cilium_gateway_lb_ip }}", proto: tcp }
       - { port: 443, toport: 443, toaddr: "{{ cilium_gateway_lb_ip }}", proto: tcp }
-      - { port: 8080, toport: 80, toaddr: "{{ agentgateway_lb_ip }}", proto: tcp }
-      - { port: 8443, toport: 443, toaddr: "{{ agentgateway_lb_ip }}", proto: tcp }
       # DNS privado (platform/networking/private-dns/) - un dispositivo LAN
       # configura este host (192.168.80.20) como su DNS y llega al CoreDNS
       # interno que resuelve las rutas privadas.

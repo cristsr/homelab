@@ -5,7 +5,11 @@ gateway:
   controller:
     replicas: 1
     service:
-      type: LoadBalancer
+      # ClusterIP a proposito: TLS lo termina `main` (Cilium) y reenvia
+      # en HTTP plano hacia este Service - ver ADR-012 (actualizacion) en
+      # docs/DECISIONS.md. El controller de Agent Gateway tampoco soporta
+      # HTTPS, asi que no tiene sentido exponerlo con IP externa propia.
+      type: ClusterIP
 
 metrics:
   enabled: true

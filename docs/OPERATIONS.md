@@ -532,7 +532,7 @@ sudo find /var/log/pods -type f -mtime +7 -delete
 
 ## 11. Acceso Privado: Tailscale
 
-Ver [ADR-011](DECISIONS.md) y [ADR-012](DECISIONS.md). Las rutas de administración (todas menos `portfolio` y `api` `/webhooks`) no son públicas — se accede desde Tailscale (la vía prioritaria y única soportada, ver §11.2). Las rutas del Gateway `main` sirven HTTPS (TLS terminado por la CA interna del cluster, §11.5 para confiar la CA en tus dispositivos); las 3 rutas de Agent Gateway (`mcp`, `openmemory-api`, `agentgateway`) quedan en `http://` puerto 80 — su controller no soporta listeners HTTPS (ADR-012) y el transporte ya viaja cifrado por WireGuard dentro del tailnet.
+Ver [ADR-011](DECISIONS.md) y [ADR-012](DECISIONS.md). Las rutas de administración (todas menos `portfolio` y `api` `/webhooks`) no son públicas — se accede desde Tailscale (la vía prioritaria y única soportada, ver §11.2), y las 11 sirven HTTPS con TLS terminado por la CA interna del cluster (§11.5 para confiar la CA en tus dispositivos). Las 3 rutas de Agent Gateway (`mcp`, `openmemory-api`, `agentgateway`) también son `https://` de cara al cliente: su controller sigue sin soportar listeners HTTPS (ADR-012), así que es el Gateway `main` el que termina el TLS y reenvía en HTTP plano, puertas adentro del cluster, hacia el Service de Agent Gateway.
 
 ### 11.1 Configurar el subnet router de Tailscale (una sola vez)
 
@@ -558,7 +558,7 @@ curl -k https://argocd.cristianpuenguenan.internal/
 
 Decisión de ADR-012: Tailscale es la vía de acceso; un dispositivo solo en la LAN física (sin cliente Tailscale) **no puede usar las rutas privadas** — el puerto 80 de `main` responde solo redirect 301 hacia una IP interna inalcanzable desde la LAN, y no hay DNS que resuelve los hostnames. No es un bug: para eso está Tailscale.
 
-`ansible/host-network.yaml` sigue manteniendo los forward-ports (`80/443`, `8080/8443`, `53`) y el hook `/etc/libvirt/hooks/network` — este último sigue siendo crítico para el tráfico Tailscale que atraviesa el hipervisor: sin él, libvirt rechaza por defecto cualquier conexión nueva entrante hacia su red NAT (ver [ADR-011](DECISIONS.md), actualización de troubleshooting). Si algo deja de andar después de un reboot del hipervisor o de reiniciar `libvirtd`, sospechá primero de ese hook (`cat /etc/libvirt/hooks/network`, y `sudo nft list chain ip libvirt_network guest_input` para confirmar que las excepciones siguen ahí). Ojo: un `firewall-cmd --reload` manual también regenera la cadena y requiere re-ejecutar el hook (`/etc/libvirt/hooks/network default started - -`).
+`ansible/host-network.yaml` sigue manteniendo los forward-ports (`80/443`, `53`) y el hook `/etc/libvirt/hooks/network` — este último sigue siendo crítico para el tráfico Tailscale que atraviesa el hipervisor: sin él, libvirt rechaza por defecto cualquier conexión nueva entrante hacia su red NAT (ver [ADR-011](DECISIONS.md), actualización de troubleshooting). Si algo deja de andar después de un reboot del hipervisor o de reiniciar `libvirtd`, sospechá primero de ese hook (`cat /etc/libvirt/hooks/network`, y `sudo nft list chain ip libvirt_network guest_input` para confirmar que las excepciones siguen ahí). Ojo: un `firewall-cmd --reload` manual también regenera la cadena y requiere re-ejecutar el hook (`/etc/libvirt/hooks/network default started - -`).
 
 ### 11.3 Resolver los hostnames (DNS privado)
 
@@ -569,8 +569,7 @@ Hay un `CoreDNS` propio (`platform/networking/private-dns/`, IP fija `192.168.12
 **Alternativa manual, sin Split DNS:** agregar los hostnames al `hosts` file local (`/etc/hosts` o `C:\Windows\System32\drivers\etc\hosts`) apuntando a las IPs fijas de los Gateways (requiere estar en Tailscale, §11.1):
 
 ```
-192.168.122.240 argocd.cristianpuenguenan.internal grafana.cristianpuenguenan.internal longhorn.cristianpuenguenan.internal headlamp.cristianpuenguenan.internal hubble.cristianpuenguenan.internal openbao.cristianpuenguenan.internal openmemory.cristianpuenguenan.internal sonarqube.cristianpuenguenan.internal
-192.168.122.250 agentgateway.cristianpuenguenan.internal mcp.cristianpuenguenan.internal openmemory-api.cristianpuenguenan.internal
+192.168.122.240 argocd.cristianpuenguenan.internal grafana.cristianpuenguenan.internal longhorn.cristianpuenguenan.internal headlamp.cristianpuenguenan.internal hubble.cristianpuenguenan.internal openbao.cristianpuenguenan.internal openmemory.cristianpuenguenan.internal sonarqube.cristianpuenguenan.internal agentgateway.cristianpuenguenan.internal mcp.cristianpuenguenan.internal openmemory-api.cristianpuenguenan.internal
 ```
 
 Para agregar una ruta privada nueva: sumarla al `Corefile` en `platform/networking/private-dns/configmap.yaml` y hacer `git push` — Reloader reinicia el pod solo, no hace falta ningún paso manual adicional.

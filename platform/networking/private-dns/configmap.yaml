@@ -1,5 +1,6 @@
-# Registros A estaticos solo para las rutas privadas del cluster (las que
-# viven en `main` y `agentgateway-mcp`, ver docs/DECISIONS.md ADR-011).
+# Registros A estaticos solo para las rutas privadas del cluster - todas
+# entran por `main` (192.168.122.240), incluidas las de Agent Gateway, que
+# se reenvian puertas adentro (ver docs/DECISIONS.md ADR-011 y ADR-012).
 # portfolio/api no entran acá - son publicas, resuelven via el DNS real de
 # Cloudflare. `fallthrough` + `forward` evitan que esto se convierta en un
 # agujero negro si algo lo usa como DNS primario por error.
@@ -20,9 +21,9 @@ data:
             192.168.122.240 openbao.cristianpuenguenan.internal
             192.168.122.240 openmemory.cristianpuenguenan.internal
             192.168.122.240 sonarqube.cristianpuenguenan.internal
-            192.168.122.250 agentgateway.cristianpuenguenan.internal
-            192.168.122.250 mcp.cristianpuenguenan.internal
-            192.168.122.250 openmemory-api.cristianpuenguenan.internal
+            192.168.122.240 agentgateway.cristianpuenguenan.internal
+            192.168.122.240 mcp.cristianpuenguenan.internal
+            192.168.122.240 openmemory-api.cristianpuenguenan.internal
             fallthrough
         }
         forward . 1.1.1.1 1.0.0.1
