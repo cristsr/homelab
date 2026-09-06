@@ -439,7 +439,7 @@ Cada Gateway tiene una IP LAN fija, asignada via Cilium L2 Announcements (`Ciliu
 | Gateway | IP fija |
 |---------|---------|
 | `cilium-gateway-main` (rutas genericas) | `192.168.122.240` |
-| `agentgateway-mcp` (rutas MCP) | `192.168.122.241` |
+| `agentgateway-mcp` (rutas MCP) | `192.168.122.50` |
 
 ```
 Internet (solo portfolio + api /webhooks)
@@ -450,12 +450,12 @@ Internet (solo portfolio + api /webhooks)
 LAN fisica (sin Tailscale)
   └── Host 192.168.80.20 (firewalld forward-port, ansible/host-network.yaml)
         ├── 80/443   → 192.168.122.240:80/443 (cilium-gateway-main)
-        └── 8080/8443 → 192.168.122.241:80/443 (agentgateway-mcp)
+        └── 8080/8443 → 192.168.122.50:80/443 (agentgateway-mcp)
 
 Tailscale (cualquier dispositivo del usuario, desde cualquier lado)
   └── Subnet router en el hipervisor (`tailscale up --advertise-routes=192.168.122.0/24`)
         ├── 192.168.122.240:80 (cilium-gateway-main)
-        └── 192.168.122.241:80 (agentgateway-mcp)
+        └── 192.168.122.50:80 (agentgateway-mcp)
 ```
 
 Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git); para LAN/Tailscale, el usuario apunta el hostname a la IP correspondiente (`hosts` file local — sin Split DNS de Tailscale por ahora).
@@ -472,7 +472,7 @@ La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo ti
 
 ### DNS y subdominios
 
-`portfolio`/`api` resuelven via Cloudflare Tunnel (WAN). El resto de las rutas no tiene DNS publico — se accede por IP directa (`192.168.122.240`/`.241`) o agregando el hostname al `hosts` file local, desde la LAN o desde Tailscale.
+`portfolio`/`api` resuelven via Cloudflare Tunnel (WAN). El resto de las rutas no tiene DNS publico — se accede por IP directa (`192.168.122.240`/`192.168.122.50`) o agregando el hostname al `hosts` file local, desde la LAN o desde Tailscale.
 
 ---
 
