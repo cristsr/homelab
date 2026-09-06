@@ -471,6 +471,21 @@ kubectl create serviceaccount longhorn-sa -n argocd
 kubectl create clusterrolebinding longhorn-temp --clusterrole=cluster-admin --serviceaccount=argocd:longhorn-sa
 ```
 
+### Actualizar paquetes del SO de la VM
+
+`update-vm-packages.yaml` no corre en `deploy.yml` a proposito: un `dnf upgrade` puede traer un kernel nuevo, y reiniciar el unico nodo del cluster no es algo que deba pasar sin supervision en cada push a master. Se ejecuta manualmente, en una ventana de mantenimiento elegida:
+
+```bash
+cd ansible
+ansible-playbook update-vm-packages.yaml
+```
+
+Si el output indica que se requiere reboot (kernel u otro paquete critico actualizado), el cluster completo queda caido mientras la VM reinicia (single-node). Para aplicar el reboot en el mismo paso:
+
+```bash
+ansible-playbook update-vm-packages.yaml -e reboot_if_needed=true
+```
+
 ### Reinstalar desde cero
 
 Para resetear solo el cluster (mantener la VM):
