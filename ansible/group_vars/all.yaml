@@ -6,7 +6,7 @@ k0s_node_ip: 192.168.122.10 # IP interna de la VM (NAT libvirt); 192.168.80.20 s
 # platform/networking/agentgateway/gateway.yaml) - usadas por
 # ansible/host-network.yaml para el forward-port LAN.
 cilium_gateway_lb_ip: 192.168.122.240
-agentgateway_lb_ip: 192.168.122.50
+agentgateway_lb_ip: 192.168.122.250
 k0s_pod_cidr: 10.244.0.0/16
 k0s_service_cidr: 10.96.0.0/12
 
