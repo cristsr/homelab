@@ -532,7 +532,7 @@ sudo find /var/log/pods -type f -mtime +7 -delete
 
 ## 11. Acceso Privado: Tailscale
 
-Ver [ADR-011](DECISIONS.md) y [ADR-012](DECISIONS.md). Las rutas de administración (todas menos `portfolio` y `api` `/webhooks`) no son públicas — se accede desde Tailscale (la vía prioritaria y única soportada, ver §11.2), con TLS terminado en los Gateways por la CA interna del cluster (§11.5 para confiar la CA en tus dispositivos).
+Ver [ADR-011](DECISIONS.md) y [ADR-012](DECISIONS.md). Las rutas de administración (todas menos `portfolio` y `api` `/webhooks`) no son públicas — se accede desde Tailscale (la vía prioritaria y única soportada, ver §11.2). Las rutas del Gateway `main` sirven HTTPS (TLS terminado por la CA interna del cluster, §11.5 para confiar la CA en tus dispositivos); las 3 rutas de Agent Gateway (`mcp`, `openmemory-api`, `agentgateway`) quedan en `http://` puerto 80 — su controller no soporta listeners HTTPS (ADR-012) y el transporte ya viaja cifrado por WireGuard dentro del tailnet.
 
 ### 11.1 Configurar el subnet router de Tailscale (una sola vez)
 
@@ -556,7 +556,7 @@ curl -k https://argocd.cristianpuenguenan.internal/
 
 ### 11.2 LAN física sin Tailscale: no soportada
 
-Decisión de ADR-012: Tailscale es la vía de acceso; un dispositivo solo en la LAN física (sin cliente Tailscale) **no puede usar las rutas privadas** — el puerto 80 de los Gateways ahora solo responde redirect 301 a HTTPS, y la IP interna a la que redirige no es alcanzable desde la LAN. No es un bug: para eso está Tailscale.
+Decisión de ADR-012: Tailscale es la vía de acceso; un dispositivo solo en la LAN física (sin cliente Tailscale) **no puede usar las rutas privadas** — el puerto 80 de `main` responde solo redirect 301 hacia una IP interna inalcanzable desde la LAN, y no hay DNS que resuelve los hostnames. No es un bug: para eso está Tailscale.
 
 `ansible/host-network.yaml` sigue manteniendo los forward-ports (`80/443`, `8080/8443`, `53`) y el hook `/etc/libvirt/hooks/network` — este último sigue siendo crítico para el tráfico Tailscale que atraviesa el hipervisor: sin él, libvirt rechaza por defecto cualquier conexión nueva entrante hacia su red NAT (ver [ADR-011](DECISIONS.md), actualización de troubleshooting). Si algo deja de andar después de un reboot del hipervisor o de reiniciar `libvirtd`, sospechá primero de ese hook (`cat /etc/libvirt/hooks/network`, y `sudo nft list chain ip libvirt_network guest_input` para confirmar que las excepciones siguen ahí). Ojo: un `firewall-cmd --reload` manual también regenera la cadena y requiere re-ejecutar el hook (`/etc/libvirt/hooks/network default started - -`).
 

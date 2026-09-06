@@ -14,25 +14,13 @@ spec:
       group: agentgateway.dev
       kind: AgentgatewayParameters
   listeners:
-    # 80 queda exclusivamente para el redirect HTTP->HTTPS
-    # (httproute-redirect.yaml); por eso solo admite rutas del namespace
-    # `networking`. El contenido vive en el listener https.
+    # HTTP plano a proposito: el controller de Agent Gateway (v1.1.0) ignora
+    # silenciosamente los listeners HTTPS (no crea el listener en status ni
+    # el puerto en el Service) — ver ADR-012. Las rutas MCP sirven por el
+    # tailnet privado, TLS terminado por Tailscale mismo (WireGuard).
     - name: http
       protocol: HTTP
       port: 80
-      allowedRoutes:
-        namespaces:
-          from: Selector
-          selector:
-            matchLabels:
-              kubernetes.io/metadata.name: networking
-    - name: https
-      protocol: HTTPS
-      port: 443
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: wildcard-internal-tls
       allowedRoutes:
         namespaces:
           from: All
