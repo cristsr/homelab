@@ -27,7 +27,7 @@ metadata:
   name: agentgateway-mcp
 spec:
   blocks:
-    - cidr: "192.168.122.241/32"
+    - cidr: "192.168.122.50/32"
   serviceSelector:
     matchLabels:
       "io.kubernetes.service.namespace": networking
