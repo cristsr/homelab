@@ -21,23 +21,12 @@ spec:
           selector:
             matchLabels:
               kubernetes.io/metadata.name: networking
-    # Cilium/Envoy no soporta multiples certificateRefs en un mismo
-    # listener - dos listeners con `hostname` disjuntos en el mismo
-    # puerto 443, cada uno con su propio certificado, es el patron
-    # soportado para servir 2 certs por SNI (ver docs/DECISIONS.md,
-    # actualizacion de ADR-012, migracion a internal.cristianpuenguenan.online).
+    # Let's Encrypt real via DNS-01 (ver docs/DECISIONS.md, actualizacion
+    # de ADR-012) - reemplaza la CA propia autofirmada. DNS-01 no exige
+    # que el subdominio resuelva publicamente, asi que sigue sin ser
+    # alcanzable fuera del tailnet, pero el certificado lo confia
+    # cualquier navegador sin instalar nada.
     - name: https
-      protocol: HTTPS
-      port: 443
-      hostname: "*.cristianpuenguenan.internal"
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: wildcard-internal-tls
-      allowedRoutes:
-        namespaces:
-          from: All
-    - name: https-online
       protocol: HTTPS
       port: 443
       hostname: "*.internal.cristianpuenguenan.online"

@@ -8,7 +8,6 @@ spec:
     - name: agentgateway-mcp
       namespace: networking
   hostnames:
-    - agentgateway.cristianpuenguenan.internal
     - agentgateway.internal.cristianpuenguenan.online
   rules:
     - backendRefs:
