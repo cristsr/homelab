@@ -8,8 +8,12 @@ spec:
     - name: main
       namespace: networking
       sectionName: https
+    - name: main
+      namespace: networking
+      sectionName: https-online
   hostnames:
     - openmemory.cristianpuenguenan.internal
+    - openmemory.internal.cristianpuenguenan.online
   rules:
     - backendRefs:
         - name: openmemory-ui

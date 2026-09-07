@@ -9,6 +9,7 @@ spec:
       namespace: networking
   hostnames:
     - mcp.cristianpuenguenan.internal
+    - mcp.internal.cristianpuenguenan.online
   rules:
     - matches:
         - path:
