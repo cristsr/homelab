@@ -17,6 +17,13 @@ releases:
       - events: ["presync"]
         command: kubectl
         args: ["apply", "-f", "namespaces.yaml"]
+      # El operator de Cilium reconcilia el Role cilium-gateway-secrets por
+      # fuera de Helm y le borra las anotaciones de ownership - ver el
+      # comentario del script. Sin esto, el upgrade siguiente aborta con
+      # "cannot be imported into the current release".
+      - events: ["presync"]
+        command: bash
+        args: ["adopt-cilium-gateway-secrets.sh"]
 
   - name: argocd
     namespace: argocd
