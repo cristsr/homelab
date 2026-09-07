@@ -11,7 +11,13 @@ configs:
   params:
     server.insecure: "true"
   cm:
-    timeout.reconciliation: 0s
+    # Webhook (platform/argocd/httproute-webhook.yaml + webhook-externalsecret.yaml)
+    # dispara el sync al instante en cada push - esto es solo el fallback
+    # de seguridad si alguna entrega de webhook se pierde. En 0s (sin
+    # fallback) un webhook roto deja de sincronizar TODO silenciosamente,
+    # como paso el 2026-05-13 al 2026-09-07 sin que nadie lo notara (ver
+    # docs/DECISIONS.md).
+    timeout.reconciliation: 600s
     application.resourceTrackingMethod: annotation
   rbac:
     policy.default: role:readonly

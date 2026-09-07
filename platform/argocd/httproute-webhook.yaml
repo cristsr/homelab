@@ -1,0 +1,27 @@
+# Unica ruta publica de ArgoCD: el webhook de GitHub necesita que
+# GitHub (servidor publico) le pueda pegar, y ArgoCD vive privado en
+# `main` (argocd.internal.cristianpuenguenan.online, httproute.yaml).
+# Solo el path /api/webhook queda expuesto - el resto de ArgoCD
+# (UI, API) sigue sin ruta publica. Seguro de exponer: el payload va
+# firmado (HMAC) contra el secret `webhook.github.secret`
+# (webhook-externalsecret.yaml, ya mezclado en argocd-secret) - ArgoCD
+# rechaza cualquier request sin la firma correcta.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argocd-webhook
+  namespace: argocd
+spec:
+  parentRefs:
+    - name: public
+      namespace: networking
+  hostnames:
+    - argocd.cristianpuenguenan.online
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/webhook
+      backendRefs:
+        - name: argocd-server
+          port: 80
