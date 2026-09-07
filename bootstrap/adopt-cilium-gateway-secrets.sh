@@ -1,30 +1,45 @@
 #!/bin/bash
 # Presync hook de `helmfile sync` (bootstrap/helmfile.yaml, release cilium).
 #
-# Con gatewayAPI.enabled=true (bootstrap/cilium/values.yaml), el operator de
-# Cilium reconcilia por su cuenta el Role `cilium-gateway-secrets`
-# (namespace `cilium-secrets`) que le da permiso para sincronizar ahi los
-# Secrets TLS referenciados por certificateRefs de cualquier Gateway - lo
-# hace desde que existe al menos un listener HTTPS real (ver
-# docs/DECISIONS.md ADR-012, wildcard-internal-tls en el Gateway `main`).
-# Cada reconciliacion del operator reemplaza el objeto entero por fuera de
-# Helm y le borra las anotaciones de ownership - el siguiente
-# `helm upgrade` (via helmfile sync) lo ve como un recurso ajeno y aborta
-# con "cannot be imported into the current release".
+# Con gatewayAPI.enabled=true (bootstrap/cilium/values.yaml), el chart de
+# Cilium templa 4 recursos RBAC en el namespace `cilium-secrets` para que
+# el agent y el operator puedan sincronizar ahi los Secrets TLS
+# referenciados por certificateRefs de cualquier Gateway (ver
+# docs/DECISIONS.md ADR-012, wildcard-internal-tls en el Gateway `main`):
+# `templates/cilium-agent/{role,rolebinding}.yaml` (Role/RoleBinding
+# `cilium-gateway-secrets`) y `templates/cilium-operator/{role,rolebinding}.yaml`
+# (Role/RoleBinding `cilium-operator-gateway-secrets`). El agent y el
+# operator (cada uno corriendo ya, reconciliando por su cuenta) terminan
+# re-escribiendo estos objetos por fuera de Helm y les borran las
+# anotaciones de ownership - confirmado en la practica: se fueron rompiendo
+# de a uno por corrida de CI (primero el Role del agent, despues el del
+# operator). El siguiente `helm upgrade` (via helmfile sync, en cada
+# deploy) ve un recurso ajeno y aborta con
+# "cannot be imported into the current release".
 #
 # Reponer las anotaciones/labels de Helm antes de cada sync es idempotente:
-# si el operator no lo toco desde la ultima vez, no cambia nada; si ya lo
-# reconcilio, deja a Helm actualizarlo en paz. Sin `set -e` a proposito -
-# en el primerisimo bootstrap (namespace/Role todavia no existen) estos
-# comandos fallan con "not found" y no debe abortar el resto del sync.
+# si nadie lo toco desde la ultima vez, no cambia nada; si ya lo
+# reconciliaron, deja a Helm actualizarlo en paz. Sin `set -e` a proposito
+# - en el primerisimo bootstrap (namespace/recursos todavia no existen)
+# estos comandos fallan con "not found" y no debe abortar el resto del
+# sync.
 
-kubectl -n cilium-secrets annotate role cilium-gateway-secrets \
-  meta.helm.sh/release-name=cilium \
-  meta.helm.sh/release-namespace=kube-system \
-  --overwrite >/dev/null 2>&1
+NS=cilium-secrets
 
-kubectl -n cilium-secrets label role cilium-gateway-secrets \
-  app.kubernetes.io/managed-by=Helm \
-  --overwrite >/dev/null 2>&1
+adopt() {
+  local kind="$1" name="$2"
+  kubectl -n "$NS" annotate "$kind" "$name" \
+    meta.helm.sh/release-name=cilium \
+    meta.helm.sh/release-namespace=kube-system \
+    --overwrite >/dev/null 2>&1
+  kubectl -n "$NS" label "$kind" "$name" \
+    app.kubernetes.io/managed-by=Helm \
+    --overwrite >/dev/null 2>&1
+}
+
+adopt role cilium-gateway-secrets
+adopt rolebinding cilium-gateway-secrets
+adopt role cilium-operator-gateway-secrets
+adopt rolebinding cilium-operator-gateway-secrets
 
 exit 0
