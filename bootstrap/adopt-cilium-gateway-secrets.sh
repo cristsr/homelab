@@ -1,45 +1,51 @@
 #!/bin/bash
 # Presync hook de `helmfile sync` (bootstrap/helmfile.yaml, release cilium).
 #
-# Con gatewayAPI.enabled=true (bootstrap/cilium/values.yaml), el chart de
-# Cilium templa 4 recursos RBAC en el namespace `cilium-secrets` para que
-# el agent y el operator puedan sincronizar ahi los Secrets TLS
-# referenciados por certificateRefs de cualquier Gateway (ver
-# docs/DECISIONS.md ADR-012, wildcard-internal-tls en el Gateway `main`):
-# `templates/cilium-agent/{role,rolebinding}.yaml` (Role/RoleBinding
-# `cilium-gateway-secrets`) y `templates/cilium-operator/{role,rolebinding}.yaml`
-# (Role/RoleBinding `cilium-operator-gateway-secrets`). El agent y el
-# operator (cada uno corriendo ya, reconciliando por su cuenta) terminan
-# re-escribiendo estos objetos por fuera de Helm y les borran las
-# anotaciones de ownership - confirmado en la practica: se fueron rompiendo
-# de a uno por corrida de CI (primero el Role del agent, despues el del
-# operator). El siguiente `helm upgrade` (via helmfile sync, en cada
-# deploy) ve un recurso ajeno y aborta con
-# "cannot be imported into the current release".
+# Con gatewayAPI.enabled=true (bootstrap/cilium/values.yaml), varios de los
+# recursos que el chart de Cilium templa para Gateway API terminan siendo
+# reconciliados en vivo por el agent y el operator (que ya estan corriendo)
+# - por ejemplo el GatewayClass necesita su `status.conditions: Accepted`
+# actualizado, y las Role/RoleBinding de sync de Secrets TLS se re-crean
+# cuando cambia algun certificateRef (ver docs/DECISIONS.md ADR-012,
+# wildcard-internal-tls en el Gateway `main`). Esa reconciliacion pisa el
+# objeto entero por fuera de Helm y le borra las anotaciones de ownership -
+# confirmado en la practica, se fueron rompiendo de a uno por corrida de CI
+# (Role del agent, despues el del operator, despues el GatewayClass). El
+# siguiente `helm upgrade` (via helmfile sync, en cada deploy) ve un
+# recurso ajeno y aborta con "cannot be imported into the current release".
 #
-# Reponer las anotaciones/labels de Helm antes de cada sync es idempotente:
-# si nadie lo toco desde la ultima vez, no cambia nada; si ya lo
-# reconciliaron, deja a Helm actualizarlo en paz. Sin `set -e` a proposito
-# - en el primerisimo bootstrap (namespace/recursos todavia no existen)
-# estos comandos fallan con "not found" y no debe abortar el resto del
-# sync.
+# Recursos identificados leyendo el chart cilium/cilium 1.20.1 real
+# (templates/cilium-agent/, cilium-operator/, cilium-gateway-api-*.yaml)
+# que dependen de gatewayAPI.enabled - se reponen todos antes de cada sync,
+# no solo el que fallo la ultima vez. Idempotente: si nadie lo toco desde
+# la ultima vez no cambia nada; sin `set -e` a proposito, en el
+# primerisimo bootstrap (recursos todavia no existen) los comandos fallan
+# con "not found" y no debe abortar el resto del sync.
 
-NS=cilium-secrets
+RELEASE_ANNOTATIONS=(
+  meta.helm.sh/release-name=cilium
+  meta.helm.sh/release-namespace=kube-system
+)
 
 adopt() {
-  local kind="$1" name="$2"
-  kubectl -n "$NS" annotate "$kind" "$name" \
-    meta.helm.sh/release-name=cilium \
-    meta.helm.sh/release-namespace=kube-system \
-    --overwrite >/dev/null 2>&1
-  kubectl -n "$NS" label "$kind" "$name" \
-    app.kubernetes.io/managed-by=Helm \
-    --overwrite >/dev/null 2>&1
+  local kind="$1" name="$2" ns_flag=()
+  [ -n "${3:-}" ] && ns_flag=(-n "$3")
+
+  kubectl "${ns_flag[@]}" annotate "$kind" "$name" \
+    "${RELEASE_ANNOTATIONS[@]}" --overwrite >/dev/null 2>&1
+  kubectl "${ns_flag[@]}" label "$kind" "$name" \
+    app.kubernetes.io/managed-by=Helm --overwrite >/dev/null 2>&1
 }
 
-adopt role cilium-gateway-secrets
-adopt rolebinding cilium-gateway-secrets
-adopt role cilium-operator-gateway-secrets
-adopt rolebinding cilium-operator-gateway-secrets
+# Namespaced: sync de Secrets TLS (agent + operator), namespace cilium-secrets
+adopt role cilium-gateway-secrets cilium-secrets
+adopt rolebinding cilium-gateway-secrets cilium-secrets
+adopt role cilium-operator-gateway-secrets cilium-secrets
+adopt rolebinding cilium-operator-gateway-secrets cilium-secrets
+
+# Cluster-scoped
+adopt gatewayclass cilium
+adopt validatingadmissionpolicy gateway.cilium.io
+adopt validatingadmissionpolicybinding gateway.cilium.io
 
 exit 0
