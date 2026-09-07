@@ -472,7 +472,7 @@ ansible-playbook vault-populate.yaml
 
 ### Dashboards de Grafana
 
-Accede a `https://grafana.cristianpuenguenan.internal` y revisa:
+Accede a `https://grafana.internal.cristianpuenguenan.online` y revisa:
 - **Node Exporter Full**: Metricas del host.
 - **Kubernetes / Compute Resources / Cluster**: Uso de recursos del cluster.
 - **Longhorn**: Estado de volumenes.
@@ -532,7 +532,7 @@ sudo find /var/log/pods -type f -mtime +7 -delete
 
 ## 11. Acceso Privado: Tailscale
 
-Ver [ADR-011](DECISIONS.md) y [ADR-012](DECISIONS.md). Las rutas de administración (todas menos `portfolio` y `api` `/webhooks`) no son públicas — se accede desde Tailscale (la vía prioritaria y única soportada, ver §11.2), y las 11 sirven HTTPS con TLS terminado por la CA interna del cluster (§11.5 para confiar la CA en tus dispositivos). Las 3 rutas de Agent Gateway (`mcp`, `openmemory-api`, `agentgateway`) también son `https://` de cara al cliente: su controller sigue sin soportar listeners HTTPS (ADR-012), así que es el Gateway `main` el que termina el TLS y reenvía en HTTP plano, puertas adentro del cluster, hacia el Service de Agent Gateway.
+Ver [ADR-011](DECISIONS.md) y [ADR-012](DECISIONS.md). Las rutas de administración (todas menos `portfolio` y `api` `/webhooks`) no son públicas — se accede desde Tailscale (la vía prioritaria y única soportada, ver §11.2), y las 11 sirven HTTPS con un certificado real de Let's Encrypt (`*.internal.cristianpuenguenan.online`, ADR-012 actualización) — no hace falta instalar nada en ningún dispositivo. Las 3 rutas de Agent Gateway (`mcp`, `openmemory-api`, `agentgateway`) también son `https://` de cara al cliente: su controller sigue sin soportar listeners HTTPS (ADR-012), así que es el Gateway `main` el que termina el TLS y reenvía en HTTP plano, puertas adentro del cluster, hacia el Service de Agent Gateway.
 
 ### 11.1 Configurar el subnet router de Tailscale (una sola vez)
 
@@ -549,10 +549,10 @@ Además, firewalld del hipervisor necesita la policy `ts_to_libvirt` (trusted �
 Verificar desde cualquier dispositivo en tu tailnet (podés estar en cualquier lado, no hace falta estar en la LAN de casa):
 
 ```bash
-curl -k https://argocd.cristianpuenguenan.internal/
+curl https://argocd.internal.cristianpuenguenan.online/
 ```
 
-(`-k` hasta que instales la CA del cluster en el dispositivo, §11.5.)
+Certificado real (Let's Encrypt) — no hace falta `-k` ni instalar nada.
 
 ### 11.2 LAN física sin Tailscale: no soportada
 
@@ -562,14 +562,16 @@ Decisión de ADR-012: Tailscale es la vía de acceso; un dispositivo solo en la 
 
 ### 11.3 Resolver los hostnames (DNS privado)
 
-Hay un `CoreDNS` propio (`platform/networking/private-dns/`, IP fija `192.168.122.253`) que resuelve *solo* `cristianpuenguenan.internal` — todo lo demás lo reenvía al DNS público real, no reemplaza tu DNS habitual.
+Hay un `CoreDNS` propio (`platform/networking/private-dns/`, IP fija `192.168.122.253`) que resuelve *solo* `internal.cristianpuenguenan.online` — todo lo demás lo reenvía al DNS público real, no reemplaza tu DNS habitual.
 
-**Desde Tailscale (la vía soportada, una sola vez):** en [login.tailscale.com/admin/dns](https://login.tailscale.com/admin/dns) agregar un Nameserver custom `192.168.122.253` con "Restrict to domain: `cristianpuenguenan.internal`". A partir de ahí, cualquier dispositivo tuyo en el tailnet resuelve los hostnames privados solo, sin tocar nada más.
+**Desde Tailscale (la vía soportada, una sola vez):** en [login.tailscale.com/admin/dns](https://login.tailscale.com/admin/dns) agregar un Nameserver custom `192.168.122.253` con "Restrict to domain: `internal.cristianpuenguenan.online`". A partir de ahí, cualquier dispositivo tuyo en el tailnet resuelve los hostnames privados solo, sin tocar nada más.
+
+Ojo: el wildcard **público** `*.cristianpuenguenan.online` también matchea estos subdominios por DNS (una consulta a un DNS público real, `1.1.1.1` por ejemplo, va a devolver las IPs de Cloudflare) — pero conectar de verdad ahí falla en el borde de Cloudflare, ese hostname nunca fue dado de alta como "Hostname" válido en su config SSL. Sin el Split DNS de arriba, el dispositivo no llega a nada útil; con él, resuelve directo a `192.168.122.240`.
 
 **Alternativa manual, sin Split DNS:** agregar los hostnames al `hosts` file local (`/etc/hosts` o `C:\Windows\System32\drivers\etc\hosts`) apuntando a las IPs fijas de los Gateways (requiere estar en Tailscale, §11.1):
 
 ```
-192.168.122.240 argocd.cristianpuenguenan.internal grafana.cristianpuenguenan.internal longhorn.cristianpuenguenan.internal headlamp.cristianpuenguenan.internal hubble.cristianpuenguenan.internal openbao.cristianpuenguenan.internal openmemory.cristianpuenguenan.internal sonarqube.cristianpuenguenan.internal agentgateway.cristianpuenguenan.internal mcp.cristianpuenguenan.internal openmemory-api.cristianpuenguenan.internal
+192.168.122.240 argocd.internal.cristianpuenguenan.online grafana.internal.cristianpuenguenan.online longhorn.internal.cristianpuenguenan.online headlamp.internal.cristianpuenguenan.online hubble.internal.cristianpuenguenan.online openbao.internal.cristianpuenguenan.online openmemory.internal.cristianpuenguenan.online sonarqube.internal.cristianpuenguenan.online agentgateway.internal.cristianpuenguenan.online mcp.internal.cristianpuenguenan.online openmemory-api.internal.cristianpuenguenan.online
 ```
 
 Para agregar una ruta privada nueva: sumarla al `Corefile` en `platform/networking/private-dns/configmap.yaml` y hacer `git push` — Reloader reinicia el pod solo, no hace falta ningún paso manual adicional.
@@ -585,24 +587,9 @@ Para hacer pública una ruta nueva: agregar su `HTTPRoute` con `parentRefs: [{na
 
 En [dash.cloudflare.com](https://dash.cloudflare.com) → Zero Trust → Networks → Tunnels → túnel del homelab → Public Hostnames, la única entrada a mantener es el wildcard apuntando a `cilium-gateway-public` — no se toca al agregar o quitar rutas privadas.
 
-### 11.5 TLS interno: confiar la CA del cluster en tus dispositivos
+### 11.5 TLS interno: certificado real, nada que instalar
 
-`.internal` es un TLD reservado — ninguna CA pública emite certificados para él, así que el cluster firma los suyos con su propia CA (`internal-root-ca`, ver [ADR-012](DECISIONS.md)). Una única vez por dispositivo, exportar e instalar esa CA:
-
-**Exportar el certificado** (desde cualquier máquina con acceso `kubectl` a la VM, o por SSH — §0):
-
-```bash
-kubectl get secret internal-root-ca -n networking -o jsonpath='{.data.ca\.crt}' | base64 -d > homelab-internal-ca.crt
-```
-
-Pasar el archivo al dispositivo y:
-
-- **Windows** (PowerShell como admin): `certutil -addstore -f Root homelab-internal-ca.crt`
-- **Linux**: copiar a `/usr/local/share/ca-certificates/homelab-internal-ca.crt` y `sudo update-ca-certificates`
-- **Android**: Ajustes → Seguridad → Cifrado y credenciales → Instalar un certificado → Certificado de CA
-- **iOS**: abrir el archivo → permitir el perfil → luego Ajustes → General → Información → Configuración de confianza de certificados → habilitar "Homelab Internal CA"
-
-Notas: Firefox usa su propio store (Configuración → Privacidad y seguridad → Certificados → Importar). Si la CA se regenera algún día (vence en 10 años, o se borra el secret `internal-root-ca`), hay que repetir este paso en todos los dispositivos.
+Ver [ADR-012](DECISIONS.md) (actualización). Las rutas privadas usaron una CA propia autofirmada hasta 2026-09-07 — exigía instalarla a mano en cada dispositivo (`certutil -addstore`, etc.) y, más importante, un dispositivo que confía en una CA raíz propia confía en *cualquier* certificado que esa CA firme para *cualquier* dominio, no solo el homelab. Se reemplazó por un wildcard real de Let's Encrypt para `*.internal.cristianpuenguenan.online` (mismo `ClusterIssuer` que ya emitía `wildcard-home-tls`, vía DNS-01 — no exige que el subdominio resuelva a nada real). Cualquier navegador lo confía de fábrica; no hay ningún paso de instalación que hacer en los dispositivos.
 
 ---
 

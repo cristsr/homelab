@@ -13,17 +13,6 @@ data:
   Corefile: |
     . {
         hosts {
-            192.168.122.240 argocd.cristianpuenguenan.internal
-            192.168.122.240 grafana.cristianpuenguenan.internal
-            192.168.122.240 headlamp.cristianpuenguenan.internal
-            192.168.122.240 hubble.cristianpuenguenan.internal
-            192.168.122.240 longhorn.cristianpuenguenan.internal
-            192.168.122.240 openbao.cristianpuenguenan.internal
-            192.168.122.240 openmemory.cristianpuenguenan.internal
-            192.168.122.240 sonarqube.cristianpuenguenan.internal
-            192.168.122.240 agentgateway.cristianpuenguenan.internal
-            192.168.122.240 mcp.cristianpuenguenan.internal
-            192.168.122.240 openmemory-api.cristianpuenguenan.internal
             192.168.122.240 argocd.internal.cristianpuenguenan.online
             192.168.122.240 grafana.internal.cristianpuenguenan.online
             192.168.122.240 headlamp.internal.cristianpuenguenan.online

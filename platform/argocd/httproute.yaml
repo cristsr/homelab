@@ -8,11 +8,7 @@ spec:
     - name: main
       namespace: networking
       sectionName: https
-    - name: main
-      namespace: networking
-      sectionName: https-online
   hostnames:
-    - argocd.cristianpuenguenan.internal
     - argocd.internal.cristianpuenguenan.online
   rules:
     - backendRefs:

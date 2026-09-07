@@ -8,11 +8,7 @@ spec:
     - name: main
       namespace: networking
       sectionName: https
-    - name: main
-      namespace: networking
-      sectionName: https-online
   hostnames:
-    - grafana.cristianpuenguenan.internal
     - grafana.internal.cristianpuenguenan.online
   rules:
     - backendRefs:

@@ -167,10 +167,10 @@ Controla el ciclo de vida de todas las aplicaciones del cluster. La `root-app` a
 | Parametro | Valor |
 |-----------|-------|
 | `server.ingress.enabled` | `false` (gestionado por HTTPRoute contra el Gateway de Cilium) |
-| `server.insecure` | `true` (TLS terminado en el Gateway `main` con la CA interna — el backend siempre habla HTTP plano, ver §3.1 TLS) |
+| `server.insecure` | `true` (TLS terminado en el Gateway `main` con Let's Encrypt — el backend siempre habla HTTP plano, ver §3.1 TLS) |
 | Timeout de reconciliacion | `180s` |
 | RBAC por defecto | `role:readonly` |
-| Dominio | `argocd.cristianpuenguenan.internal` |
+| Dominio | `argocd.internal.cristianpuenguenan.online` |
 
 ### 2.4 Namespaces
 
@@ -195,7 +195,7 @@ Declarados en `bootstrap/namespaces.yaml` y creados por el hook presync de Ciliu
 
 ### 3.1 Ingress: tres Gateway API, uno por audiencia
 
-Ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp), ADR-011 y ADR-012 en [DECISIONS.md](DECISIONS.md). Los tres `Gateway` viven en el namespace `networking`. `main` termina TLS en HTTPS:443 con la CA interna del cluster (ver TLS abajo); su puerto 80 solo hace redirect a HTTPS. `agentgateway-mcp` sirve HTTP:80 plano puertas adentro (su controller no soporta listeners HTTPS, ADR-012) pero no tiene IP externa propia: sus 3 rutas entran igual por HTTPS, vía `main` haciendo de proxy TLS hacia su Service. `public` escucha HTTP:80 plano — el TLS de cara a Internet lo termina Cloudflare en el borde del tunel. La separacion entre `public` y `main` no es por tipo de trafico sino por **audiencia**: `public` es el unico Gateway al que apunta el wildcard de Cloudflare — lo que es publico queda decidido por que `HTTPRoute` vive ahi, no por una lista aparte.
+Ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp), ADR-011 y ADR-012 en [DECISIONS.md](DECISIONS.md). Los tres `Gateway` viven en el namespace `networking`. `main` termina TLS en HTTPS:443 con un certificado real de Let's Encrypt (ver TLS abajo); su puerto 80 solo hace redirect a HTTPS. `agentgateway-mcp` sirve HTTP:80 plano puertas adentro (su controller no soporta listeners HTTPS, ADR-012) pero no tiene IP externa propia: sus 3 rutas entran igual por HTTPS, vía `main` haciendo de proxy TLS hacia su Service. `public` escucha HTTP:80 plano — el TLS de cara a Internet lo termina Cloudflare en el borde del tunel. La separacion entre `public` y `main` no es por tipo de trafico sino por **audiencia**: `public` es el unico Gateway al que apunta el wildcard de Cloudflare — lo que es publico queda decidido por que `HTTPRoute` vive ahi, no por una lista aparte.
 
 #### 3.1.a Cilium Gateway API — público (`public`)
 
@@ -210,20 +210,20 @@ Ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-age
 
 #### 3.1.b Cilium Gateway API — privado (`main`)
 
-**`GatewayClass`**: `cilium` (creada automaticamente por Cilium al habilitar `gatewayAPI.enabled: true`) — **`Gateway`**: `main` (`platform/networking/cilium-gateway/gateway.yaml`) — **Service generado**: `cilium-gateway-main` — IP LAN fija `192.168.122.240` (Cilium L2 Announcements, ver §7) — listeners: `https` (443, TLS terminate con `wildcard-internal-tls`) y `http` (80, solo redirect)
+**`GatewayClass`**: `cilium` (creada automaticamente por Cilium al habilitar `gatewayAPI.enabled: true`) — **`Gateway`**: `main` (`platform/networking/cilium-gateway/gateway.yaml`) — **Service generado**: `cilium-gateway-main` — IP LAN fija `192.168.122.240` (Cilium L2 Announcements, ver §7) — listeners: `https` (443, TLS terminate con `wildcard-internal-online-tls`) y `http` (80, solo redirect)
 
 Herramientas de administracion/observabilidad — solo alcanzables por LAN/Tailscale, nunca por el wildcard de Cloudflare:
 
 | Subdominio | Backend | Namespace |
 |-----------|---------|-----------|
-| `argocd.cristianpuenguenan.internal` | argocd-server:80 | argocd |
-| `grafana.cristianpuenguenan.internal` | prometheus-grafana:80 | observability |
-| `headlamp.cristianpuenguenan.internal` | headlamp:80 | observability |
-| `hubble.cristianpuenguenan.internal` | hubble-ui:80 | kube-system |
-| `longhorn.cristianpuenguenan.internal` | longhorn-frontend:80 | longhorn-system |
-| `openbao.cristianpuenguenan.internal` | openbao:8200 | secret-management |
-| `openmemory.cristianpuenguenan.internal` | openmemory-ui:3000 | devtools |
-| `sonarqube.cristianpuenguenan.internal` | sonarqube-sonarqube:9000 | sonarqube |
+| `argocd.internal.cristianpuenguenan.online` | argocd-server:80 | argocd |
+| `grafana.internal.cristianpuenguenan.online` | prometheus-grafana:80 | observability |
+| `headlamp.internal.cristianpuenguenan.online` | headlamp:80 | observability |
+| `hubble.internal.cristianpuenguenan.online` | hubble-ui:80 | kube-system |
+| `longhorn.internal.cristianpuenguenan.online` | longhorn-frontend:80 | longhorn-system |
+| `openbao.internal.cristianpuenguenan.online` | openbao:8200 | secret-management |
+| `openmemory.internal.cristianpuenguenan.online` | openmemory-ui:3000 | devtools |
+| `sonarqube.internal.cristianpuenguenan.online` | sonarqube-sonarqube:9000 | sonarqube |
 
 #### 3.1.c Agent Gateway (solo servidores MCP)
 
@@ -233,16 +233,16 @@ Retenido unicamente para las rutas que aprovechan features reales de protocolo M
 
 | Subdominio | Backend | Namespace |
 |-----------|---------|-----------|
-| `agentgateway.cristianpuenguenan.internal` | agentgateway admin UI | networking |
-| `openmemory-api.cristianpuenguenan.internal` | openmemory:8765 (MCP server) | devtools |
-| `mcp.cristianpuenguenan.internal` | mcp-sonarqube:3000 (`/sonarqube`) | sonarqube |
+| `agentgateway.internal.cristianpuenguenan.online` | agentgateway admin UI | networking |
+| `openmemory-api.internal.cristianpuenguenan.online` | openmemory:8765 (MCP server) | devtools |
+| `mcp.internal.cristianpuenguenan.online` | mcp-sonarqube:3000 (`/sonarqube`) | sonarqube |
 
 #### TLS
 
-Dos planos separados (ver ADR-012):
+Dos planos separados, ambos con certificados reales de Let's Encrypt — ya no hay CA propia (ver ADR-012, actualizacion):
 
-- **Interno (`*.cristianpuenguenan.internal`)**: `.internal` es un TLD reservado — ninguna CA publica puede emitir para el. El cluster corre su propia CA (`internal-root-ca`, `platform/networking/cert-manager/internal-tls.yaml`, patron selfSigned → CA → ClusterIssuer `internal-ca`) que firma un wildcard unico `wildcard-internal-tls` referenciado por el listener HTTPS de `main`. La CA hay que confiarla a mano en cada dispositivo del tailnet (ver `docs/OPERATIONS.md` §11.5). El puerto 80 de `main` solo responde 301 → HTTPS. Las 3 rutas de `agentgateway-mcp` tambien quedan HTTPS de cara al cliente: su controller sigue sin soportar listeners HTTPS (ADR-012), asi que `main` termina el TLS y reenvia en HTTP plano, puertas adentro del cluster, al Service `agentgateway-mcp` (`platform/networking/cilium-gateway/httproute-agentgateway-proxy.yaml`).
-- **Publico (`*.cristianpuenguenan.online`)**: el TLS de cara a Internet lo termina Cloudflare en el borde del tunel; cloudflared habla HTTP al `Gateway public`. El wildcard `wildcard-home-tls` emitido por cert-manager (Let's Encrypt, DNS-01) sigue sin estar referenciado por ningun listener — se mantiene emitido para uso futuro, no es necesario para el flujo actual.
+- **Privado (`*.internal.cristianpuenguenan.online`)**: subdominio de un dominio que ya es nuestro, certificado por el mismo `ClusterIssuer` (`letsencrypt-prod-cloudflare-dns01`, DNS-01 via Cloudflare) que emite el wildcard publico — `wildcard-internal-online-tls`, referenciado por el listener HTTPS de `main`. El desafio DNS-01 no exige que el subdominio resuelva a una IP real: no hay ningun registro A/AAAA para `internal.cristianpuenguenan.online`, asi que sigue sin ser alcanzable fuera del tailnet (aunque el wildcard *publico* `*.cristianpuenguenan.online` sí matchea por DNS estas rutas al ser subdominios de el — la conexion real falla igual en el borde de Cloudflare, que rechaza el TLS de cualquier hostname sin un Hostname/certificado propio configurado ahi, ver ADR-012 actualizacion). El puerto 80 de `main` solo responde 301 → HTTPS. Las 3 rutas de `agentgateway-mcp` tambien quedan HTTPS de cara al cliente: su controller sigue sin soportar listeners HTTPS (ADR-012), asi que `main` termina el TLS y reenvia en HTTP plano, puertas adentro del cluster, al Service `agentgateway-mcp` (`platform/networking/cilium-gateway/httproute-agentgateway-proxy.yaml`).
+- **Publico (`*.cristianpuenguenan.online`)**: el TLS de cara a Internet lo termina Cloudflare en el borde del tunel; cloudflared habla HTTP al `Gateway public`. El wildcard `wildcard-home-tls` emitido por cert-manager sigue sin estar referenciado por ningun listener del cluster — se mantiene emitido para uso futuro, no es necesario para el flujo actual.
 
 ### 3.2 cert-manager
 
@@ -252,13 +252,11 @@ Automatiza la emision y renovacion de certificados TLS.
 
 | Recurso | Detalle |
 |---------|---------|
-| ClusterIssuer | `letsencrypt-prod-cloudflare-dns01` |
+| ClusterIssuer | `letsencrypt-prod-cloudflare-dns01` (unico, usado por los dos wildcards) |
 | Metodo de validacion | DNS-01 via Cloudflare API |
-| Certificado | Wildcard `*.cristianpuenguenan.online` + apex |
+| Certificado publico | Wildcard `*.cristianpuenguenan.online` + apex → `wildcard-home-tls` |
+| Certificado privado | Wildcard `*.internal.cristianpuenguenan.online` + apex → `wildcard-internal-online-tls`, usado por `main` |
 | Secret del token | `cloudflare-api-token` en namespace `networking` (via ExternalSecret) |
-| Secret del certificado | `wildcard-home-tls` en namespace `networking` |
-| CA interna | `internal-root-ca` (10 años) → ClusterIssuer `internal-ca` (`internal-tls.yaml`) |
-| Certificado interno | Wildcard `*.cristianpuenguenan.internal` → `wildcard-internal-tls`, usado por `main` |
 
 ### 3.3 Longhorn (Storage)
 
@@ -297,7 +295,7 @@ Dashboard web para inspeccionar el estado del cluster.
 | Parametro | Valor |
 |-----------|-------|
 | Service | ClusterIP:80 |
-| Acceso | `headlamp.cristianpuenguenan.internal` via Cilium Gateway API |
+| Acceso | `headlamp.internal.cristianpuenguenan.online` via Cilium Gateway API |
 
 ### 3.6 OpenBao (Secrets Backend)
 
@@ -453,7 +451,7 @@ Cada Gateway tiene una IP LAN fija, asignada via Cilium L2 Announcements (`Ciliu
 | Gateway / Servicio | IP fija |
 |---------|---------|
 | `cilium-gateway-main` (rutas genericas, incluidas las 3 de Agent Gateway via proxy) | `192.168.122.240` |
-| `private-dns` (CoreDNS, resuelve `cristianpuenguenan.internal` para LAN/Tailscale) | `192.168.122.253` |
+| `private-dns` (CoreDNS, resuelve `internal.cristianpuenguenan.online` para LAN/Tailscale) | `192.168.122.253` |
 
 `agentgateway-mcp` ya no tiene IP LAN fija — es `ClusterIP`, solo alcanzable por el proxy interno de `main` (ver TLS en §3.1).
 
@@ -478,7 +476,7 @@ Tailscale (cualquier dispositivo del usuario, desde cualquier lado) — via prio
         └── 192.168.122.253:53 (private-dns, via Tailscale Split DNS)
 ```
 
-Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git); para LAN/Tailscale, `private-dns` (CoreDNS, `platform/networking/private-dns/`) resuelve `cristianpuenguenan.internal` a la IP fija correspondiente — ver §11 en `docs/OPERATIONS.md` para configurar Tailscale Split DNS.
+Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git); para LAN/Tailscale, `private-dns` (CoreDNS, `platform/networking/private-dns/`) resuelve `internal.cristianpuenguenan.online` a la IP fija correspondiente — ver §11 en `docs/OPERATIONS.md` para configurar Tailscale Split DNS.
 
 La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo tiene WiFi activa — bridging de una VM sobre WiFi es fragil con la mayoria de drivers/APs (ver ADR-008).
 
@@ -491,7 +489,7 @@ La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo ti
 
 ### DNS y subdominios
 
-`portfolio`/`api` resuelven via Cloudflare Tunnel (WAN). El resto de las rutas no tiene DNS publico — resuelven via `private-dns` con Tailscale Split DNS restringido a `cristianpuenguenan.internal` (ver §11 en `docs/OPERATIONS.md`).
+`portfolio`/`api` resuelven via Cloudflare Tunnel (WAN). El resto de las rutas no tiene DNS publico util — resuelven via `private-dns` con Tailscale Split DNS restringido a `internal.cristianpuenguenan.online` (ver §11 en `docs/OPERATIONS.md`). El wildcard publico `*.cristianpuenguenan.online` técnicamente también matchea estos subdominios por DNS, pero la conexion TLS falla en el borde de Cloudflare (ningun Hostname configurado ahi) — no hay forma real de llegar a estas rutas desde fuera del tailnet.
 
 ---
 
@@ -551,8 +549,8 @@ root-app (gitops/root-app.yaml)
 ```
 Longhorn ──────────────────────► Todas las bases de datos y PVCs
 
-cert-manager ──► internal-root-ca (CA interna) ──► wildcard-internal-tls ──► listener HTTPS de main
-            └──► wildcard-home-tls (emitido, no referenciado — ver §3.1 TLS)
+cert-manager (letsencrypt-prod-cloudflare-dns01) ──► wildcard-internal-online-tls ──► listener HTTPS de main
+                                                └──► wildcard-home-tls (emitido, no referenciado — ver §3.1 TLS)
 
 OpenBao ──► openbao-init ──► ExternalSecrets sync ──► todos los secrets
 
