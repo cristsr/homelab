@@ -8,8 +8,12 @@ spec:
     - name: main
       namespace: networking
       sectionName: https
+    - name: main
+      namespace: networking
+      sectionName: https-online
   hostnames:
     - openbao.cristianpuenguenan.internal
+    - openbao.internal.cristianpuenguenan.online
   rules:
     - backendRefs:
         - name: openbao

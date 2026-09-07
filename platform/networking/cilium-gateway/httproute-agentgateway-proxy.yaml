@@ -14,10 +14,16 @@ spec:
     - name: main
       namespace: networking
       sectionName: https
+    - name: main
+      namespace: networking
+      sectionName: https-online
   hostnames:
     - mcp.cristianpuenguenan.internal
     - agentgateway.cristianpuenguenan.internal
     - openmemory-api.cristianpuenguenan.internal
+    - mcp.internal.cristianpuenguenan.online
+    - agentgateway.internal.cristianpuenguenan.online
+    - openmemory-api.internal.cristianpuenguenan.online
   rules:
     - backendRefs:
         - name: agentgateway-mcp

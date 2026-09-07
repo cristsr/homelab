@@ -8,8 +8,12 @@ spec:
     - name: main
       namespace: networking
       sectionName: https
+    - name: main
+      namespace: networking
+      sectionName: https-online
   hostnames:
     - hubble.cristianpuenguenan.internal
+    - hubble.internal.cristianpuenguenan.online
   rules:
     - backendRefs:
         - name: hubble-ui

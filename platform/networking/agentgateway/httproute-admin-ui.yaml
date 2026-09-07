@@ -9,6 +9,7 @@ spec:
       namespace: networking
   hostnames:
     - agentgateway.cristianpuenguenan.internal
+    - agentgateway.internal.cristianpuenguenan.online
   rules:
     - backendRefs:
         - name: agentgateway-admin-ui

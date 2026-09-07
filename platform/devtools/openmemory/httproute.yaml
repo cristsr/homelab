@@ -9,6 +9,7 @@ spec:
       namespace: networking
   hostnames:
     - openmemory-api.cristianpuenguenan.internal
+    - openmemory-api.internal.cristianpuenguenan.online
   rules:
     - backendRefs:
         - name: openmemory

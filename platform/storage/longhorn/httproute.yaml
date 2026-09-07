@@ -8,8 +8,12 @@ spec:
     - name: main
       namespace: networking
       sectionName: https
+    - name: main
+      namespace: networking
+      sectionName: https-online
   hostnames:
     - longhorn.cristianpuenguenan.internal
+    - longhorn.internal.cristianpuenguenan.online
   rules:
     - backendRefs:
         - name: longhorn-frontend

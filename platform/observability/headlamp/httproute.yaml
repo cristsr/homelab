@@ -8,8 +8,12 @@ spec:
     - name: main
       namespace: networking
       sectionName: https
+    - name: main
+      namespace: networking
+      sectionName: https-online
   hostnames:
     - headlamp.cristianpuenguenan.internal
+    - headlamp.internal.cristianpuenguenan.online
   rules:
     - backendRefs:
         - name: headlamp

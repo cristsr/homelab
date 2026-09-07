@@ -24,6 +24,17 @@ data:
             192.168.122.240 agentgateway.cristianpuenguenan.internal
             192.168.122.240 mcp.cristianpuenguenan.internal
             192.168.122.240 openmemory-api.cristianpuenguenan.internal
+            192.168.122.240 argocd.internal.cristianpuenguenan.online
+            192.168.122.240 grafana.internal.cristianpuenguenan.online
+            192.168.122.240 headlamp.internal.cristianpuenguenan.online
+            192.168.122.240 hubble.internal.cristianpuenguenan.online
+            192.168.122.240 longhorn.internal.cristianpuenguenan.online
+            192.168.122.240 openbao.internal.cristianpuenguenan.online
+            192.168.122.240 openmemory.internal.cristianpuenguenan.online
+            192.168.122.240 sonarqube.internal.cristianpuenguenan.online
+            192.168.122.240 agentgateway.internal.cristianpuenguenan.online
+            192.168.122.240 mcp.internal.cristianpuenguenan.online
+            192.168.122.240 openmemory-api.internal.cristianpuenguenan.online
             fallthrough
         }
         forward . 1.1.1.1 1.0.0.1
