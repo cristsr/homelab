@@ -10,9 +10,14 @@ variable "vm_name" {
 }
 
 variable "pool_path" {
+  # /var/lib/libvirt vive en la particion raiz del hipervisor, que en este
+  # host tiene solo ~50GB - insuficiente para el disco raiz de la VM (120GB)
+  # mas el disco dedicado de OpenEBS (100GB). /home esta en una particion
+  # separada con mucho mas espacio libre, asi que el pool completo (ambos
+  # discos + la imagen base + el ISO de cloud-init) vive ahi.
   description = "Path en el host donde vive el pool de libvirt dedicado a este modulo"
   type        = string
-  default     = "/var/lib/libvirt/images/homelab"
+  default     = "/home/libvirt/images/homelab"
 }
 
 variable "memory_mib" {
@@ -31,6 +36,12 @@ variable "disk_size_bytes" {
   description = "Tamano del disco overlay de la VM (bytes)"
   type        = number
   default     = 128849018880 # 120 GiB
+}
+
+variable "openebs_disk_size_bytes" {
+  description = "Tamano del disco dedicado (vdb, raw) para el Volume Group LVM de OpenEBS Local PV LVM (bytes)"
+  type        = number
+  default     = 107374182400 # 100 GiB
 }
 
 variable "libvirt_network_name" {

@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: longhorn-config
+  name: openebs-config
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -12,12 +12,12 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/storage/longhorn
+    path: platform/storage/openebs
     directory:
-      exclude: "longhorn.yaml"
+      exclude: "values.yaml"
   destination:
     server: https://kubernetes.default.svc
-    namespace: longhorn-system
+    namespace: openebs
   syncPolicy:
     automated:
       prune: true

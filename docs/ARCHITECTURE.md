@@ -30,7 +30,7 @@ Homelab de un solo nodo construido sobre k0s con GitOps completo. ArgoCD gestion
 | Ingress / Gateway (MCP) | Agent Gateway 1.1.0 |
 | GitOps | Argo CD 9.5.13 |
 | Certificados TLS | cert-manager: Let's Encrypt (publico, DNS-01) + CA interna (rutas `.internal`) |
-| Storage | Longhorn 1.11.2 |
+| Storage | OpenEBS Local PV LVM 1.10.0 |
 | Tunel Internet | Cloudflare Tunnel (cloudflared) |
 | Monitoreo | kube-prometheus-stack + Grafana Operator |
 | Secrets | OpenBao 2.5.3 + External Secrets Operator |
@@ -59,7 +59,7 @@ homelab/
 │   │   ├── k0s.yaml            # Instalacion y configuracion de k0s
 │   │   ├── kubeconfig.yaml     # Export de kubeconfig e instalacion de kubectl
 │   │   ├── helm.yaml           # Instalacion de Helm
-│   │   ├── longhorn-prereqs.yaml  # Prerequisitos de Longhorn (open-iscsi)
+│   │   ├── openebs-prereqs.yaml  # Prerequisitos de OpenEBS (lvm2 + Volume Group)
 │   │   ├── helmfile.yaml       # Instalacion de Helmfile y bootstrap Cilium/ArgoCD
 │   │   ├── argocd-secret.yaml  # Secret repo-creds de GitHub para ArgoCD
 │   │   └── vault-secrets.yaml  # Namespace secret-management y static unseal key
@@ -85,7 +85,7 @@ homelab/
 │       ├── platform/           # ArgoCD Applications de infraestructura
 │       │   ├── argocd/         # Configuracion adicional de ArgoCD
 │       │   ├── networking/     # cert-manager, cloudflared, agentgateway, cilium-gateway
-│       │   ├── storage/        # Longhorn
+│       │   ├── storage/        # OpenEBS Local PV LVM
 │       │   ├── data-platform/  # PostgreSQL, MongoDB, Redis, Qdrant
 │       │   ├── devtools/       # OpenMemory
 │       │   ├── observability/  # Prometheus, Grafana, Headlamp
@@ -183,7 +183,7 @@ Declarados en `bootstrap/namespaces.yaml` y creados por el hook presync de Ciliu
 | `data-platform` | CloudNative-PG, Percona operators |
 | `infra` | PostgreSQL, MongoDB, Redis, Qdrant |
 | `devtools` | OpenMemory |
-| `longhorn-system` | Longhorn |
+| `openebs` | OpenEBS Local PV LVM |
 | `networking` | Cilium Gateway, Agent Gateway (MCP), cloudflared, cert-manager |
 | `observability` | Prometheus, Grafana, Alertmanager, Headlamp |
 | `secret-management` | OpenBao, External Secrets |
@@ -220,7 +220,6 @@ Herramientas de administracion/observabilidad — solo alcanzables por LAN/Tails
 | `grafana.internal.cristianpuenguenan.online` | prometheus-grafana:80 | observability |
 | `headlamp.internal.cristianpuenguenan.online` | headlamp:80 | observability |
 | `hubble.internal.cristianpuenguenan.online` | hubble-ui:80 | kube-system |
-| `longhorn.internal.cristianpuenguenan.online` | longhorn-frontend:80 | longhorn-system |
 | `openbao.internal.cristianpuenguenan.online` | openbao:8200 | secret-management |
 | `openmemory.internal.cristianpuenguenan.online` | openmemory-ui:3000 | devtools |
 | `sonarqube.internal.cristianpuenguenan.online` | sonarqube-sonarqube:9000 | sonarqube |
@@ -258,25 +257,29 @@ Automatiza la emision y renovacion de certificados TLS.
 | Certificado privado | Wildcard `*.internal.cristianpuenguenan.online` + apex → `wildcard-internal-online-tls`, usado por `main` |
 | Secret del token | `cloudflare-api-token` en namespace `networking` (via ExternalSecret) |
 
-### 3.3 Longhorn (Storage)
+### 3.3 OpenEBS Local PV LVM (Storage)
 
-**Chart**: `longhorn/longhorn` — **Namespace**: `longhorn-system`
+**Chart**: `lvm-localpv` (`https://openebs.github.io/lvm-localpv`) — **Namespace**: `openebs`
 
-CSI StorageClass por defecto del cluster. En nodo unico, las replicas se configuran en 1.
+Ver ADR-013 en [DECISIONS.md](DECISIONS.md) (reemplaza a Longhorn/ADR-004). PVCs provisionados como
+Logical Volumes dentro de un Volume Group LVM (`vg-openebs`) sobre un disco dedicado de la VM
+(`vdb`, ver ADR-008/terraform). Sin replicacion (copia unica, local al nodo) — igual trade-off
+que ya aceptaba Longhorn con `replicaCount: 1`.
 
 | Parametro | Valor |
 |-----------|-------|
-| `defaultSettings.defaultReplicaCount` | `1` |
-| `defaultSettings.storageMinimalAvailablePercentage` | `50` |
-| `csi.kubeletRootDir` | `/var/lib/kubelet` |
-| StorageClass por defecto | `longhorn` |
+| `global.kubeletDir` / `lvmNode.kubeletDir` | `/var/lib/k0s/kubelet/` |
+| `lvmNode.serviceMonitor.enabled` | `true` |
+| `analytics.enabled` | `false` |
+| StorageClass por defecto | `openebs-lvm` |
+| Volume Group | `vg-openebs` (creado por Ansible, ver `ansible/tasks/openebs-prereqs.yaml`) |
 
 #### StorageClasses
 
-| Nombre | ReclaimPolicy | Replicas | Uso |
-|--------|--------------|----------|-----|
-| `longhorn` | Delete | 1 | Por defecto |
-| `longhorn-retain` | Retain | 1 | Bases de datos |
+| Nombre | ReclaimPolicy | Uso |
+|--------|--------------|-----|
+| `openebs-lvm` | Delete | Por defecto |
+| `openebs-lvm-retain` | Retain | Bases de datos |
 
 ### 3.4 Cloudflared (Tunel Internet)
 
@@ -308,7 +311,7 @@ KV v2 secrets engine como backend central de todos los secrets del cluster.
 | Modo | Production (standalone) |
 | Autenticacion | Kubernetes auth |
 | KV mount | `secret` (v2) |
-| Storage | PVC (Longhorn) |
+| Storage | PVC (`openebs-lvm`, default del cluster) |
 | UI | habilitada en `:8200` |
 
 **Init jobs** (`platform/secret-management/openbao/init.yaml`):
@@ -388,7 +391,7 @@ Todas en namespace `data-platform`.
 | Parametro | Valor |
 |-----------|-------|
 | Imagen | `ghcr.io/cloudnative-pg/postgresql:17-standard` |
-| Storage | `longhorn-retain` |
+| Storage | `openebs-lvm-retain` |
 
 Servicios generados: `-rw`, `-r`, `-ro`.
 
@@ -399,7 +402,7 @@ Servicios generados: `-rw`, `-r`, `-ro`.
 | Parametro | Valor |
 |-----------|-------|
 | Replica set | `rs0` (1 miembro en nodo unico) |
-| Storage | `longhorn-retain` |
+| Storage | `openebs-lvm-retain` |
 
 ### 5.3 Redis
 
@@ -409,7 +412,7 @@ Servicios generados: `-rw`, `-r`, `-ro`.
 |-----------|-------|
 | Puerto | 6379 |
 | Auth | via Secret |
-| Storage | `longhorn-retain` |
+| Storage | `openebs-lvm-retain` |
 
 ### 5.4 Qdrant (Vector DB)
 
@@ -419,7 +422,7 @@ Servicios generados: `-rw`, `-r`, `-ro`.
 |-----------|-------|
 | Puerto REST | 6333 |
 | Puerto gRPC | 6334 |
-| Storage | `longhorn-retain` |
+| Storage | `openebs-lvm-retain` |
 
 ---
 
@@ -444,7 +447,7 @@ Servicios generados: `-rw`, `-r`, `-ro`.
 
 ### Acceso segmentado: publico (Cloudflare) vs privado (LAN + Tailscale)
 
-Ver ADR-011 en [DECISIONS.md](DECISIONS.md). Solo 2 de las 13 rutas son publicas de verdad (`portfolio`, `api` `/webhooks`) — el resto (ArgoCD, Grafana, Headlamp, Hubble, Longhorn, OpenBao, SonarQube UI, admin UI de Agent Gateway, OpenMemory UI/API, SonarQube MCP) son herramientas de administracion, accesibles solo desde la LAN de casa o el tailnet del usuario.
+Ver ADR-011 en [DECISIONS.md](DECISIONS.md). Solo 2 de las 12 rutas son publicas de verdad (`portfolio`, `api` `/webhooks`) — el resto (ArgoCD, Grafana, Headlamp, Hubble, OpenBao, SonarQube UI, admin UI de Agent Gateway, OpenMemory UI/API, SonarQube MCP) son herramientas de administracion, accesibles solo desde la LAN de casa o el tailnet del usuario. OpenEBS (reemplazo de Longhorn, ver ADR-013) no expone UI web — no hay ruta equivalente que administrar.
 
 Cada Gateway tiene una IP LAN fija, asignada via Cilium L2 Announcements (`CiliumLoadBalancerIPPool` + `CiliumL2AnnouncementPolicy` en `platform/networking/cilium-gateway/`, `spec.addresses` en cada `Gateway`):
 
@@ -531,7 +534,7 @@ secret/infra/cloudflared -> token
 root-app (gitops/root-app.yaml)
   └── App of Apps (gitops/apps/)
         ├── platform/
-        │     ├── Wave 1:  longhorn, cert-manager, operators (cloudnative-pg, percona)
+        │     ├── Wave 1:  openebs, cert-manager, operators (cloudnative-pg, percona)
         │     ├── Wave 2:  openbao, external-secrets, init jobs, gateway-api-crds
         │     ├── Wave 3:  agentgateway, cilium (con gatewayAPI.enabled)
         │     ├── Wave 4:  agentgateway-config, cilium-gateway, private-dns, argocd-config, cert-manager-config
@@ -547,7 +550,7 @@ root-app (gitops/root-app.yaml)
 ### Dependencias implicitas
 
 ```
-Longhorn ──────────────────────► Todas las bases de datos y PVCs
+OpenEBS ───────────────────────► Todas las bases de datos y PVCs
 
 cert-manager (letsencrypt-prod-cloudflare-dns01) ──► wildcard-internal-online-tls ──► listener HTTPS de main
                                                 └──► wildcard-home-tls (emitido, no referenciado — ver §3.1 TLS)
@@ -567,22 +570,22 @@ Qdrant ────────────────────────�
 
 | Componente | Tamanio | StorageClass |
 |-----------|---------|-------------|
-| PostgreSQL | 10Gi | longhorn-retain |
-| MongoDB | 10Gi | longhorn-retain |
-| Redis | 5Gi | longhorn-retain |
-| Qdrant | 10Gi | longhorn-retain |
-| OpenBao | 1Gi | longhorn |
-| Prometheus | 20Gi | longhorn |
-| Grafana | 5Gi | longhorn |
-| Alertmanager | 1Gi | longhorn |
-| SonarQube | 10Gi | longhorn |
+| PostgreSQL | 10Gi | openebs-lvm-retain |
+| MongoDB | 10Gi | openebs-lvm-retain |
+| Redis | 5Gi | openebs-lvm-retain |
+| Qdrant | 10Gi | openebs-lvm-retain |
+| OpenBao | 1Gi | openebs-lvm |
+| Prometheus | 20Gi | openebs-lvm |
+| Grafana | 5Gi | openebs-lvm |
+| Alertmanager | 1Gi | openebs-lvm |
+| SonarQube | 10Gi | openebs-lvm |
 | **Total** | **~72Gi** | |
 
 ### Requerimiento minimo de la VM
 
 - **CPU**: 4 cores (default de este repo: 8 vCPU)
 - **RAM**: 8 GB (default: 16 GB)
-- **Disco**: 100 GB SSD, recomendado para Longhorn (default: 120 GB overlay)
+- **Disco**: 2 discos - raiz (100 GB SSD recomendado, default: 120 GB overlay qcow2) + dedicado para el VG LVM de OpenEBS (default: 100 GB raw, `vdb`)
 - **OS**: Fedora Cloud Base (imagen descargada por Terraform)
 
 El **host** (hipervisor) necesita margen adicional sobre estos numeros para SO + libvirt/KVM + overhead de la VM.
@@ -603,7 +606,7 @@ terraform apply
 
 ### Fase 1 — Aprovisionamiento del nodo (Ansible)
 
-Ansible instala k0s, exporta kubeconfig, instala kubectl, Helm, Helmfile, prerequisitos de Longhorn, secret de ArgoCD y secret de OpenBao.
+Ansible instala k0s, exporta kubeconfig, instala kubectl, Helm, Helmfile, prerequisitos de OpenEBS (lvm2 + Volume Group), secret de ArgoCD y secret de OpenBao.
 
 ```bash
 cd ansible
@@ -675,8 +678,10 @@ kubectl describe clustersecretstore openbao
 kubectl exec -n secret-management openbao-0 -- bao operator unseal <UNSEAL_KEY>
 ```
 
-**Longhorn stuck:**
+**Volumen OpenEBS no provisiona (Pending):**
 ```bash
-kubectl create serviceaccount longhorn-sa -n argocd
-kubectl create clusterrolebinding longhorn-temp --clusterrole=cluster-admin --serviceaccount=argocd:longhorn-sa
+kubectl get lvmnode -n openebs
+kubectl -n openebs logs -l app=openebs-lvm-controller -c openebs-lvm-plugin
+# En el nodo: confirmar que el VG existe y tiene espacio libre
+vgs vg-openebs
 ```

@@ -48,6 +48,23 @@ resource "libvirt_volume" "k0s_node_disk" {
   }
 }
 
+# Disco dedicado (raw, sin backing_store) para el Volume Group LVM que usa
+# OpenEBS Local PV LVM. Separado del disco raiz (vda) a proposito: este VG es
+# solo para PVCs, no compite con el filesystem del SO, y raw evita el overhead
+# de doble buffering de qcow2 sobre un VG que ya maneja sus propios metadatos.
+resource "libvirt_volume" "openebs_data_disk" {
+  name     = "${var.vm_name}-openebs.raw"
+  pool     = libvirt_pool.homelab.name
+  type     = "file"
+  capacity = var.openebs_disk_size_bytes
+
+  target = {
+    format = {
+      type = "raw"
+    }
+  }
+}
+
 # Llave SSH dedicada a este modulo, generada por Terraform. No reutiliza
 # ninguna llave del operador para que el repo sea reproducible desde cero.
 resource "tls_private_key" "vm" {
@@ -116,10 +133,10 @@ resource "libvirt_domain" "k0s_node" {
   type        = "kvm"
   memory      = var.memory_mib
   memory_unit = "MiB" # sin esto, "memory" se interpreta en KiB: cada VM
-                       # creada hasta ahora arrancaba con unos pocos MB de
-                       # RAM en vez de GB, y por eso SeaBIOS colgaba siempre
-                       # en el mismo punto sin importar que mas se cambiara
-  vcpu        = var.vcpu
+  # creada hasta ahora arrancaba con unos pocos MB de
+  # RAM en vez de GB, y por eso SeaBIOS colgaba siempre
+  # en el mismo punto sin importar que mas se cambiara
+  vcpu      = var.vcpu
   autostart = true # unica via de arranque del cluster tras un reboot del host
   running   = true # arrancar inmediatamente al crear (autostart solo aplica en reboots del host)
 
@@ -131,7 +148,7 @@ resource "libvirt_domain" "k0s_node" {
   # cuelga el arranque en silencio (sin salida en serie ni framebuffer,
   # confirmado empiricamente). BIOS legacy es lo que si arranca de forma
   # confiable con esta plantilla de Fedora Cloud, y nada en el stack
-  # (k0s/Cilium/Longhorn) necesita UEFI.
+  # (k0s/Cilium/OpenEBS) necesita UEFI.
   os = {
     type         = "hvm"
     type_machine = "pc"
@@ -143,17 +160,17 @@ resource "libvirt_domain" "k0s_node" {
       { name = "rtc", tick_policy = "catchup" },
       { name = "pit", tick_policy = "delay" },
       { name = "hpet", present = "no" }, # HPET habilitado cuelga la
-                                          # calibracion de timer de SeaBIOS
-                                          # bajo KVM en este host (confirmado
-                                          # empiricamente)
+      # calibracion de timer de SeaBIOS
+      # bajo KVM en este host (confirmado
+      # empiricamente)
     ]
   }
 
   features = {
     acpi = true
     apic = {} # sin esto, un vCPU se queda en spin-loop al 99% CPU esperando
-              # una interrupcion que nunca llega a entregarse (confirmado
-              # empiricamente: mismo EIP fijo, independiente del vcpu count)
+    # una interrupcion que nunca llega a entregarse (confirmado
+    # empiricamente: mismo EIP fijo, independiente del vcpu count)
   }
 
   devices = {
@@ -173,6 +190,23 @@ resource "libvirt_domain" "k0s_node" {
         driver = {
           name = "qemu"
           type = "qcow2"
+        }
+      },
+      {
+        device = "disk"
+        source = {
+          volume = {
+            pool   = libvirt_pool.homelab.name
+            volume = libvirt_volume.openebs_data_disk.name
+          }
+        }
+        target = {
+          bus = "virtio"
+          dev = "vdb"
+        }
+        driver = {
+          name = "qemu"
+          type = "raw"
         }
       },
       {

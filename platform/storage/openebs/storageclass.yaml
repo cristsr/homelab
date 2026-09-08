@@ -1,0 +1,27 @@
+# Nombre del VG (vg-openebs) debe coincidir con ansible/group_vars/all.yaml
+# (openebs_lvm_vg_name) - ahi se crea el VG, aca solo se referencia por nombre.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openebs-lvm
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: local.csi.openebs.io
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+parameters:
+  storage: "lvm"
+  volgroup: "vg-openebs"
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openebs-lvm-retain
+provisioner: local.csi.openebs.io
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+parameters:
+  storage: "lvm"
+  volgroup: "vg-openebs"

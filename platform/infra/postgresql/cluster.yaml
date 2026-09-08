@@ -9,7 +9,7 @@ spec:
 
   storage:
     size: 10Gi
-    storageClass: longhorn-retain
+    storageClass: openebs-lvm-retain
 
   resources:
     requests:

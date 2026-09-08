@@ -96,6 +96,41 @@ sudo ausearch -m avc -ts recent | grep sshd_session_t | audit2allow -M <nombre-n
 sudo semodule -i <nombre-nuevo>.pp
 ```
 
+## 3.5. SELinux — etiquetar el pool de libvirt en `/home`
+
+`/var/lib/libvirt/images` ya viene etiquetado por la política default con el
+contexto `virt_image_t`, que es el que necesita libvirtd/qemu para leer y
+escribir los discos de la VM. El pool de este módulo (`terraform/variables.tf`
+`pool_path`) vive en `/home/libvirt/images/homelab` en vez de la ruta default
+porque la partición raíz de este hipervisor tiene solo ~50GB — insuficiente
+para el disco raíz de la VM (120GB) más el disco dedicado de OpenEBS (100GB).
+`/home` no tiene ese contexto por defecto, así que sin este paso `terraform
+apply` falla (o libvirtd rechaza leer/escribir los volúmenes) con un AVC
+`denied` sobre `virt_image_t`/`home_root_t` — mismo patrón que los AVC de
+`sshd_session_t` de arriba, pero en el dominio `virtqemud_t`/`svirt_t`.
+
+```bash
+sudo mkdir -p /home/libvirt/images
+sudo semanage fcontext -a -t virt_image_t '/home/libvirt(/.*)?'
+sudo restorecon -R -v /home/libvirt
+```
+
+**Ojo con el patrón del `fcontext`**: tiene que cubrir `/home/libvirt` completo, no
+solo `/home/libvirt/images`. SELinux exige permiso `search` en *cada* directorio
+intermedio del path — si solo se etiqueta `images/`, `/home/libvirt` (el
+directorio padre) se queda con la equivalencia default de `/home/<algo>`
+(`user_home_dir_t`, pensada para el home personal de un usuario), y
+`virtqemud_t`/`svirt_t` no tienen permiso de `search` ahí. Confirmado
+empíricamente en este host (2026-09-08): con solo `images/` etiquetado,
+`ls -laZ /home/libvirt` seguía mostrando `user_home_dir_t` en el padre.
+
+Verificación (después del primer `terraform apply`, no debería aparecer
+ningún AVC nuevo sobre este path):
+
+```bash
+sudo ausearch -m avc -ts recent | grep -i 'home/libvirt'
+```
+
 ## 4. sudo para Ansible (`host-network.yaml`)
 
 Ansible ejecuta sus módulos (incluido `ansible.builtin.command`) copiando un

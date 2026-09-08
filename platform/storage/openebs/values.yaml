@@ -1,0 +1,16 @@
+# Values del chart lvm-localpv 1.10.0 (https://openebs.github.io/lvm-localpv).
+# Claves verificadas contra el values.yaml real del chart, no adivinadas.
+
+global:
+  # k0s usa /var/lib/k0s/kubelet en lugar del path estandar /var/lib/kubelet
+  # (mismo ajuste que hacia Longhorn via csi.kubeletRootDir).
+  kubeletDir: /var/lib/k0s/kubelet/
+
+lvmNode:
+  kubeletDir: /var/lib/k0s/kubelet/
+  serviceMonitor:
+    enabled: true
+
+# Sin telemetria hacia OpenEBS/Mayadata en un homelab.
+analytics:
+  enabled: false
