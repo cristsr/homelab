@@ -131,6 +131,42 @@ ningún AVC nuevo sobre este path):
 sudo ausearch -m avc -ts recent | grep -i 'home/libvirt'
 ```
 
+## 3.6. SELinux — permitir que `virtnetworkd` corra el hook de red
+
+`ansible/host-network.yaml` instala `/etc/libvirt/hooks/network` (contexto
+`virt_hook_t`, ver §3.5 de arriba para el hook en sí). El daemon modular
+`virtnetworkd` (dominio `virtnetworkd_t`) necesita **cuatro** permisos
+distintos para poder ejecutarlo, cada uno visible recién después de resolver
+el anterior (mismo patrón en cascada que los AVC de `sshd_session_t` de la
+sección 3) — descubierto en vivo el 2026-09-08 cuando `virsh net-start
+default` fallaba con `cannot execute binary: Permission denied` y después
+con `unexpected fatal signal 11` (SIGSEGV):
+
+1. `execute` de `virtnetworkd_t` sobre el propio hook (`virt_hook_t`, `file`).
+2. `execute_no_trans` de `virtnetworkd_t` sobre el hook — corre sin
+   transición de dominio, se queda en `virtnetworkd_t`.
+3. `execute` de `virtnetworkd_t` sobre `/usr/bin/bash` (`shell_exec_t`) — el
+   hook tiene shebang `#!/bin/bash` y, al no transicionar de dominio, es
+   `virtnetworkd_t` quien necesita poder ejecutar el intérprete.
+4. `map` de `virtnetworkd_t` sobre `/usr/bin/bash` (`shell_exec_t`) — mmap
+   del binario para cargarlo; sin este permiso el intérprete referencia
+   memoria inválida y el proceso muere con SIGSEGV en vez de un EACCES limpio.
+
+Sin estos permisos, `virsh net-start default` (o el arranque automático de
+la red via autostart) falla siempre, y por lo tanto **todo `terraform
+apply` que intente arrancar el dominio de la VM falla** con `network
+'default' is not active` — no es un problema de Terraform ni del dominio.
+
+Igual que en la sección 3, se resuelve generando un módulo de política por
+cada AVC ya conocido (no hace falta re-disparar los errores a mano):
+
+```bash
+sudo ausearch -m avc -ts recent | grep virtnetworkd_t | audit2allow -M <nombre>
+sudo semodule -i <nombre>.pp
+# repetir con `sudo virsh net-start default` entre cada paso hasta que
+# ya no aparezcan AVC nuevas y el comando termine en "Network default started"
+```
+
 ## 4. sudo para Ansible (`host-network.yaml`)
 
 Ansible ejecuta sus módulos (incluido `ansible.builtin.command`) copiando un
