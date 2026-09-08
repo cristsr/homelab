@@ -17,7 +17,6 @@ data:
             192.168.122.240 grafana.internal.cristianpuenguenan.online
             192.168.122.240 headlamp.internal.cristianpuenguenan.online
             192.168.122.240 hubble.internal.cristianpuenguenan.online
-            192.168.122.240 longhorn.internal.cristianpuenguenan.online
             192.168.122.240 openbao.internal.cristianpuenguenan.online
             192.168.122.240 openmemory.internal.cristianpuenguenan.online
             192.168.122.240 sonarqube.internal.cristianpuenguenan.online

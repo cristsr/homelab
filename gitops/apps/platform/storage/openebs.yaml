@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: longhorn
+  name: openebs
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -10,19 +10,19 @@ metadata:
 spec:
   project: homelab
   sources:
-    - repoURL: https://charts.longhorn.io
-      chart: longhorn
-      targetRevision: "1.11.2"
+    - repoURL: https://openebs.github.io/lvm-localpv
+      chart: lvm-localpv
+      targetRevision: "1.10.0"
       helm:
-        releaseName: longhorn
+        releaseName: openebs-lvm-localpv
         valueFiles:
-          - $values/platform/storage/longhorn/longhorn.yaml
+          - $values/platform/storage/openebs/values.yaml
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: longhorn-system
+    namespace: openebs
   syncPolicy:
     automated:
       prune: true
