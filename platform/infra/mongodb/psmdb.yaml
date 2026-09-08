@@ -20,7 +20,7 @@ spec:
           memory: 512Mi
       volumeSpec:
         persistentVolumeClaim:
-          storageClassName: longhorn-retain
+          storageClassName: openebs-lvm-retain
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:

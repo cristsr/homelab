@@ -113,7 +113,7 @@ Se necesita un CNI que cumpla tres requisitos simultáneamente:
 
 ## ADR-004: Longhorn como storage
 
-**Estado**: Aceptado  
+**Estado**: Superseded por [ADR-013](#adr-013-reemplazo-de-longhorn-por-openebs-local-pv-lvm)  
 **Fecha**: 2026-04
 
 ### Contexto
@@ -472,5 +472,47 @@ Consecuencias:
 - Certificate Transparency: cualquiera puede ver en `crt.sh` que existe `*.internal.cristianpuenguenan.online` — revela que hay una zona de administración privada (no revela qué hostnames específicos, esos nunca se emiten individualmente), algo que con `.internal` (TLD reservado) no era ni remotamente posible. Riesgo aceptado: es solo reconocimiento, no acceso.
 - Un solo `ClusterIssuer` para los dos wildcards (público y privado) — mismo token de Cloudflare, sin credenciales nuevas.
 - Riesgo de error humano ligeramente mayor que antes: `.internal` y `.online` eran visualmente imposibles de confundir; `internal.cristianpuenguenan.online` vs `cristianpuenguenan.online` difieren en una sola etiqueta — un `HTTPRoute` mal armado (parentRef al Gateway `public` en vez de `main`, o el hostname sin el prefijo `internal.`) expondría una ruta de administración a Internet. Mitigado por convención de nombres consistente y revisión de diffs, no por control automático.
+
+---
+
+## ADR-013: Reemplazo de Longhorn por OpenEBS Local PV LVM
+
+**Estado**: Aceptado  
+**Fecha**: 2026-09-08
+
+### Contexto
+
+ADR-004 descartó OpenEBS por "más complejo de configurar, comunidad más pequeña" y adoptó Longhorn con réplicas=1 (sin ganancia real de redundancia en single-node). Ese mismo mecanismo de Longhorn —volúmenes expuestos vía iSCSI (`iscsid`, `ansible/tasks/longhorn-prereqs.yaml`)— resultó ser la causa más probable de un cuelgue real de `k0s reset` durante un teardown (2026-09-07, documentado en memoria de sesión y en `ansible/tasks/graceful-shutdown.yaml`): si el kubelet muere antes de que el CSI driver desmonte y haga logout de esas sesiones, quedan mounts/sesiones "busy" que cuelgan el `umount` interno del reset.
+
+Se aprovechó un ciclo de teardown/rebuild del cluster (sin cargas productivas todavía) para revisar la decisión: en un solo nodo, la capa de red + réplicas + iSCSI de Longhorn no compra nada (replicaCount ya estaba fijo en 1) y sí paga en superficie de fallo y en throughput/latencia frente a un motor puramente local.
+
+### Opciones consideradas
+
+Motores de OpenEBS Local PV evaluados para reemplazar a Longhorn (ver tabla completa de trade-offs discutida con el operador):
+
+| Opción | Razón de descarte / elección |
+|--------|------------------------------|
+| **Local PV Hostpath** | Máxima performance y cero aprovisionamiento adicional, pero sin snapshots ni resize online ni thin-provisioning |
+| **Local PV ZFS** | Requiere ZFS (DKMS/kmod) en un host Fedora que no lo trae por defecto — más piezas nuevas que mantener |
+| **Mayastor (NVMe-oF)** | Pensado para replicación multi-nodo; overkill para un solo nodo, no aporta nada sobre Local PV |
+| **Local PV LVM** (elegido) | Requiere un Volume Group LVM dedicado (no existía) — a cambio da snapshots, thin-provisioning y resize online con performance cercana a la nativa del disco |
+
+### Decisión
+
+**OpenEBS Local PV LVM** (chart standalone `lvm-localpv` de `https://openebs.github.io/lvm-localpv`, no el paquete umbrella `openebs/openebs` con NDM/Mayastor — solo se instala el motor que se usa):
+
+- Disco dedicado nuevo (`vdb`, raw, sin `backing_store` qcow2) en la VM vía Terraform (`libvirt_volume.openebs_data_disk`, `terraform/variables.tf` `openebs_disk_size_bytes`), separado del disco raíz para que el VG no compita con el filesystem del SO.
+- Volume Group `vg-openebs` creado por Ansible (`ansible/tasks/openebs-prereqs.yaml`, idempotente vía `pvcreate`/`vgcreate`), reemplazando el prerequisito de `iscsi-initiator-utils`/`iscsid`.
+- Mismo split de dos StorageClasses que Longhorn, renombradas 1:1 para minimizar el diff en los consumidores: `openebs-lvm` (default, `Delete`) y `openebs-lvm-retain` (`Retain`, bases de datos). `provisioner: local.csi.openebs.io`, `parameters: {storage: "lvm", volgroup: "vg-openebs"}`.
+- Namespace `openebs` (reemplaza `longhorn-system`).
+- ServiceMonitor propio del chart (`lvmNode.serviceMonitor.enabled: true`) en vez del ServiceMonitor manual que tenía Longhorn.
+
+### Consecuencias
+
+- **Sin UI web**: Longhorn tenía una UI propia (HTTPRoute + DNS `longhorn.internal...`); LVM-LocalPV no tiene equivalente. Se retira sin reemplazo — inspección de volúmenes queda vía `kubectl get lvmvolumes -n openebs` / `lvs`/`vgs` en el nodo.
+- **Sin réplicas** (igual que antes: Longhorn ya corría con `replicaCount: 1`, no es una regresión real): un fallo del disco `vdb` es pérdida total de datos. Mitigable con snapshots LVM manuales (`lvcreate --snapshot`), sin automatización todavía — misma deuda de backups que ya existía con Longhorn.
+- El footprint de disco de la VM sube de 120GiB a 120+100GiB (root + VG dedicado).
+- Se simplifica el ciclo de shutdown: sin iSCSI de por medio, `ansible/tasks/graceful-shutdown.yaml` ya no necesita esperar "volúmenes detached" ni forzar logout — el drenaje normal de Kubernetes basta, porque LVM-LocalPV monta los LVs directo (sin capa NBD/iSCSI).
+- El argumento original de ADR-004 contra OpenEBS ("más complejo de configurar") se acepta ahora a cambio de performance en single-node: el chart standalone de un solo motor (LVM) es en la práctica más simple de operar que Longhorn con su UI, su manager y su engine-image por réplica.
 
 

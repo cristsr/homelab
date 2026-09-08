@@ -242,7 +242,7 @@ El playbook `site.yaml` realiza automaticamente:
 2. **kubeconfig**: Exporta la config de admin y la coloca en `~/.kube/config`.
 3. **kubectl**: Descarga el binario standalone de kubectl.
 4. **helm**: Descarga e instala Helm.
-5. **longhorn-prereqs**: Instala `open-iscsi` y habilita `iscsid`.
+5. **openebs-prereqs**: Instala `lvm2` y crea el Volume Group `vg-openebs` sobre el disco dedicado (`vdb`).
 6. **helmfile**: Descarga Helmfile y ejecuta `helmfile sync` desde `../bootstrap`.
 7. **argocd-secret**: Crea el secret `github-repo-creds` en namespace `argocd` y el `in-cluster-secret` para que ArgoCD gestione el cluster local.
 8. **vault-secrets**: Crea el namespace `secret-management` y el secret `openbao-static-unseal-key`.
@@ -482,11 +482,13 @@ kubectl -n secret-management logs deployment/external-secrets --tail=50
 kubectl -n secret-management exec openbao-0 -- bao operator unseal <UNSEAL_KEY>
 ```
 
-### Longhorn atascado
+### Volumen OpenEBS no provisiona
 
 ```bash
-kubectl create serviceaccount longhorn-sa -n argocd
-kubectl create clusterrolebinding longhorn-temp --clusterrole=cluster-admin --serviceaccount=argocd:longhorn-sa
+kubectl get lvmnode -n openebs
+kubectl -n openebs logs -l app=openebs-lvm-controller -c openebs-lvm-plugin
+# En el nodo: confirmar que el VG existe y tiene espacio libre
+vgs vg-openebs
 ```
 
 ### Actualizar paquetes del SO de la VM
@@ -513,7 +515,7 @@ cd ansible
 ansible-playbook teardown.yaml
 ```
 
-> **ADVERTENCIA**: `teardown.yaml` elimina el cluster k0s, certificados, etcd y unidades systemd. Los datos de Longhorn pueden perderse dependiendo de la politica de reclaim.
+> **ADVERTENCIA**: `teardown.yaml` elimina el cluster k0s, certificados, etcd y unidades systemd, y borra los Logical Volumes de OpenEBS (`vg-openebs`) segun la politica de reclaim de cada StorageClass.
 
 Para destruir tambien la VM y recrearla desde cero:
 

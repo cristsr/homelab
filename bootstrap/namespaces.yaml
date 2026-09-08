@@ -29,7 +29,7 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: longhorn-system
+  name: openebs
   labels:
     app.kubernetes.io/part-of: homelab
 ---

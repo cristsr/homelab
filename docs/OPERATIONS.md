@@ -242,12 +242,13 @@ kubectl -n data-platform exec -it postgresql-1 -- pg_dump -U admin homelab > bac
 kubectl -n data-platform exec -it mongodb-rs0-0 -- mongodump --out /tmp/backup
 ```
 
-### Backup de PersistentVolumes (Longhorn)
+### Backup de PersistentVolumes (OpenEBS LVM)
 
-Longhorn soporta snapshots. Desde la UI de Longhorn o via kubectl:
+OpenEBS Local PV LVM no tiene UI ni snapshots automatizados. Backup manual via snapshot LVM
+en el nodo (identificar el LV real con `lvs vg-openebs`, el nombre lo asigna el CSI driver):
 
 ```bash
-kubectl -n longhorn-system get volumes
+lvcreate --snapshot --name <lv>-snap --size 1G vg-openebs/<lv>
 ```
 
 ### Backup de configuracion de Ansible
@@ -380,17 +381,18 @@ kubectl -n networking logs deployment/cert-manager --tail=100
 kubectl -n networking annotate certificate wildcard-home-tls cert-manager.io/force-renew="true"
 ```
 
-### Longhorn
+### OpenEBS
 
 ```bash
-# Volumenes
-kubectl -n longhorn-system get volumes
+# Volumenes LVM
+kubectl -n openebs get lvmvolumes
 
 # Nodos de almacenamiento
-kubectl -n longhorn-system get nodes
+kubectl -n openebs get lvmnode
 
-# UI de Longhorn
-kubectl -n longhorn-system port-forward svc/longhorn-frontend 8080:80
+# Estado del Volume Group (en el nodo)
+vgs vg-openebs
+lvs vg-openebs
 ```
 
 ### OpenBao
@@ -454,7 +456,18 @@ kubectl apply -f ../gitops/root-app.yaml
 ansible-playbook vault-populate.yaml
 ```
 
-> **ADVERTENCIA**: Todos los datos persistentes en Longhorn con `Delete` reclaim policy se perderan.
+`teardown.yaml` drena el nodo **antes** de detener `k0scontroller` y correr `k0s reset`
+(OpenEBS Local PV LVM monta los LVs directo, sin iSCSI de por medio, asi que el drenaje
+normal de Kubernetes ya alcanza para un desmontaje limpio). Si el cluster ya esta
+inalcanzable al momento de correr el playbook, el drenaje se salta pero igual se
+fuerza el `umount -l` de cualquier mount huerfano bajo `/var/lib/kubelet` antes de tocar
+`k0scontroller`. El propio `k0s reset` esta acotado a 120s (`async`/`poll`) para que, si
+se cuelga (gotcha real del 2026-09-07, epoca de Longhorn/iSCSI), el playbook siga y
+reporte el problema en vez de dejar la sesión SSH colgada. Al final se borran los
+Logical Volumes de `vg-openebs` (`lvremove`), dejando el VG y el PV intactos para que
+el proximo `site.yaml` no tenga que recrearlos.
+
+> **ADVERTENCIA**: Todos los datos persistentes en `openebs-lvm` (`Delete` reclaim policy) se perderan.
 
 ---
 
@@ -468,14 +481,14 @@ ansible-playbook vault-populate.yaml
 | Uso de RAM nodo | > 85% | `free -h` |
 | Pods en estado Error/CrashLoopBackOff | > 0 | `kubectl get pods -A | grep -v Running` |
 | Certificados proximos a expirar | < 7 dias | `kubectl get certificate -A` |
-| Volumenes Longhorn degradados | > 0 | `kubectl -n longhorn-system get volumes` |
+| Volumenes OpenEBS en estado distinto de Ready | > 0 | `kubectl -n openebs get lvmvolumes` |
 
 ### Dashboards de Grafana
 
 Accede a `https://grafana.internal.cristianpuenguenan.online` y revisa:
 - **Node Exporter Full**: Metricas del host.
 - **Kubernetes / Compute Resources / Cluster**: Uso de recursos del cluster.
-- **Longhorn**: Estado de volumenes.
+- **Node Exporter** (disco): Uso del Volume Group `vg-openebs` (sin dashboard dedicado de OpenEBS - LVM-LocalPV no publica uno propio via el chart de monitoring por defecto).
 
 ---
 
@@ -571,7 +584,7 @@ Ojo: el wildcard **público** `*.cristianpuenguenan.online` también matchea est
 **Alternativa manual, sin Split DNS:** agregar los hostnames al `hosts` file local (`/etc/hosts` o `C:\Windows\System32\drivers\etc\hosts`) apuntando a las IPs fijas de los Gateways (requiere estar en Tailscale, §11.1):
 
 ```
-192.168.122.240 argocd.internal.cristianpuenguenan.online grafana.internal.cristianpuenguenan.online longhorn.internal.cristianpuenguenan.online headlamp.internal.cristianpuenguenan.online hubble.internal.cristianpuenguenan.online openbao.internal.cristianpuenguenan.online openmemory.internal.cristianpuenguenan.online sonarqube.internal.cristianpuenguenan.online agentgateway.internal.cristianpuenguenan.online mcp.internal.cristianpuenguenan.online openmemory-api.internal.cristianpuenguenan.online
+192.168.122.240 argocd.internal.cristianpuenguenan.online grafana.internal.cristianpuenguenan.online headlamp.internal.cristianpuenguenan.online hubble.internal.cristianpuenguenan.online openbao.internal.cristianpuenguenan.online openmemory.internal.cristianpuenguenan.online sonarqube.internal.cristianpuenguenan.online agentgateway.internal.cristianpuenguenan.online mcp.internal.cristianpuenguenan.online openmemory-api.internal.cristianpuenguenan.online
 ```
 
 Para agregar una ruta privada nueva: sumarla al `Corefile` en `platform/networking/private-dns/configmap.yaml` y hacer `git push` — Reloader reinicia el pod solo, no hace falta ningún paso manual adicional.
