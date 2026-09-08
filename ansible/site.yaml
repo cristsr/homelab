@@ -13,7 +13,7 @@
     - import_tasks: tasks/k0s.yaml
     - import_tasks: tasks/kubeconfig.yaml
     - import_tasks: tasks/helm.yaml
-    - import_tasks: tasks/longhorn-prereqs.yaml
+    - import_tasks: tasks/openebs-prereqs.yaml
     - import_tasks: tasks/helmfile.yaml
     - import_tasks: tasks/argocd-secret.yaml
     - import_tasks: tasks/vault-secrets.yaml

@@ -3,7 +3,7 @@ replicaCount: 1
 persistence:
   accessModes: ["ReadWriteOnce"]
   size: 10Gi
-  storageClassName: longhorn-retain
+  storageClassName: openebs-lvm-retain
 
 service:
   type: ClusterIP

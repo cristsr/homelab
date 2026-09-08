@@ -12,7 +12,7 @@ Este repositorio contiene la configuracion completa para levantar un cluster Kub
 - **Networking**: Cilium como CNI con reemplazo completo de kube-proxy via eBPF.
 - **Ingress**: Cilium Gateway API para el trafico generico, Agent Gateway retenido solo para servidores MCP (ver ADR-010).
 - **Secretos**: OpenBao como backend de secretos, sincronizado con Kubernetes via External Secrets Operator.
-- **Almacenamiento**: Longhorn como storage distribuido.
+- **Almacenamiento**: OpenEBS Local PV LVM como storage local (ver ADR-013).
 - **Monitoreo**: Prometheus, Grafana y Headlamp.
 - **Bases de datos**: PostgreSQL (CloudNative-PG), MongoDB (Percona), Redis y Qdrant.
 - **Herramientas**: SonarQube, OpenMemory.
@@ -32,7 +32,7 @@ La VM se crea con **Terraform** (libvirt/KVM); el aprovisionamiento del nodo y l
 | GitOps | Argo CD | 9.5.13 |
 | Ingress (generico) | Cilium Gateway API | 1.19.3 |
 | Ingress (MCP) | Agent Gateway | 1.1.0 |
-| Storage | Longhorn | 1.11.2 |
+| Storage | OpenEBS Local PV LVM | 1.10.0 |
 | Secrets | OpenBao | 2.5.3 |
 | Secret Sync | External Secrets Operator | 2.4.1 |
 | Monitoreo | kube-prometheus-stack / Grafana Operator | - |
@@ -105,7 +105,7 @@ Toda la documentacion se encuentra en la carpeta [`docs/`](./docs/):
 - **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)**: Descripcion detallada de la arquitectura, componentes, networking, seguridad y flujo de datos.
 - **[docs/INSTALL.md](./docs/INSTALL.md)**: Requisitos previos, preparacion del servidor, configuracion de Ansible Vault, instalacion del cluster y activacion de GitOps.
 - **[docs/OPERATIONS.md](./docs/OPERATIONS.md)**: Operaciones diarias, gestion de secretos, backups, actualizaciones, troubleshooting y procedimientos de emergencia.
-- **[docs/DECISIONS.md](./docs/DECISIONS.md)**: Registro de decisiones de arquitectura (ADR): k0s, Agent Gateway, Cilium, Longhorn, Ansible, Terraform/libvirt y CI/CD.
+- **[docs/DECISIONS.md](./docs/DECISIONS.md)**: Registro de decisiones de arquitectura (ADR): k0s, Agent Gateway, Cilium, OpenEBS, Ansible, Terraform/libvirt y CI/CD.
 - **[docs/CI_CD_HYPERVISOR_SETUP.md](./docs/CI_CD_HYPERVISOR_SETUP.md)**: Runbook de setup manual del hipervisor (Tailscale, SSH, SELinux, sudo) para que CI/CD funcione.
 
 ---
