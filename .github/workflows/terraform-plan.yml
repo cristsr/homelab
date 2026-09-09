@@ -17,18 +17,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Necesario para llegar a la API de Proxmox en la LAN del homelab via
+      # la ruta de subred que advierte el nodo Tailscale del hipervisor - ya
+      # no se usa para SSH (ver docs/CI_CD_HYPERVISOR_SETUP.md).
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
-
-      - name: Write CI SSH key
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.HOMESERVER_SSH_PRIVATE_KEY }}" > ~/.ssh/ci_ed25519
-          chmod 600 ~/.ssh/ci_ed25519
 
       - uses: hashicorp/setup-terraform@v3
 
@@ -54,10 +51,11 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          TF_VAR_hypervisor_ssh_host: ${{ vars.HYPERVISOR_TAILSCALE_IP }}
-          TF_VAR_hypervisor_ssh_user: ${{ vars.HYPERVISOR_SSH_USER }}
-          TF_VAR_hypervisor_ssh_keyfile: /home/runner/.ssh/ci_ed25519
-          TF_VAR_fedora_cloud_image_url: ${{ vars.FEDORA_CLOUD_IMAGE_URL }}
+          TF_VAR_proxmox_endpoint: ${{ vars.PROXMOX_ENDPOINT }}
+          TF_VAR_proxmox_api_token: ${{ secrets.PROXMOX_API_TOKEN }}
+          TF_VAR_talos_schematic_id: ${{ vars.TALOS_SCHEMATIC_ID }}
+          TF_VAR_vm_static_ip: ${{ vars.VM_STATIC_IP }}
+          TF_VAR_vm_gateway: ${{ vars.VM_GATEWAY }}
         run: |
           terraform plan -no-color -input=false | tee plan.txt
 

@@ -1,205 +1,76 @@
-# Setup del hipervisor para CI/CD
+# Setup del hipervisor para CI/CD (Proxmox VE)
 
-> Runbook de todo lo que hay que aplicar **en el servidor físico (Fedora)** para que
-> GitHub Actions pueda provisionar/administrar la VM remotamente (ver
-> [ADR-009](DECISIONS.md#adr-009-cicd-con-github-actions-hosted--tailscale--cloudflare-r2)).
-> No cubre la configuración de cuenta (Tailscale ACL/OAuth client, Cloudflare R2,
-> GitHub Secrets/Vars) — eso ya está hecho; ver el checklist de la Fase 0 si hay
-> que rehacerlo desde cero.
+> Runbook de lo que hay que aplicar en el hipervisor Proxmox y en GitHub para
+> que el pipeline de CI/CD pueda aprovisionar/administrar el nodo Talos
+> remotamente. Reemplaza el runbook anterior (Fedora + libvirt + SELinux),
+> que ya no aplica: Proxmox no usa libvirt, y Talos no tiene SSH ni SELinux.
 >
-> Todo lo de acá es idempotente: correrlo de nuevo sobre un servidor ya
-> configurado no rompe nada.
+> A diferencia del runbook viejo, acá **no hace falta ninguna llave SSH**:
+> Terraform habla con la API REST de Proxmox (token) y con la API de Talos
+> (mTLS), y Ansible corre en `localhost` (el runner) usando el kubeconfig que
+> Terraform ya dejó en disco.
 
-## 1. Tailscale
+## 1. Tailscale en el hipervisor + ruta de subred
 
-```bash
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up --ssh --advertise-tags=tag:ci-target
-tailscale ip -4   # anotar -> variable HYPERVISOR_TAILSCALE_IP en GitHub
-```
-
-**Importante:** desactivar el SSH propio de Tailscale inmediatamente después.
-`--ssh` activa un servidor SSH que intercepta el puerto 22 y autoriza por
-identidad de tailnet (política `ssh` del ACL), no por `authorized_keys` — con
-la política ACL actual, un nodo taggeado (`tag:ci-target`) deja de ser "self"
-de nadie y queda bloqueado para todos. Este proyecto usa clave SSH dedicada +
-sshd clásico, no Tailscale SSH:
+El runner de GitHub Actions es hosted (no tiene acceso directo a la LAN del
+homelab). Para que llegue tanto a la API de Proxmox (`:8006`) como a la IP
+que le toque a la VM Talos, el nodo Tailscale del hipervisor debe advertir
+la subred LAN completa:
 
 ```bash
-sudo tailscale set --ssh=false
+sudo tailscale set --advertise-routes=192.168.80.0/24 --accept-routes
 ```
 
-## 2. Clave SSH dedicada para CI
+Y aprobar la ruta en el admin console de Tailscale (**Machines → homelab →
+Edit route settings → habilitar la subred anunciada**). Sin este paso manual
+la ruta queda advertida pero no enrutada.
 
-En tu propia máquina (no en el servidor):
+Verificación desde cualquier maquina de la tailnet:
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/homeserver_ci_ed25519 -N "" -C "gh-actions-ci"
-cat ~/.ssh/homeserver_ci_ed25519.pub
+tailscale ping 192.168.80.20   # IP LAN del hipervisor
 ```
 
-En el servidor, agregar esa pública (con tu acceso SSH normal):
+## 2. API token de Proxmox para Terraform
 
-```bash
-echo '<PEGAR_LA_PUBLICA>' >> ~/.ssh/authorized_keys
-groups | grep -o libvirt || sudo usermod -aG libvirt "$USER"   # relogin si hizo falta
-```
+En la UI de Proxmox: **Datacenter → Permissions → API Tokens → Add**.
+Usuario `terraform@pve` (o el que corresponda) con un token dedicado
+(`ci` por ejemplo), **sin** "Privilege Separation" si el token necesita los
+mismos permisos que el usuario, o con un rol acotado si se prefiere
+principio de mínimo privilegio (necesita al menos permisos para crear/editar
+VMs y descargar archivos al datastore).
 
-Probar el salto completo:
+El token completo tiene el formato `usuario@realm!tokenid=uuid` - ese string
+completo es el valor de `TF_VAR_proxmox_api_token` / el secret
+`PROXMOX_API_TOKEN` en GitHub.
 
-```bash
-ssh -i ~/.ssh/homeserver_ci_ed25519 <usuario>@<ip_tailscale> "id && virsh -c qemu:///system list"
-```
+## 3. Variables y secrets de GitHub
 
-## 3. SELinux — permitir que sshd haga de proxy hacia libvirt y hacia la VM
+**Secrets** (Settings → Environments → `prod` → Secrets):
+- `PROXMOX_API_TOKEN` - el token generado en el paso 2.
+- `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` - backend remoto (sin cambios).
+- `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` - OAuth client de Tailscale (sin cambios).
+- `ANSIBLE_VAULT_PASSWORD` - sin cambios.
 
-Fedora trae SELinux enforcing por default. `sshd_session_t` (el dominio de
-una sesión SSH) no tiene permiso, de fábrica, para:
+**Variables** (Settings → Environments → `prod` → Variables):
+- `PROXMOX_ENDPOINT` - ej. `https://192.168.80.20:8006/`.
+- `TALOS_SCHEMATIC_ID` - el ID generado en https://factory.talos.dev (ver `terraform/variables.tf` para el valor actual, que también sirve de default).
+- `VM_STATIC_IP` - IP LAN elegida para el nodo Talos (ej. `192.168.80.30`).
+- `VM_GATEWAY` - gateway de la LAN (ej. `192.168.80.1`).
 
-1. Abrir (`write`) el socket de libvirt (`virtqemud_var_run_t`) — necesario
-   para que `qemu+ssh://` de Terraform llegue a libvirt.
-2. Conectarse (`connectto`) al `unix_stream_socket` del dominio `virtqemud_t`
-   que atiende ese socket.
-3. Abrir una conexión TCP saliente (`name_connect` sobre `ssh_port_t`) hacia
-   el puerto 22 — necesario para el `ProxyCommand -W %h:%p` que usa Ansible
-   para saltar del hipervisor a la VM (red NAT interna 192.168.122.0/24).
+## 4. Qué ya NO hace falta
 
-El booleano clásico `sshd_can_network_connect` **no existe** en esta versión
-de la política (el dominio `sshd_session_t` es más nuevo que ese booleano).
-La solución es un módulo de política custom, generado una sola vez a partir
-de los AVC ya conocidos — no hace falta re-disparar los errores a mano:
+- Llave SSH dedicada al hipervisor (`homeserver_ci_ed25519`) - Terraform ya no se conecta por SSH.
+- Módulos SELinux / sudoers custom - Proxmox es Debian sin SELinux, y no hay nada que ejecutar por SSH.
+- `ansible/host-network.yaml` (port-forward de firewalld) - con `vmbr0` bridged, la VM tiene IP LAN directa.
 
-```bash
-sudo dnf install -y policycoreutils-python-utils checkpolicy
+## 5. Primer `terraform apply` contra el state viejo
 
-cat <<'EOF' | audit2allow -M libvirt_ssh_ci
-type=AVC msg=audit(0:0): avc:  denied  { write } for  pid=0 comm="sshd-session" name="virtqemud-sock" dev="tmpfs" ino=0 scontext=system_u:system_r:sshd_session_t:s0-s0:c0.c1023 tcontext=system_u:object_r:virtqemud_var_run_t:s0 tclass=sock_file permissive=0
-type=AVC msg=audit(0:0): avc:  denied  { connectto } for  pid=0 comm="sshd-session" path="/run/libvirt/virtqemud-sock" scontext=system_u:system_r:sshd_session_t:s0-s0:c0.c1023 tcontext=system_u:system_r:virtqemud_t:s0 tclass=unix_stream_socket permissive=0
-type=AVC msg=audit(0:0): avc:  denied  { name_connect } for  pid=0 comm="sshd-session" dest=22 scontext=system_u:system_r:sshd_session_t:s0-s0:c0.c1023 tcontext=system_u:object_r:ssh_port_t:s0 tclass=tcp_socket permissive=0
-EOF
-
-sudo semodule -i libvirt_ssh_ci.pp
-```
-
-Verificación (no debería aparecer ningún AVC nuevo con `sshd_session_t` como
-`scontext` después de correr el pipeline):
-
-```bash
-sudo ausearch -m avc -ts recent | grep sshd_session_t
-```
-
-Si en el futuro aparece un AVC *nuevo* con este mismo patrón (otro `tclass`),
-el flujo de diagnóstico es:
-
-```bash
-sudo ausearch -m avc -ts recent | grep sshd_session_t | audit2allow -M <nombre-nuevo>
-sudo semodule -i <nombre-nuevo>.pp
-```
-
-## 3.5. SELinux — etiquetar el pool de libvirt en `/home`
-
-`/var/lib/libvirt/images` ya viene etiquetado por la política default con el
-contexto `virt_image_t`, que es el que necesita libvirtd/qemu para leer y
-escribir los discos de la VM. El pool de este módulo (`terraform/variables.tf`
-`pool_path`) vive en `/home/libvirt/images/homelab` en vez de la ruta default
-porque la partición raíz de este hipervisor tiene solo ~50GB — insuficiente
-para el disco raíz de la VM (120GB) más el disco dedicado de OpenEBS (100GB).
-`/home` no tiene ese contexto por defecto, así que sin este paso `terraform
-apply` falla (o libvirtd rechaza leer/escribir los volúmenes) con un AVC
-`denied` sobre `virt_image_t`/`home_root_t` — mismo patrón que los AVC de
-`sshd_session_t` de arriba, pero en el dominio `virtqemud_t`/`svirt_t`.
-
-```bash
-sudo mkdir -p /home/libvirt/images
-sudo semanage fcontext -a -t virt_image_t '/home/libvirt(/.*)?'
-sudo restorecon -R -v /home/libvirt
-```
-
-**Ojo con el patrón del `fcontext`**: tiene que cubrir `/home/libvirt` completo, no
-solo `/home/libvirt/images`. SELinux exige permiso `search` en *cada* directorio
-intermedio del path — si solo se etiqueta `images/`, `/home/libvirt` (el
-directorio padre) se queda con la equivalencia default de `/home/<algo>`
-(`user_home_dir_t`, pensada para el home personal de un usuario), y
-`virtqemud_t`/`svirt_t` no tienen permiso de `search` ahí. Confirmado
-empíricamente en este host (2026-09-08): con solo `images/` etiquetado,
-`ls -laZ /home/libvirt` seguía mostrando `user_home_dir_t` en el padre.
-
-Verificación (después del primer `terraform apply`, no debería aparecer
-ningún AVC nuevo sobre este path):
-
-```bash
-sudo ausearch -m avc -ts recent | grep -i 'home/libvirt'
-```
-
-## 3.6. SELinux — permitir que `virtnetworkd` corra el hook de red
-
-`ansible/host-network.yaml` instala `/etc/libvirt/hooks/network` (contexto
-`virt_hook_t`, ver §3.5 de arriba para el hook en sí). El daemon modular
-`virtnetworkd` (dominio `virtnetworkd_t`) necesita **cuatro** permisos
-distintos para poder ejecutarlo, cada uno visible recién después de resolver
-el anterior (mismo patrón en cascada que los AVC de `sshd_session_t` de la
-sección 3) — descubierto en vivo el 2026-09-08 cuando `virsh net-start
-default` fallaba con `cannot execute binary: Permission denied` y después
-con `unexpected fatal signal 11` (SIGSEGV):
-
-1. `execute` de `virtnetworkd_t` sobre el propio hook (`virt_hook_t`, `file`).
-2. `execute_no_trans` de `virtnetworkd_t` sobre el hook — corre sin
-   transición de dominio, se queda en `virtnetworkd_t`.
-3. `execute` de `virtnetworkd_t` sobre `/usr/bin/bash` (`shell_exec_t`) — el
-   hook tiene shebang `#!/bin/bash` y, al no transicionar de dominio, es
-   `virtnetworkd_t` quien necesita poder ejecutar el intérprete.
-4. `map` de `virtnetworkd_t` sobre `/usr/bin/bash` (`shell_exec_t`) — mmap
-   del binario para cargarlo; sin este permiso el intérprete referencia
-   memoria inválida y el proceso muere con SIGSEGV en vez de un EACCES limpio.
-
-Sin estos permisos, `virsh net-start default` (o el arranque automático de
-la red via autostart) falla siempre, y por lo tanto **todo `terraform
-apply` que intente arrancar el dominio de la VM falla** con `network
-'default' is not active` — no es un problema de Terraform ni del dominio.
-
-Igual que en la sección 3, se resuelve generando un módulo de política por
-cada AVC ya conocido (no hace falta re-disparar los errores a mano):
-
-```bash
-sudo ausearch -m avc -ts recent | grep virtnetworkd_t | audit2allow -M <nombre>
-sudo semodule -i <nombre>.pp
-# repetir con `sudo virsh net-start default` entre cada paso hasta que
-# ya no aparezcan AVC nuevas y el comando termine en "Network default started"
-```
-
-## 4. sudo para Ansible (`host-network.yaml`)
-
-Ansible ejecuta sus módulos (incluido `ansible.builtin.command`) copiando un
-wrapper Python a un path temporal aleatorio y corriéndolo vía `sudo` — por
-eso **no es posible** restringir el sudoers a un solo binario (ej.
-`firewall-cmd`): sudo nunca ve ese binario directamente, ve el intérprete
-Python del wrapper. La única opción funcional es NOPASSWD sin restricción de
-comando para el usuario de CI:
-
-```bash
-echo 'cpuenguenan ALL=(root) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/ci-firewall-cmd
-sudo chmod 440 /etc/sudoers.d/ci-firewall-cmd
-sudo visudo -c
-```
-
-Aceptado como trade-off razonable: este mismo usuario ya está en el grupo
-`libvirt`, que de por sí es un camino directo a root (se le puede adjuntar a
-una VM el filesystem del host como disco). Restringir sudo a un comando no
-cierra ese vector de todos modos.
-
-Verificación:
-
-```bash
-sudo -n whoami   # debe imprimir "root" sin pedir password
-```
-
-## 5. Qué NO hace falta tocar a mano
-
-- **firewalld**: viene activo por default en Fedora Server/Workstation; el
-  playbook `host-network.yaml` configura el `masquerade` y el forward-port
-  (80/443 → VM) solo, no requiere setup previo más allá del punto 4.
-- **libvirt / daemons modulares**: Fedora ya trae `virtqemud.socket` activo
-  por default; no hace falta habilitar nada extra ahí. Ver
-  [ADR-009 / memoria del proyecto] si algún día el socket real cambia de
-  path — el que usa `terraform/provider.tf` hoy es
-  `/run/libvirt/virtqemud-sock`.
+El `terraform.tfstate` remoto (R2) puede seguir teniendo referencias a los
+recursos `libvirt_*`/`tls_private_key` de la arquitectura anterior (Fedora +
+libvirt), que ya no existe físicamente. Antes del primer `apply` con este
+código, hay que reconciliar ese state - la opción más simple es resetear el
+objeto de state en R2 (bucket `homelab-tfstate`, key `terraform.tfstate`) ya
+que la infraestructura que describía fue destruida junto con el hipervisor
+Fedora. Alternativamente, `terraform state rm` cada recurso viejo uno por
+uno si se prefiere no perder el historial de state.
