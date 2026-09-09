@@ -3,6 +3,37 @@ kubeProxyReplacement: "true"
 k8sServiceHost: "127.0.0.1"
 k8sServicePort: "6443"
 
+# Talos monta cgroupv2/bpffs por su cuenta - no dejar que Cilium intente
+# volver a montarlos. Y Talos no permite a los workloads cargar modulos de
+# kernel, asi que SYS_MODULE se saca de las capabilities por defecto del
+# chart (que si lo incluyen) - sin esto el init container clean-cilium-state
+# falla con "unable to apply caps: operation not permitted" (confirmado en
+# un deploy real). Valores segun la guia oficial de Talos:
+# https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
+cgroup:
+  autoMount:
+    enabled: false
+  hostRoot: /sys/fs/cgroup
+
+securityContext:
+  capabilities:
+    ciliumAgent:
+      - CHOWN
+      - KILL
+      - NET_ADMIN
+      - NET_RAW
+      - IPC_LOCK
+      - SYS_ADMIN
+      - SYS_RESOURCE
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    cleanCiliumState:
+      - NET_ADMIN
+      - SYS_ADMIN
+      - SYS_RESOURCE
+
 ipam:
   mode: cluster-pool
   operator:
