@@ -8,7 +8,7 @@ data "kubernetes_config_map_v1" "kube_root_ca" {
 resource "kubernetes_secret_v1" "github_repo_creds" {
   metadata {
     name      = "github-repo-creds"
-    namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    namespace = kubernetes_namespace_v1.namespaces["argocd"].metadata[0].name
     labels = {
       "argocd.argoproj.io/secret-type" = "repo-creds"
     }
@@ -27,7 +27,7 @@ resource "kubernetes_secret_v1" "github_repo_creds" {
 resource "kubernetes_secret_v1" "argocd_in_cluster" {
   metadata {
     name      = "in-cluster-secret"
-    namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    namespace = kubernetes_namespace_v1.namespaces["argocd"].metadata[0].name
     labels = {
       "argocd.argoproj.io/secret-type" = "cluster"
     }
@@ -50,7 +50,7 @@ resource "kubernetes_secret_v1" "argocd_in_cluster" {
 resource "kubernetes_secret_v1" "openbao_static_unseal_key" {
   metadata {
     name      = "openbao-static-unseal-key"
-    namespace = kubernetes_namespace_v1.secret_management.metadata[0].name
+    namespace = kubernetes_namespace_v1.namespaces["secret-management"].metadata[0].name
   }
 
   data = {
