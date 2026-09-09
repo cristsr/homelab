@@ -8,7 +8,7 @@ deploymentAnnotations:
 
 persistence:
   enabled: true
-  storageClass: openebs-lvm
+  storageClass: openebs-zfs
   size: 10Gi
 
 postgresql:

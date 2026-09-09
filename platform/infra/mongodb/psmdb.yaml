@@ -20,7 +20,7 @@ spec:
           memory: 512Mi
       volumeSpec:
         persistentVolumeClaim:
-          storageClassName: openebs-lvm-retain
+          storageClassName: openebs-zfs-retain
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:

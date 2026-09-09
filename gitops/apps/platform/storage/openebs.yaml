@@ -10,11 +10,11 @@ metadata:
 spec:
   project: homelab
   sources:
-    - repoURL: https://openebs.github.io/lvm-localpv
-      chart: lvm-localpv
-      targetRevision: "1.10.0"
+    - repoURL: https://openebs.github.io/zfs-localpv
+      chart: zfs-localpv
+      targetRevision: "2.11.1"
       helm:
-        releaseName: openebs-lvm-localpv
+        releaseName: openebs-zfs-localpv
         valueFiles:
           - $values/platform/storage/openebs/values.yaml
     - repoURL: https://github.com/cristsr/homelab

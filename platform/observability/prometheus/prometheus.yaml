@@ -9,7 +9,7 @@ prometheus:
     storageSpec:
       volumeClaimTemplate:
         spec:
-          storageClassName: openebs-lvm
+          storageClassName: openebs-zfs
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
@@ -21,7 +21,7 @@ alertmanager:
     storage:
       volumeClaimTemplate:
         spec:
-          storageClassName: openebs-lvm
+          storageClassName: openebs-zfs
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
@@ -48,7 +48,7 @@ grafana:
       searchNamespace: ALL
   persistence:
     enabled: true
-    storageClassName: openebs-lvm
+    storageClassName: openebs-zfs
     size: 5Gi
     accessModes: ["ReadWriteOnce"]
 

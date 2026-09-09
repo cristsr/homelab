@@ -1,15 +1,12 @@
-# Values del chart lvm-localpv 1.10.0 (https://openebs.github.io/lvm-localpv).
+# Values del chart zfs-localpv 2.11.1 (https://openebs.github.io/zfs-localpv).
 # Claves verificadas contra el values.yaml real del chart, no adivinadas.
-
-global:
-  # k0s usa /var/lib/k0s/kubelet en lugar del path estandar /var/lib/kubelet
-  # (mismo ajuste que hacia Longhorn via csi.kubeletRootDir).
-  kubeletDir: /var/lib/k0s/kubelet/
-
-lvmNode:
-  kubeletDir: /var/lib/k0s/kubelet/
-  serviceMonitor:
-    enabled: true
+#
+# A diferencia de k0s (que usaba /var/lib/k0s/kubelet, un path no estandar),
+# Talos monta el kubelet en el path estandar /var/lib/kubelet - coincide con
+# el default del chart, asi que no hace falta overridear zfsNode.kubeletDir.
+#
+# El chart no expone serviceMonitor (a diferencia de lvm-localpv) - sin
+# metricas de Prometheus por ahora.
 
 # Sin telemetria hacia OpenEBS/Mayadata en un homelab.
 analytics:
