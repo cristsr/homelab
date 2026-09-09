@@ -56,9 +56,14 @@ resource "proxmox_virtual_environment_vm" "talos_node" {
 
   boot_order = ["virtio0", "ide3"]
 
+  # MAC fija (no autogenerada por Proxmox) para poder reservarle una IP por
+  # DHCP en el router - asi el boot en modo mantenimiento ya cae en
+  # var.vm_static_ip en vez de una IP random del pool, y la ruta de
+  # Tailscale del hipervisor se puede acotar a hosts /32 en vez de todo el /24.
   network_device {
-    bridge = var.network_bridge
-    model  = "virtio"
+    bridge      = var.network_bridge
+    model       = "virtio"
+    mac_address = var.vm_mac_address
   }
 
   operating_system {
