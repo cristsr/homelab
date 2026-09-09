@@ -81,11 +81,14 @@ resource "proxmox_virtual_environment_vm" "talos_node" {
 # IP que el nodo tiene en modo mantenimiento, ANTES de aplicar el machine
 # config (via DHCP - todavia no tiene la IP estatica que le vamos a asignar).
 # ipv4_addresses/network_interface_names vienen en el mismo orden por
-# interfaz; se descarta "lo" y se toma la unica NIC real.
+# interfaz. El kernel de Talos trae varias interfaces virtuales sin IP
+# (bond0, dummy0, teql0, tunl0, sit0, ip6tnl0 - lista vacia, confirmado
+# contra la VM real) ademas de "lo" - se descartan ambos casos y se toma la
+# unica interfaz real con al menos una IPv4.
 locals {
   maintenance_ip = [
     for idx, ips in proxmox_virtual_environment_vm.talos_node.ipv4_addresses :
-    ips[0] if proxmox_virtual_environment_vm.talos_node.network_interface_names[idx] != "lo"
+    ips[0] if length(ips) > 0 && proxmox_virtual_environment_vm.talos_node.network_interface_names[idx] != "lo"
   ][0]
 }
 
