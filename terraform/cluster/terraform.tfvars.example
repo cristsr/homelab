@@ -1,0 +1,6 @@
+# Copiar a terraform.tfvars (gitignored) y completar.
+# En CI se inyectan por TF_VAR_*. argocd_github_username tiene default.
+
+# kubeconfig_path         = "../infra/generated/kubeconfig"
+# argocd_github_pat       = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# openbao_static_seal_key = "<openssl rand -base64 32>"

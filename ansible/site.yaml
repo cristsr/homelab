@@ -1,12 +1,12 @@
 ---
-- name: Bootstrap del cluster (Cilium, ArgoCD, OpenEBS, OpenBao) sobre el nodo Talos
+# Namespaces/secrets de ArgoCD y OpenBao, y la Application raiz, se crean
+# aparte via terraform/cluster (despues de este playbook) y
+# `kubectl apply -f gitops/root-app.yaml` - ver .github/workflows/deploy.yml.
+- name: Bootstrap del cluster (Cilium, ArgoCD via helmfile, OpenEBS) sobre el nodo Talos
   hosts: localhost
   become: false
 
   tasks:
     - import_tasks: tasks/kubeconfig.yaml
-    - import_tasks: tasks/helm.yaml
     - import_tasks: tasks/helmfile.yaml
     - import_tasks: tasks/openebs-zfs-prereqs.yaml
-    - import_tasks: tasks/argocd-secret.yaml
-    - import_tasks: tasks/vault-secrets.yaml
