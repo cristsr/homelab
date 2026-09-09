@@ -20,6 +20,23 @@
   become: true
   tags: [ helmfile ]
 
+# El bootstrap de Talos (talos_machine_bootstrap) dispara la formacion de
+# etcd + el arranque de los pods estaticos del control plane, pero eso no
+# es instantaneo - Terraform ya considero "listo" el bootstrap apenas la
+# API de Talos acepto el comando, no cuando el apiserver de Kubernetes
+# empieza a aceptar conexiones. Sin este wait, helmfile falla con
+# "connection refused" contra :6443 (confirmado en un deploy real).
+- name: Esperar a que el API server de Kubernetes responda
+  ansible.builtin.command: kubectl get --raw /healthz
+  register: apiserver_health
+  until: apiserver_health.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  tags: [ helmfile ]
+
 # bootstrap/ ya esta local (mismo checkout del repo que corre Ansible) - a
 # diferencia de la VM Fedora anterior, no hay nada que copiar antes de
 # invocar helmfile.
