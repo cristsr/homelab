@@ -47,18 +47,26 @@
     # cluster para diagnosticar cada vez que algo se cuelga.
     - name: Diagnostico - pods en kube-system y argocd
       ansible.builtin.command: kubectl get pods -A -o wide
+      register: diag_pods
       environment:
         KUBECONFIG: "{{ kubeconfig_path }}"
       changed_when: false
       ignore_errors: true
 
+    - ansible.builtin.debug:
+        msg: "{{ diag_pods.stdout_lines }}"
+
     - name: Diagnostico - eventos recientes del cluster
       ansible.builtin.command: >
         kubectl get events -A --sort-by=.lastTimestamp
+      register: diag_events
       environment:
         KUBECONFIG: "{{ kubeconfig_path }}"
       changed_when: false
       ignore_errors: true
+
+    - ansible.builtin.debug:
+        msg: "{{ diag_events.stdout_lines }}"
 
     - name: Diagnostico - describe y logs de pods no listos en argocd
       ansible.builtin.shell: |
@@ -69,10 +77,16 @@
           echo "=== logs pod/$p ==="
           kubectl logs -n argocd "$p" --all-containers --tail=200 || true
         done
+      args:
+        executable: /bin/bash
+      register: diag_pod_detail
       environment:
         KUBECONFIG: "{{ kubeconfig_path }}"
       changed_when: false
       ignore_errors: true
+
+    - ansible.builtin.debug:
+        msg: "{{ diag_pod_detail.stdout_lines }}"
 
     - name: Re-lanzar el fallo original de helmfile
       ansible.builtin.fail:
