@@ -68,14 +68,16 @@
     - ansible.builtin.debug:
         msg: "{{ diag_events.stdout_lines }}"
 
-    - name: Diagnostico - describe y logs de pods no listos en argocd
+    - name: Diagnostico - describe y logs de pods no listos (kube-system y argocd)
       ansible.builtin.shell: |
         set -o pipefail
-        for p in $(kubectl get pods -n argocd -o json | jq -r '.items[] | select(.status.phase!="Running" or any(.status.containerStatuses[]?; .ready==false)) | .metadata.name'); do
-          echo "=== describe pod/$p ==="
-          kubectl describe pod -n argocd "$p"
-          echo "=== logs pod/$p ==="
-          kubectl logs -n argocd "$p" --all-containers --tail=200 || true
+        for ns in kube-system argocd; do
+          for p in $(kubectl get pods -n "$ns" -o json | jq -r '.items[] | select(.status.phase!="Running" or any(.status.containerStatuses[]?; .ready==false)) | .metadata.name'); do
+            echo "=== describe pod/$ns/$p ==="
+            kubectl describe pod -n "$ns" "$p"
+            echo "=== logs pod/$ns/$p ==="
+            kubectl logs -n "$ns" "$p" --all-containers --tail=200 || true
+          done
         done
       args:
         executable: /bin/bash
