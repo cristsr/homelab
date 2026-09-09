@@ -16,6 +16,21 @@
     KUBECONFIG: "{{ kubeconfig_path }}"
   tags: [ helmfile ]
 
+# El primer healthz exitoso no es garantia de estabilidad: el apiserver
+# puede seguir reiniciando/reconciliando segundos despues de responder por
+# primera vez, justo tras el bootstrap (confirmado en un deploy real:
+# "connection refused" en el helmfile sync, 9s despues de un healthz OK).
+- name: Confirmar que el API server sigue respondiendo de forma estable
+  ansible.builtin.command: kubectl get --raw /healthz
+  register: apiserver_health_stable
+  until: apiserver_health_stable.rc == 0
+  retries: 6
+  delay: 5
+  changed_when: false
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  tags: [ helmfile ]
+
 # bootstrap/ ya esta local (mismo checkout del repo que corre Ansible) - a
 # diferencia de la VM Fedora anterior, no hay nada que copiar antes de
 # invocar helmfile.
