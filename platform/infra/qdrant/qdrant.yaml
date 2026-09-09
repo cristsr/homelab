@@ -3,7 +3,7 @@ replicaCount: 1
 persistence:
   accessModes: ["ReadWriteOnce"]
   size: 10Gi
-  storageClassName: openebs-lvm-retain
+  storageClassName: openebs-zfs-retain
 
 service:
   type: ClusterIP

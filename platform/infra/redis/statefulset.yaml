@@ -46,7 +46,7 @@ spec:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
-        storageClassName: openebs-lvm-retain
+        storageClassName: openebs-zfs-retain
         resources:
           requests:
             storage: 5Gi
