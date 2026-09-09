@@ -12,3 +12,4 @@ terraform/*/*.tfstate.*
 terraform/*/terraform.tfvars
 terraform/*/generated/
 terraform/*/backend.hcl
+terraform/*/.destroy-secrets
