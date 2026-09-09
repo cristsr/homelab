@@ -62,6 +62,9 @@ resource "talos_machine_configuration_apply" "this" {
     # formatearlo - "!system_disk" matchea el unico disco que no es el de
     # instalacion de Talos (virtio0/vda). El partition label resultante
     # (r-openebs-zfs) lo consume storage.tf via /dev/disk/by-partlabel/.
+    # A diferencia de UserVolumeConfig, Talos exige minSize o maxSize
+    # explicito para RawVolumeConfig (rechaza el patch si falta) - maxSize
+    # igual al tamano real del disco dedicado para que ocupe el disco entero.
     yamlencode({
       apiVersion = "v1alpha1"
       kind       = "RawVolumeConfig"
@@ -70,6 +73,7 @@ resource "talos_machine_configuration_apply" "this" {
         diskSelector = {
           match = "!system_disk"
         }
+        maxSize = "${var.zfs_disk_size_gb}GiB"
       }
     })
   ]
