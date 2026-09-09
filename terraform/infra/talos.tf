@@ -57,6 +57,20 @@ resource "talos_machine_configuration_apply" "this" {
           disabled = true
         }
       }
+    }),
+    # Particiona el disco dedicado a ZFS (virtio1, ver proxmox.tf) sin
+    # formatearlo - "!system_disk" matchea el unico disco que no es el de
+    # instalacion de Talos (virtio0/vda). El partition label resultante
+    # (r-openebs-zfs) lo consume storage.tf via /dev/disk/by-partlabel/.
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "RawVolumeConfig"
+      name       = "openebs-zfs"
+      provisioning = {
+        diskSelector = {
+          match = "!system_disk"
+        }
+      }
     })
   ]
 

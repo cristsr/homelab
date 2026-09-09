@@ -124,15 +124,21 @@ git clone git@github.com:cristsr/homelab.git && cd homelab
 
 # 3. Configurar secrets en ansible/group_vars/all.yaml y crear .vault-pass
 
-# 4. Instalar cluster
-cd ansible
-ansible-playbook site.yaml
+# 4. Instalar cluster infra (VM + Talos)
+cd terraform/infra
+terraform init -backend-config=backend.hcl
+terraform apply
 
-# 5. Activar GitOps
-cd ..
+# 5. Bootstrap K8s (Cilium, ArgoCD, ZFS) y configuraciones base
+cd ../cluster
+terraform init -backend-config=backend.hcl
+terraform apply
+
+# 6. Activar GitOps
+cd ../../
 kubectl apply -f gitops/root-app.yaml
 
-# 6. Poblar OpenBao (infraestructura + secrets de apps)
+# 7. Poblar OpenBao (infraestructura + secrets de apps)
 cd ansible
 ansible-playbook vault-populate.yaml
 ansible-playbook load-extra-secrets.yaml
@@ -144,7 +150,7 @@ Para una guia detallada, consulta [docs/INSTALL.md](./docs/INSTALL.md).
 
 ## CI/CD
 
-Terraform y Ansible **no** corren en el homeserver: cada push a `master` dispara [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml) en un runner hosted de GitHub Actions, que se conecta al hipervisor por Tailscale y aplica el cambio (`terraform apply` + `ansible-playbook site.yaml`/`host-network.yaml`), detras de un gate de aprobacion manual (Environment `prod`). Cada PR que toque `terraform/**` dispara [`terraform-plan.yml`](./.github/workflows/terraform-plan.yml), que comenta el plan antes de mergear. Detalle completo de la arquitectura en [ADR-009](./docs/DECISIONS.md#adr-009-cicd-con-github-actions-hosted--tailscale--cloudflare-r2).
+Terraform y Ansible **no** corren en el homeserver: cada push a `master` dispara [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml) en un runner hosted de GitHub Actions, que se conecta al hipervisor por Tailscale y aplica el cambio (`terraform apply` en `infra` y `cluster`, y `ansible-playbook vault-populate.yaml`), detras de un gate de aprobacion manual (Environment `prod`). Cada PR que toque `terraform/**` dispara [`terraform-plan.yml`](./.github/workflows/terraform-plan.yml), que comenta el plan antes de mergear. Detalle completo de la arquitectura en [ADR-009](./docs/DECISIONS.md#adr-009-cicd-con-github-actions-hosted--tailscale--cloudflare-r2).
 
 ---
 

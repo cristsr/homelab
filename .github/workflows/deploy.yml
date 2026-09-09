@@ -62,11 +62,6 @@ jobs:
         with:
           version: "3.17.3"
 
-      - name: Install helmfile
-        run: |
-          curl -sSL "https://github.com/helmfile/helmfile/releases/download/v1.5.0/helmfile_1.5.0_linux_amd64.tar.gz" \
-            | tar -xz -C /usr/local/bin helmfile
-
       - name: Write R2 backend config (infra)
         working-directory: terraform/infra
         run: |
@@ -90,10 +85,6 @@ jobs:
           terraform init -backend-config=backend.hcl
           terraform apply -auto-approve -input=false
 
-      - name: Bootstrap cluster (Cilium, ArgoCD via helmfile, OpenEBS)
-        working-directory: ansible
-        run: ansible-playbook site.yaml
-
       - name: Write R2 backend config (cluster)
         working-directory: terraform/cluster
         run: |
@@ -103,7 +94,16 @@ jobs:
           }
           EOF
 
-      - name: Terraform apply (cluster namespaces/secrets)
+      - name: Wait for Kubernetes API to be stable
+        env:
+          KUBECONFIG: ${{ github.workspace }}/terraform/infra/generated/kubeconfig
+        run: |
+          echo "Waiting for initial API response..."
+          for i in {1..30}; do kubectl get --raw /healthz && break || sleep 10; done
+          echo "Confirming API stability..."
+          for i in {1..6}; do kubectl get --raw /healthz && sleep 5 || exit 1; done
+
+      - name: Terraform apply (cluster bootstrap and config)
         working-directory: terraform/cluster
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -114,6 +114,26 @@ jobs:
         run: |
           terraform init -backend-config=backend.hcl
           terraform apply -auto-approve -input=false
+
+      - name: Diagnostico de cluster en caso de fallo
+        if: failure()
+        env:
+          KUBECONFIG: ${{ github.workspace }}/terraform/infra/generated/kubeconfig
+        run: |
+          set -o pipefail
+          echo "=== PODS ==="
+          kubectl get pods -A -o wide || true
+          echo "=== EVENTOS ==="
+          kubectl get events -A --sort-by=.lastTimestamp || true
+          echo "=== LOGS DE PODS NO LISTOS ==="
+          for ns in kube-system argocd; do
+            for p in $(kubectl get pods -n "$ns" -o json | jq -r '.items[]? | select(.status.phase!="Running" or any(.status.containerStatuses[]?; .ready==false)) | .metadata.name'); do
+              echo "=== describe pod/$ns/$p ==="
+              kubectl describe pod -n "$ns" "$p" || true
+              echo "=== logs pod/$ns/$p ==="
+              kubectl logs -n "$ns" "$p" --all-containers --tail=200 || true
+            done
+          done
 
       # Ultimo paso del bootstrap: registra la Application raiz de ArgoCD,
       # que ya tiene su namespace/secrets creados por terraform/cluster.
