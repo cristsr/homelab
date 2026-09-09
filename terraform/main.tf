@@ -23,6 +23,9 @@ resource "proxmox_virtual_environment_vm" "talos_node" {
 
   agent {
     enabled = true # requiere la extension qemu-guest-agent del schematic
+    wait_for_ip {
+      ipv4 = true
+    }
   }
 
   cpu {
@@ -75,6 +78,17 @@ resource "proxmox_virtual_environment_vm" "talos_node" {
   }
 }
 
+# IP que el nodo tiene en modo mantenimiento, ANTES de aplicar el machine
+# config (via DHCP - todavia no tiene la IP estatica que le vamos a asignar).
+# ipv4_addresses/network_interface_names vienen en el mismo orden por
+# interfaz; se descarta "lo" y se toma la unica NIC real.
+locals {
+  maintenance_ip = [
+    for idx, ips in proxmox_virtual_environment_vm.talos_node.ipv4_addresses :
+    ips[0] if proxmox_virtual_environment_vm.talos_node.network_interface_names[idx] != "lo"
+  ][0]
+}
+
 # Secrets del cluster (PKI de etcd/Kubernetes) - se generan una sola vez y
 # quedan en el state. Sensible: el backend remoto (R2) ya maneja esto igual
 # que cualquier otro secreto en el tfstate.
@@ -98,7 +112,11 @@ data "talos_client_configuration" "this" {
 resource "talos_machine_configuration_apply" "this" {
   client_configuration        = talos_machine_secrets.this.client_configuration
   machine_configuration_input = data.talos_machine_configuration.this.machine_configuration
-  node                        = var.vm_static_ip
+  # Se aplica contra la IP DHCP de modo mantenimiento, no la estatica final
+  # (var.vm_static_ip) - el nodo todavia no la tiene en este punto. Tras
+  # instalar a disco y reiniciar, queda en var.vm_static_ip (usado por los
+  # recursos de abajo: bootstrap, kubeconfig, client_configuration).
+  node = local.maintenance_ip
 
   config_patches = [
     yamlencode({
@@ -113,7 +131,7 @@ resource "talos_machine_configuration_apply" "this" {
         network = {
           interfaces = [
             {
-              interface = "eth0"
+              interface = "ens18"
               addresses = ["${var.vm_static_ip}/${var.vm_ip_prefix}"]
               routes = [
                 { network = "0.0.0.0/0", gateway = var.vm_gateway }
