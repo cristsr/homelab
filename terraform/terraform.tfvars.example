@@ -1,23 +1,22 @@
 # Copiar a terraform.tfvars (gitignored) y completar.
 
-# Obtener la URL actual desde https://fedoraproject.org/cloud/download
-# (elige el enlace .qcow2 del release vigente).
-fedora_cloud_image_url = "https://download.fedoraproject.org/pub/fedora/linux/releases/<VERSION>/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-<VERSION>-<BUILD>.x86_64.qcow2"
-
 # Ajustar si hace falta; estos son los defaults ya definidos en variables.tf
 # vm_name          = "homelab"
+# vm_id            = 100
 # memory_mib       = 16384
 # vcpu             = 8
-# disk_size_bytes  = 128849018880 # 120 GiB
-# openebs_disk_size_bytes = 107374182400 # 100 GiB (VG LVM de OpenEBS)
-# pool_path        = "/home/libvirt/images/homelab" # / tiene poco espacio en este host - ver docs/CI_CD_HYPERVISOR_SETUP.md #3.5 (labeling SELinux)
-# vm_static_ip     = "192.168.122.10"
-# vm_gateway       = "192.168.122.1"
-# vm_mac           = "52:54:00:12:34:56"
+# disk_size_gb     = 120 # disco de instalacion de Talos
+# zfs_disk_size_gb = 100 # disco dedicado para el zpool de OpenEBS ZFS LocalPV
+# proxmox_datastore_id = "local-lvm"
+# network_bridge   = "vmbr0"
+# talos_version      = "v1.14.0"
+# talos_schematic_id = "4dc4594391d715ab33e9c2ae96950b98049cc9e7cb24443d0568983914de5b11"
+# cluster_name       = "homelab"
 
-# Obligatorias, sin default a proposito (dependen de tu red/maquina, ver
-# ADR-009). En CI se inyectan por TF_VAR_*; en local podes descomentarlas
-# aca o exportarlas como env vars.
-# hypervisor_ssh_host    = "100.x.x.x" # IP Tailscale del hipervisor
-# hypervisor_ssh_user    = "cpuenguenan"
-# hypervisor_ssh_keyfile = "/home/tu-usuario/.ssh/homeserver_ci_ed25519"
+# Obligatorias, sin default a proposito (dependen de tu red/instalacion). En
+# CI se inyectan por TF_VAR_*; en local podes descomentarlas aca o
+# exportarlas como env vars.
+# proxmox_endpoint  = "https://192.168.80.20:8006/"
+# proxmox_api_token = "terraform@pve!ci=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+# vm_static_ip      = "192.168.80.30"
+# vm_gateway        = "192.168.80.1"

@@ -1,269 +1,176 @@
-# Pool dedicado, no toca los pools existentes del host (default, images, boot, ...)
-resource "libvirt_pool" "homelab" {
-  name = "homelab"
-  type = "dir"
-  target = {
-    path = var.pool_path
+# Descarga el ISO de Talos (con el schematic de extensiones) directo a
+# Proxmox via su API download-url - no pasa por la maquina donde corre
+# Terraform ni requiere SSH al hipervisor.
+resource "proxmox_download_file" "talos_iso" {
+  content_type = "iso"
+  datastore_id = "local"
+  node_name    = var.proxmox_node_name
+  url          = "https://factory.talos.dev/image/${var.talos_schematic_id}/${var.talos_version}/metal-amd64.iso"
+  file_name    = "talos-${var.talos_version}-${var.talos_schematic_id}.iso"
+}
+
+# VM del nodo Talos. OVMF/q35 (no BIOS legacy, a diferencia del hipervisor
+# Fedora anterior): pensado para el passthrough de GPU futuro (RTX 2060),
+# que en Proxmox no tiene el problema de arranque silencioso que se
+# encontro con libvirt/SeaBIOS en el host viejo.
+resource "proxmox_virtual_environment_vm" "talos_node" {
+  name      = var.vm_name
+  node_name = var.proxmox_node_name
+  vm_id     = var.vm_id
+
+  bios    = "ovmf"
+  machine = "q35"
+
+  agent {
+    enabled = true # requiere la extension qemu-guest-agent del schematic
+  }
+
+  cpu {
+    cores = var.vcpu
+    type  = "x86-64-v2-AES"
+  }
+
+  memory {
+    dedicated = var.memory_mib
+  }
+
+  efi_disk {
+    datastore_id = var.proxmox_datastore_id
+    type         = "4m"
+  }
+
+  # Disco de instalacion de Talos (equivalente al vda/root de antes).
+  disk {
+    interface    = "virtio0"
+    datastore_id = var.proxmox_datastore_id
+    size         = var.disk_size_gb
+  }
+
+  # Disco dedicado para el zpool de OpenEBS ZFS LocalPV (equivalente al
+  # vdb/openebs_data_disk de antes) - separado del disco de instalacion a
+  # proposito, mismo razonamiento que con LVM: es solo para PVCs.
+  disk {
+    interface    = "virtio1"
+    datastore_id = var.proxmox_datastore_id
+    size         = var.zfs_disk_size_gb
+  }
+
+  cdrom {
+    file_id   = proxmox_download_file.talos_iso.id
+    interface = "ide3"
+  }
+
+  # Arranca del disco si ya tiene bootloader (post-instalacion); si esta
+  # vacio (primer boot) cae al ISO de Talos, que arranca en modo
+  # mantenimiento y espera el machine config via la API.
+  boot_order = ["virtio0", "ide3"]
+
+  network_device {
+    bridge = var.network_bridge
+    model  = "virtio"
+  }
+
+  operating_system {
+    type = "l26"
   }
 }
 
-# Importa el qcow2 local ya descargado y limpiado (virt-sysprep) como volumen
-# base. Nunca se escribe: k0s_node_disk es un overlay sobre este.
-resource "libvirt_volume" "fedora_base" {
-  name = "fedora-cloud-base.qcow2"
-  pool = libvirt_pool.homelab.name
-  type = "file"
+# Secrets del cluster (PKI de etcd/Kubernetes) - se generan una sola vez y
+# quedan en el state. Sensible: el backend remoto (R2) ya maneja esto igual
+# que cualquier otro secreto en el tfstate.
+resource "talos_machine_secrets" "this" {}
 
-  target = {
-    format = {
-      type = "qcow2"
-    }
-  }
-
-  create = {
-    content = {
-      url = var.fedora_cloud_image_url
-    }
-  }
+data "talos_machine_configuration" "this" {
+  cluster_name     = var.cluster_name
+  machine_type     = "controlplane"
+  cluster_endpoint = "https://${var.vm_static_ip}:6443"
+  machine_secrets  = talos_machine_secrets.this.machine_secrets
+  talos_version    = var.talos_version
 }
 
-# Disco overlay (copy-on-write) por VM. La plantilla nunca se escribe.
-resource "libvirt_volume" "k0s_node_disk" {
-  name     = "${var.vm_name}.qcow2"
-  pool     = libvirt_pool.homelab.name
-  type     = "file"
-  capacity = var.disk_size_bytes
-
-  target = {
-    format = {
-      type = "qcow2"
-    }
-  }
-
-  backing_store = {
-    path = libvirt_volume.fedora_base.path
-    format = {
-      type = "qcow2"
-    }
-  }
+data "talos_client_configuration" "this" {
+  cluster_name         = var.cluster_name
+  client_configuration = talos_machine_secrets.this.client_configuration
+  nodes                = [var.vm_static_ip]
+  endpoints            = [var.vm_static_ip]
 }
 
-# Disco dedicado (raw, sin backing_store) para el Volume Group LVM que usa
-# OpenEBS Local PV LVM. Separado del disco raiz (vda) a proposito: este VG es
-# solo para PVCs, no compite con el filesystem del SO, y raw evita el overhead
-# de doble buffering de qcow2 sobre un VG que ya maneja sus propios metadatos.
-resource "libvirt_volume" "openebs_data_disk" {
-  name     = "${var.vm_name}-openebs.raw"
-  pool     = libvirt_pool.homelab.name
-  type     = "file"
-  capacity = var.openebs_disk_size_bytes
+resource "talos_machine_configuration_apply" "this" {
+  client_configuration        = talos_machine_secrets.this.client_configuration
+  machine_configuration_input = data.talos_machine_configuration.this.machine_configuration
+  node                        = var.vm_static_ip
 
-  target = {
-    format = {
-      type = "raw"
-    }
-  }
+  config_patches = [
+    yamlencode({
+      machine = {
+        install = {
+          disk = "/dev/vda"
+          # Fija el installer al schematic con extensiones (qemu-guest-agent
+          # + tailscale + zfs) para que un `talosctl upgrade` futuro no
+          # vuelva a una imagen vainilla sin ellas.
+          image = "factory.talos.dev/installer/${var.talos_schematic_id}:${var.talos_version}"
+        }
+        network = {
+          interfaces = [
+            {
+              interface = "eth0"
+              addresses = ["${var.vm_static_ip}/${var.vm_ip_prefix}"]
+              routes = [
+                { network = "0.0.0.0/0", gateway = var.vm_gateway }
+              ]
+            }
+          ]
+          nameservers = var.vm_dns_servers
+        }
+        # Requerido por la extension zfs: el modulo del kernel no se carga
+        # solo por estar la extension instalada.
+        kernel = {
+          modules = [
+            { name = "zfs" }
+          ]
+        }
+      }
+      cluster = {
+        network = {
+          cni = {
+            name = "none" # Cilium reemplaza el CNI, igual que k0s antes
+          }
+        }
+        proxy = {
+          disabled = true # Cilium reemplaza kube-proxy via eBPF
+        }
+      }
+    })
+  ]
+
+  depends_on = [proxmox_virtual_environment_vm.talos_node]
 }
 
-# Llave SSH dedicada a este modulo, generada por Terraform. No reutiliza
-# ninguna llave del operador para que el repo sea reproducible desde cero.
-resource "tls_private_key" "vm" {
-  algorithm = "ED25519"
+resource "talos_machine_bootstrap" "this" {
+  node                 = var.vm_static_ip
+  client_configuration = talos_machine_secrets.this.client_configuration
+
+  depends_on = [talos_machine_configuration_apply.this]
 }
 
-resource "local_file" "vm_private_key" {
-  content         = tls_private_key.vm.private_key_openssh
-  filename        = "${path.module}/generated/id_ed25519"
+resource "talos_cluster_kubeconfig" "this" {
+  node                 = var.vm_static_ip
+  client_configuration = talos_machine_secrets.this.client_configuration
+
+  depends_on = [talos_machine_bootstrap.this]
+}
+
+# Handoff a Ansible/CI: kubeconfig y talosconfig quedan en disco para que
+# site.yaml (localhost) y cualquier `talosctl` manual los usen. Reemplaza al
+# viejo local_file.ansible_inventory (que era SSH, ya no aplica).
+resource "local_file" "kubeconfig" {
+  content         = talos_cluster_kubeconfig.this.kubeconfig_raw
+  filename        = "${path.module}/generated/kubeconfig"
   file_permission = "0600"
 }
 
-resource "local_file" "vm_public_key" {
-  content         = tls_private_key.vm.public_key_openssh
-  filename        = "${path.module}/generated/id_ed25519.pub"
-  file_permission = "0644"
-}
-
-resource "libvirt_cloudinit_disk" "k0s_seed" {
-  name = "${var.vm_name}-seed.iso"
-
-  meta_data = "instance-id: ${var.vm_name}\nlocal-hostname: ${var.vm_name}\n"
-
-  user_data = templatefile("${path.module}/cloud-init/user-data.yaml.tpl", {
-    hostname       = var.vm_name
-    timezone       = var.timezone
-    ssh_user       = var.ssh_user
-    ssh_public_key = trimspace(tls_private_key.vm.public_key_openssh)
-  })
-
-  network_config = templatefile("${path.module}/cloud-init/network-config.yaml.tpl", {
-    mac_address = var.vm_mac
-    ip_cidr     = "${var.vm_static_ip}/${var.vm_ip_prefix}"
-    gateway     = var.vm_gateway
-    dns_servers = join(",", var.vm_dns_servers)
-  })
-}
-
-# libvirt_cloudinit_disk solo genera el ISO en un temp local de donde corre
-# Terraform (atributo .path, read-only) - no tiene pool propio. Este volumen
-# lo sube al storage pool remoto del hipervisor, igual que fedora_base.
-resource "libvirt_volume" "k0s_seed" {
-  name = "${var.vm_name}-seed.iso"
-  pool = libvirt_pool.homelab.name
-  type = "file"
-
-  target = {
-    format = {
-      # No "raw": el contenido es un ISO9660 real (cidata), libvirt lo
-      # detecta e informa como "iso" al leer el volumen despues de crearlo,
-      # sin importar lo declarado aca. Deben coincidir o el provider tira
-      # "Provider produced inconsistent result after apply".
-      type = "iso"
-    }
-  }
-
-  create = {
-    content = {
-      url = libvirt_cloudinit_disk.k0s_seed.path
-    }
-  }
-}
-
-resource "libvirt_domain" "k0s_node" {
-  name        = var.vm_name
-  type        = "kvm"
-  memory      = var.memory_mib
-  memory_unit = "MiB" # sin esto, "memory" se interpreta en KiB: cada VM
-  # creada hasta ahora arrancaba con unos pocos MB de
-  # RAM en vez de GB, y por eso SeaBIOS colgaba siempre
-  # en el mismo punto sin importar que mas se cambiara
-  vcpu      = var.vcpu
-  autostart = true # unica via de arranque del cluster tras un reboot del host
-  running   = true # arrancar inmediatamente al crear (autostart solo aplica en reboots del host)
-
-  cpu = {
-    mode = "host-passthrough"
-  }
-
-  # BIOS legacy + i440fx: en este host, OVMF/UEFI (con o sin secure-boot)
-  # cuelga el arranque en silencio (sin salida en serie ni framebuffer,
-  # confirmado empiricamente). BIOS legacy es lo que si arranca de forma
-  # confiable con esta plantilla de Fedora Cloud, y nada en el stack
-  # (k0s/Cilium/OpenEBS) necesita UEFI.
-  os = {
-    type         = "hvm"
-    type_machine = "pc"
-  }
-
-  clock = {
-    offset = "utc"
-    timer = [
-      { name = "rtc", tick_policy = "catchup" },
-      { name = "pit", tick_policy = "delay" },
-      { name = "hpet", present = "no" }, # HPET habilitado cuelga la
-      # calibracion de timer de SeaBIOS
-      # bajo KVM en este host (confirmado
-      # empiricamente)
-    ]
-  }
-
-  features = {
-    acpi = true
-    apic = {} # sin esto, un vCPU se queda en spin-loop al 99% CPU esperando
-    # una interrupcion que nunca llega a entregarse (confirmado
-    # empiricamente: mismo EIP fijo, independiente del vcpu count)
-  }
-
-  devices = {
-    disks = [
-      {
-        device = "disk"
-        source = {
-          volume = {
-            pool   = libvirt_pool.homelab.name
-            volume = libvirt_volume.k0s_node_disk.name
-          }
-        }
-        target = {
-          bus = "virtio"
-          dev = "vda"
-        }
-        driver = {
-          name = "qemu"
-          type = "qcow2"
-        }
-      },
-      {
-        device = "disk"
-        source = {
-          volume = {
-            pool   = libvirt_pool.homelab.name
-            volume = libvirt_volume.openebs_data_disk.name
-          }
-        }
-        target = {
-          bus = "virtio"
-          dev = "vdb"
-        }
-        driver = {
-          name = "qemu"
-          type = "raw"
-        }
-      },
-      {
-        device = "cdrom"
-        source = {
-          volume = {
-            pool   = libvirt_pool.homelab.name
-            volume = libvirt_volume.k0s_seed.name
-          }
-        }
-        target = {
-          bus = "ide" # i440fx no tiene controlador SATA nativo
-          dev = "hda"
-        }
-        driver = {
-          name = "qemu"
-          type = "raw"
-        }
-      },
-    ]
-
-    interfaces = [
-      {
-        source = {
-          network = {
-            network = var.libvirt_network_name
-          }
-        }
-        model = {
-          type = "virtio"
-        }
-        mac = {
-          address = var.vm_mac
-        }
-      },
-    ]
-
-    consoles = [
-      {
-        target = {
-          type = "serial"
-          port = "0"
-        }
-      },
-    ]
-  }
-}
-
-# Handoff a Ansible: regenera el inventario apuntando a la VM por SSH.
-resource "local_file" "ansible_inventory" {
-  content = templatefile("${path.module}/templates/inventory.yaml.tftpl", {
-    vm_ip              = var.vm_static_ip
-    ssh_user           = var.ssh_user
-    ssh_key_path       = abspath(local_file.vm_private_key.filename)
-    hypervisor_host    = var.hypervisor_ssh_host
-    hypervisor_user    = var.hypervisor_ssh_user
-    hypervisor_keyfile = var.hypervisor_ssh_keyfile
-  })
-  filename = "${path.module}/../ansible/inventory.yaml"
+resource "local_file" "talosconfig" {
+  content         = data.talos_client_configuration.this.talos_config
+  filename        = "${path.module}/generated/talosconfig"
+  file_permission = "0600"
 }
