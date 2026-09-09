@@ -1,7 +1,7 @@
 # Copiar a terraform.tfvars (gitignored) y completar.
 
 # Ajustar si hace falta; estos son los defaults ya definidos en variables.tf
-# vm_name          = "homelab"
+# vm_name          = "talos-01"
 # vm_id            = 100
 # memory_mib       = 16384
 # vcpu             = 8
@@ -11,7 +11,7 @@
 # network_bridge   = "vmbr0"
 # talos_version      = "v1.14.0"
 # talos_schematic_id = "4dc4594391d715ab33e9c2ae96950b98049cc9e7cb24443d0568983914de5b11"
-# cluster_name       = "homelab"
+# cluster_name       = "talos-01"
 
 # Obligatorias, sin default a proposito. En CI se inyectan por TF_VAR_*.
 # proxmox_endpoint  = "https://192.168.80.20:8006/"
