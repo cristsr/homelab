@@ -1,0 +1,5 @@
+# Copiar a backend.hcl (gitignored) y completar.
+# Usar con: terraform init -backend-config=backend.hcl
+endpoints = {
+  s3 = "https://<ACCOUNT_ID>.r2.cloudflarestorage.com"
+}

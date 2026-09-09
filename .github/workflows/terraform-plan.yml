@@ -18,8 +18,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # Necesario para llegar a la API de Proxmox en la LAN del homelab via
-      # la ruta de subred que advierte el nodo Tailscale del hipervisor - ya
-      # no se usa para SSH (ver docs/CI_CD_HYPERVISOR_SETUP.md).
+      # la ruta de subred que advierte el nodo Tailscale del hipervisor.
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
         with:
@@ -30,24 +29,18 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
 
       - name: Write R2 backend config
-        working-directory: terraform
         run: |
-          cat > backend.hcl <<EOF
+          for dir in terraform/infra terraform/cluster; do
+            cat > "$dir/backend.hcl" <<EOF
           endpoints = {
             s3 = "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
           }
           EOF
+          done
 
-      - name: Terraform init
-        working-directory: terraform
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        run: terraform init -backend-config=backend.hcl
-
-      - name: Terraform plan
-        id: plan
-        working-directory: terraform
+      - name: Terraform plan (infra)
+        id: plan_infra
+        working-directory: terraform/infra
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -57,7 +50,22 @@ jobs:
           TF_VAR_vm_static_ip: ${{ vars.VM_STATIC_IP }}
           TF_VAR_vm_gateway: ${{ vars.VM_GATEWAY }}
         run: |
-          terraform plan -no-color -input=false | tee plan.txt
+          terraform init -backend-config=backend.hcl
+          terraform plan -no-color -input=false | tee ../../plan-infra.txt
+          terraform output -raw kubeconfig_raw > ../cluster/generated-kubeconfig
+
+      - name: Terraform plan (cluster)
+        id: plan_cluster
+        working-directory: terraform/cluster
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          TF_VAR_kubeconfig_path: ${{ github.workspace }}/terraform/cluster/generated-kubeconfig
+          TF_VAR_argocd_github_pat: ${{ secrets.ARGOCD_GITHUB_PAT }}
+          TF_VAR_openbao_static_seal_key: ${{ secrets.OPENBAO_STATIC_SEAL_KEY }}
+        run: |
+          terraform init -backend-config=backend.hcl
+          terraform plan -no-color -input=false | tee ../../plan-cluster.txt
 
       - name: Comment plan on PR
         if: github.event_name == 'pull_request'
@@ -65,10 +73,11 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const plan = fs.readFileSync('terraform/plan.txt', 'utf8').slice(0, 60000);
+            const infra = fs.readFileSync('plan-infra.txt', 'utf8').slice(0, 60000);
+            const cluster = fs.readFileSync('plan-cluster.txt', 'utf8').slice(0, 60000);
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `#### Terraform Plan\n<details><summary>Ver plan</summary>\n\n\`\`\`\n${plan}\n\`\`\`\n\n</details>`
+              body: `#### Terraform Plan - infra\n<details><summary>Ver plan</summary>\n\n\`\`\`\n${infra}\n\`\`\`\n\n</details>\n\n#### Terraform Plan - cluster\n<details><summary>Ver plan</summary>\n\n\`\`\`\n${cluster}\n\`\`\`\n\n</details>`
             });

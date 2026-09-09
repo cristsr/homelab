@@ -44,9 +44,7 @@ jobs:
       # Necesario porque Proxmox y la VM Talos viven en la LAN del homelab
       # (192.168.80.0/24), no publicamente alcanzable - el runner hosted
       # llega vía la ruta de subred que el nodo Tailscale del hipervisor
-      # advierte (ver docs/CI_CD_HYPERVISOR_SETUP.md). Ya no se usa para SSH:
-      # ni Terraform (API de Proxmox) ni Ansible (API de Talos/Kubernetes)
-      # necesitan una sesion SSH.
+      # advierte (ver docs/CI_CD_HYPERVISOR_SETUP.md).
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
         with:
@@ -56,8 +54,21 @@ jobs:
 
       - uses: hashicorp/setup-terraform@v3
 
-      - name: Write R2 backend config
-        working-directory: terraform
+      - uses: azure/setup-kubectl@v5
+        with:
+          version: "v1.34.1"
+
+      - uses: azure/setup-helm@v5
+        with:
+          version: "3.17.3"
+
+      - name: Install helmfile
+        run: |
+          curl -sSL "https://github.com/helmfile/helmfile/releases/download/v1.5.0/helmfile_1.5.0_linux_amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin helmfile
+
+      - name: Write R2 backend config (infra)
+        working-directory: terraform/infra
         run: |
           cat > backend.hcl <<EOF
           endpoints = {
@@ -65,8 +76,8 @@ jobs:
           }
           EOF
 
-      - name: Terraform apply
-        working-directory: terraform
+      - name: Terraform apply (infra)
+        working-directory: terraform/infra
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -79,9 +90,37 @@ jobs:
           terraform init -backend-config=backend.hcl
           terraform apply -auto-approve -input=false
 
-      - name: Bootstrap cluster (Cilium, ArgoCD, OpenEBS)
+      - name: Bootstrap cluster (Cilium, ArgoCD via helmfile, OpenEBS)
         working-directory: ansible
         run: ansible-playbook site.yaml
+
+      - name: Write R2 backend config (cluster)
+        working-directory: terraform/cluster
+        run: |
+          cat > backend.hcl <<EOF
+          endpoints = {
+            s3 = "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          }
+          EOF
+
+      - name: Terraform apply (cluster namespaces/secrets)
+        working-directory: terraform/cluster
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          TF_VAR_kubeconfig_path: ${{ github.workspace }}/terraform/infra/generated/kubeconfig
+          TF_VAR_argocd_github_pat: ${{ secrets.ARGOCD_GITHUB_PAT }}
+          TF_VAR_openbao_static_seal_key: ${{ secrets.OPENBAO_STATIC_SEAL_KEY }}
+        run: |
+          terraform init -backend-config=backend.hcl
+          terraform apply -auto-approve -input=false
+
+      # Ultimo paso del bootstrap: registra la Application raiz de ArgoCD,
+      # que ya tiene su namespace/secrets creados por terraform/cluster.
+      - name: Register ArgoCD root Application
+        env:
+          KUBECONFIG: ${{ github.workspace }}/terraform/infra/generated/kubeconfig
+        run: kubectl apply -f gitops/root-app.yaml
 
       - name: Populate OpenBao secrets
         working-directory: ansible

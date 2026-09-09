@@ -1,25 +1,4 @@
 ---
-- name: Download Helmfile v{{ helmfile_version }}
-  ansible.builtin.get_url:
-    url: "https://github.com/helmfile/helmfile/releases/download/v{{ helmfile_version }}/helmfile_{{ helmfile_version }}_linux_amd64.tar.gz"
-    dest: /tmp/helmfile.tar.gz
-    mode: "0644"
-    force: false
-  become: true
-  tags: [ helmfile ]
-
-- name: Extract helmfile binary
-  ansible.builtin.unarchive:
-    src: /tmp/helmfile.tar.gz
-    dest: /usr/local/bin
-    remote_src: true
-    include:
-      - helmfile
-    creates: /usr/local/bin/helmfile
-    mode: "0755"
-  become: true
-  tags: [ helmfile ]
-
 # El bootstrap de Talos (talos_machine_bootstrap) dispara la formacion de
 # etcd + el arranque de los pods estaticos del control plane, pero eso no
 # es instantaneo - Terraform ya considero "listo" el bootstrap apenas la
