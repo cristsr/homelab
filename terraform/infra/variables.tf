@@ -80,6 +80,12 @@ variable "vm_static_ip" {
   type        = string
 }
 
+variable "vm_mac_address" {
+  description = "MAC fija de la NIC del nodo Talos - reservar var.vm_static_ip a esta MAC en el DHCP del router"
+  type        = string
+  default     = "02:00:00:00:00:30"
+}
+
 variable "vm_ip_prefix" {
   description = "Prefijo CIDR de la IP estatica"
   type        = number
