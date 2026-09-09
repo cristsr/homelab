@@ -14,11 +14,6 @@ resource "kubernetes_job_v1" "openebs_zpool_create" {
         name = "openebs-zpool-create"
       }
       spec {
-        # Solo host_pid: es lo unico que necesita el nsenter de mas abajo
-        # para entrar al namespace de montaje del host (pid 1). host_network
-        # y host_ipc no aportan nada a esta tarea y solo amplian innecesariamente
-        # el radio de exposicion de un contenedor privilegiado.
-        host_pid       = true
         restart_policy = "OnFailure"
 
         # Correr unicamente en el nodo que actua de controlplane/storage (Talos)
@@ -35,38 +30,41 @@ resource "kubernetes_job_v1" "openebs_zpool_create" {
         container {
           name  = "zfs-admin"
           image = "alpine:3.20"
-          
+
           security_context {
             privileged = true
           }
 
-          # Montamos root de Talos en /host para poder hacer chroot
+          # Talos no tiene shell/binarios de userspace en el host (por diseno -
+          # nsenter+chroot al host falla con "can't execute 'sh'"), asi que las
+          # herramientas de ZFS corren DENTRO del contenedor contra el device
+          # del host, montando solo /dev (no todo el host root). El kernel
+          # module zfs ya esta cargado por Talos (kernel.modules en talos.tf) -
+          # las syscalls/ioctls de ZFS son a nivel de kernel, compartido por
+          # todos los containers del nodo, sin importar el namespace.
           volume_mount {
-            name       = "host-root"
-            mount_path = "/host"
+            name       = "dev"
+            mount_path = "/dev"
           }
 
           command = [
-            "nsenter", 
-            "--mount=/proc/1/ns/mnt", 
-            "--", 
-            "sh", 
-            "-c", 
+            "sh",
+            "-c",
             <<-EOT
             set -e
+            apk add --no-cache zfs util-linux >/dev/null
+
             # La particion la crea Talos de forma declarativa (RawVolumeConfig
-            # "openebs-zfs" en terraform/infra/talos.tf), con partition label
-            # r-openebs-zfs - por eso el device es el symlink udev estandar y
-            # no un nombre de disco hardcodeado (que puede cambiar segun el
-            # hipervisor). Si este path no existe al correr el Job, confirmar
-            # el device real con: talosctl get volumestatus r-openebs-zfs
-            # (columna LOCATION) y ajustar aqui.
-            ZFS_DEVICE=/dev/disk/by-partlabel/r-openebs-zfs
+            # "openebs-zfs" en terraform/infra/talos.tf) con partition label
+            # r-openebs-zfs. Talos no corre udev, asi que /dev/disk/by-partlabel/
+            # no existe - se resuelve el device real con blkid (confirmado:
+            # PARTLABEL=r-openebs-zfs -> /dev/vdb1 en este cluster).
+            ZFS_DEVICE=$(blkid -o device -t PARTLABEL=r-openebs-zfs)
 
             # Comprobar si el zpool ya existe
-            if ! chroot /host zpool list zfspv-pool; then
-              echo "Zpool no existe. Creando..."
-              chroot /host zpool create -f \
+            if ! zpool list zfspv-pool; then
+              echo "Zpool no existe. Creando en $ZFS_DEVICE..."
+              zpool create -f \
                 -o ashift=12 \
                 -O mountpoint=/var/openebs/zfspv-pool \
                 -O compression=zstd \
@@ -81,9 +79,9 @@ resource "kubernetes_job_v1" "openebs_zpool_create" {
         }
 
         volume {
-          name = "host-root"
+          name = "dev"
           host_path {
-            path = "/"
+            path = "/dev"
           }
         }
       }

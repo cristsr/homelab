@@ -57,3 +57,21 @@ resource "kubernetes_secret_v1" "openbao_static_unseal_key" {
     key = var.openbao_static_seal_key
   }
 }
+
+# Los 3 secrets ya existen (creados por una corrida anterior de este mismo
+# state antes de refactorizar namespaces.tf a for_each - ver import de
+# namespaces.tf). Reconciliacion declarativa, mismo motivo.
+import {
+  to = kubernetes_secret_v1.github_repo_creds
+  id = "argocd/github-repo-creds"
+}
+
+import {
+  to = kubernetes_secret_v1.argocd_in_cluster
+  id = "argocd/in-cluster-secret"
+}
+
+import {
+  to = kubernetes_secret_v1.openbao_static_unseal_key
+  id = "secret-management/openbao-static-unseal-key"
+}
