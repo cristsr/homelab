@@ -1,12 +1,7 @@
-# Kubeconfig/talosconfig generados por `terraform apply` (terraform/main.tf,
-# resources local_file.kubeconfig / local_file.talosconfig) - ya no hay VM a
-# la que conectarse por SSH para extraerlos.
-kubeconfig_path: "{{ playbook_dir }}/../terraform/generated/kubeconfig"
-talosconfig_path: "{{ playbook_dir }}/../terraform/generated/talosconfig"
-
-# Ajustar segun la version de Kubernetes que bootstrapea Talos (ver
-# `talosctl version` contra el nodo, o el output de `talos_machine_bootstrap`).
-kubectl_version: "v1.34.1"
+# Kubeconfig/talosconfig generados por `terraform apply` en terraform/infra
+# (resources local_file.kubeconfig / local_file.talosconfig).
+kubeconfig_path: "{{ playbook_dir }}/../terraform/infra/generated/kubeconfig"
+talosconfig_path: "{{ playbook_dir }}/../terraform/infra/generated/talosconfig"
 
 # Nombre del nodo Talos en Kubernetes (= var.vm_name en terraform), usado por
 # tasks/openebs-zfs-prereqs.yaml para el `kubectl debug node/<nombre>`.
@@ -23,12 +18,10 @@ k0s_service_cidr: 10.96.0.0/12
 
 # Pool ZFS para OpenEBS ZFS LocalPV, creado por
 # ansible/tasks/openebs-zfs-prereqs.yaml sobre el disco dedicado (virtio1 en
-# terraform/main.tf) - misma fuente de verdad usada por el StorageClass en
-# platform/storage/openebs/storageclass.yaml.
+# terraform/infra/proxmox.tf) - misma fuente de verdad usada por el
+# StorageClass en platform/storage/openebs/storageclass.yaml.
 openebs_zfs_pool_name: zfspv-pool
 
-helm_version: 3.17.3
-helmfile_version: 1.5.0
 argocd_github_username: cristsr
 argocd_repo_url: https://github.com/cristsr/homelab
 argocd_github_pat: !vault |

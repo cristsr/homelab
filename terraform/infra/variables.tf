@@ -1,5 +1,5 @@
 variable "proxmox_endpoint" {
-  description = "URL de la API de Proxmox VE (https://host:8006/). Sin default: nunca hardcodear infraestructura de red en el repo."
+  description = "URL de la API de Proxmox VE (https://host:8006/)"
   type        = string
 }
 
@@ -70,7 +70,7 @@ variable "proxmox_datastore_id" {
 }
 
 variable "network_bridge" {
-  description = "Bridge de Proxmox al que se conecta la NIC de la VM (da IP LAN directa, sin NAT)"
+  description = "Bridge de Proxmox al que se conecta la NIC de la VM"
   type        = string
   default     = "vmbr0"
 }
