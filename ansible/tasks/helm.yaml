@@ -5,6 +5,7 @@
     dest: /tmp/helm.tar.gz
     mode: "0644"
     force: false
+  become: true
   tags: [helm]
 
 - name: Extract helm binary
@@ -17,4 +18,5 @@
       - "linux-amd64/helm"
     creates: /usr/local/bin/helm
     mode: "0755"
+  become: true
   tags: [helm]

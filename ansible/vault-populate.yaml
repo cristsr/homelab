@@ -1,7 +1,7 @@
 ---
 - name: Populate OpenBao KV
-  hosts: k0s
-  become: true
+  hosts: localhost
+  become: false
 
   vars:
     bao_url: "http://127.0.0.1:8200"
@@ -15,7 +15,8 @@
       until: openbao_endpoints.stdout | length > 0
       retries: 60
       delay: 10
-      become: false
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
       changed_when: false
 
     - name: Wait for openbao-init job to exist
@@ -25,14 +26,16 @@
       until: init_job.stdout | length > 0
       retries: 30
       delay: 10
-      become: false
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
       changed_when: false
 
     - name: Wait for openbao-init job to complete
       ansible.builtin.shell: |
         kubectl wait --for=condition=complete job/openbao-init \
           -n secret-management --timeout=300s
-      become: false
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
       changed_when: false
       when: init_job.stdout | length > 0
 
@@ -41,7 +44,8 @@
         kubectl get secret openbao-root-token -n secret-management \
           -o jsonpath='{.data.token}' | base64 -d
       register: bao_root_token
-      become: false
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
       no_log: true
       changed_when: false
 
@@ -86,7 +90,8 @@
       ansible.builtin.shell: |
         kubectl get deployment cloudflared -n networking -o name 2>/dev/null || true
       register: cloudflared_deploy
-      become: false
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
       changed_when: false
 
     - name: Wait for ExternalSecret to sync the new cloudflared token
@@ -97,7 +102,8 @@
       until: synced_token.stdout == cloudflared_token
       retries: 20
       delay: 5
-      become: false
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
       no_log: true
       changed_when: false
       when: cloudflared_deploy.stdout | length > 0
@@ -105,6 +111,7 @@
     - name: Restart cloudflared deployment to pick up new token
       ansible.builtin.shell: |
         kubectl rollout restart deployment/cloudflared -n networking
-      become: false
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
       changed_when: true
       when: cloudflared_deploy.stdout | length > 0

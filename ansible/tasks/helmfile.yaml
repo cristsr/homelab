@@ -5,6 +5,7 @@
     dest: /tmp/helmfile.tar.gz
     mode: "0644"
     force: false
+  become: true
   tags: [ helmfile ]
 
 - name: Extract helmfile binary
@@ -16,25 +17,18 @@
       - helmfile
     creates: /usr/local/bin/helmfile
     mode: "0755"
+  become: true
   tags: [ helmfile ]
 
-# El nodo corre en una VM aparte del control node (ver ADR-008): bootstrap/
-# vive en el repo del host, no en la VM, asi que hay que copiarlo antes de
-# invocar helmfile (que resuelve sus values.yaml relativos al chdir).
-- name: Sincronizar bootstrap/ a la VM
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../bootstrap/"
-    dest: /opt/homelab-bootstrap/
-    mode: preserve
-  tags: [ helmfile ]
-
+# bootstrap/ ya esta local (mismo checkout del repo que corre Ansible) - a
+# diferencia de la VM Fedora anterior, no hay nada que copiar antes de
+# invocar helmfile.
 - name: Bootstrap Cilium and ArgoCD via helmfile
   ansible.builtin.command: helmfile sync
   args:
-    chdir: /opt/homelab-bootstrap
-  become: true
+    chdir: "{{ playbook_dir }}/../bootstrap"
   environment:
-    KUBECONFIG: /var/lib/k0s/pki/admin.conf
+    KUBECONFIG: "{{ kubeconfig_path }}"
   tags: [ helmfile ]
 
 - name: Wait for node to reach Ready state (after Cilium)
@@ -45,5 +39,6 @@
   retries: 20
   delay: 20
   changed_when: false
-  become: false
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
   tags: [ helmfile ]

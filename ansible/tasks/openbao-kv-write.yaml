@@ -22,6 +22,8 @@
         setsid nohup kubectl port-forward svc/openbao 8200:8200 -n secret-management \
           < /dev/null > {{ openbao_pf_pid_file }}.log 2>&1 &
         echo $! > {{ openbao_pf_pid_file }}
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
       become: false
       changed_when: false
 

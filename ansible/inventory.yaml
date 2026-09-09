@@ -1,16 +1,8 @@
-# Generado por `terraform apply` (terraform/main.tf, resource local_file.ansible_inventory)
-# No editar a mano - se sobreescribe en cada apply.
+# Talos no tiene SSH ni shell: todo lo que antes corria "dentro de la VM"
+# ahora corre en localhost (la maquina que ejecuta Terraform/Ansible - el
+# runner de CI, o el operador), usando el kubeconfig que Terraform deja en
+# terraform/generated/kubeconfig.
 all:
-  children:
-    k0s:
-      hosts:
-        homelab:
-          ansible_host: 192.168.122.10
-          ansible_user: fedora
-          ansible_connection: ssh
-          ansible_ssh_private_key_file: /home/cpuenguenan/homelab/terraform/generated/id_ed25519
-    hypervisor:
-      hosts:
-        homelab-host:
-          ansible_host: 127.0.0.1
-          ansible_connection: local
+  hosts:
+    localhost:
+      ansible_connection: local

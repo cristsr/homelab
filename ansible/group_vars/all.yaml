@@ -1,24 +1,32 @@
-k0s_version: v1.35.3+k0s.0
-kubectl_version: "{{ k0s_version | regex_replace('\\+k0s\\..*', '') }}"
-k0s_node_ip: 192.168.122.10 # IP interna de la VM (NAT libvirt); 192.168.80.20 sigue siendo la IP del host
+# Kubeconfig/talosconfig generados por `terraform apply` (terraform/main.tf,
+# resources local_file.kubeconfig / local_file.talosconfig) - ya no hay VM a
+# la que conectarse por SSH para extraerlos.
+kubeconfig_path: "{{ playbook_dir }}/../terraform/generated/kubeconfig"
+talosconfig_path: "{{ playbook_dir }}/../terraform/generated/talosconfig"
+
+# Ajustar segun la version de Kubernetes que bootstrapea Talos (ver
+# `talosctl version` contra el nodo, o el output de `talos_machine_bootstrap`).
+kubectl_version: "v1.34.1"
+
+# Nombre del nodo Talos en Kubernetes (= var.vm_name en terraform), usado por
+# tasks/openebs-zfs-prereqs.yaml para el `kubectl debug node/<nombre>`.
+talos_node_name: homelab
+
 # IPs fijas asignadas via Cilium L2 Announcements (spec.addresses en el
-# Gateway `main`, ver platform/networking/cilium-gateway/) - usadas por
-# ansible/host-network.yaml para el forward-port LAN. agentgateway-mcp ya
-# no tiene IP propia (ClusterIP, TLS terminado por `main` - ver ADR-012).
-cilium_gateway_lb_ip: 192.168.122.240
-private_dns_ip: 192.168.122.253
+# Gateway `main`, ver platform/networking/cilium-gateway/), ahora en la LAN
+# real (vmbr0 bridged en Proxmox, ya no NAT de libvirt) - deben ser IPs
+# libres dentro de la misma subred que var.vm_static_ip en terraform.
+cilium_gateway_lb_ip: 192.168.80.240
+private_dns_ip: 192.168.80.253
 k0s_pod_cidr: 10.244.0.0/16
 k0s_service_cidr: 10.96.0.0/12
 
-# Disco dedicado (vdb, ver terraform/main.tf) y Volume Group para OpenEBS
-# Local PV LVM - misma fuente de verdad usada por ansible/tasks/openebs-prereqs.yaml
-# y por las StorageClasses en platform/storage/openebs/storageclass.yaml.
-openebs_lvm_disk_device: /dev/vdb
-openebs_lvm_vg_name: vg-openebs
+# Pool ZFS para OpenEBS ZFS LocalPV, creado por
+# ansible/tasks/openebs-zfs-prereqs.yaml sobre el disco dedicado (virtio1 en
+# terraform/main.tf) - misma fuente de verdad usada por el StorageClass en
+# platform/storage/openebs/storageclass.yaml.
+openebs_zfs_pool_name: zfspv-pool
 
-# Interfaz LAN real del host (solo WiFi disponible, sin cable) usada por
-# ansible/host-network.yaml para el port-forward 80/443 -> VM.
-host_lan_interface: wlp4s0f1u2
 helm_version: 3.17.3
 helmfile_version: 1.5.0
 argocd_github_username: cristsr
