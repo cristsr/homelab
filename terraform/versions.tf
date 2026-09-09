@@ -3,13 +3,13 @@ terraform {
   required_version = ">= 1.10.0"
 
   required_providers {
-    libvirt = {
-      source  = "dmacvicar/libvirt"
-      version = "~> 0.8"
+    proxmox = {
+      source  = "bpg/proxmox"
+      version = "~> 0.112"
     }
-    tls = {
-      source  = "hashicorp/tls"
-      version = "~> 4.0"
+    talos = {
+      source  = "siderolabs/talos"
+      version = "~> 0.9"
     }
     local = {
       source  = "hashicorp/local"

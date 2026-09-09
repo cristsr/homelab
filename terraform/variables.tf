@@ -1,23 +1,42 @@
-variable "fedora_cloud_image_url" {
-  description = "URL directa al qcow2 de Fedora Cloud Base (ver https://fedoraproject.org/cloud/download). No tiene default a proposito: cada release/build cambia de nombre."
+variable "proxmox_endpoint" {
+  description = "URL de la API de Proxmox VE (https://host:8006/). Sin default: nunca hardcodear infraestructura de red en el repo."
   type        = string
 }
 
-variable "vm_name" {
-  description = "Nombre del dominio libvirt y hostname de la VM"
+variable "proxmox_api_token" {
+  description = "API token de Proxmox, formato 'user@realm!tokenid=uuid'"
+  type        = string
+  sensitive   = true
+}
+
+variable "proxmox_node_name" {
+  description = "Nombre del nodo Proxmox donde se crea la VM"
   type        = string
   default     = "homelab"
 }
 
-variable "pool_path" {
-  # /var/lib/libvirt vive en la particion raiz del hipervisor, que en este
-  # host tiene solo ~50GB - insuficiente para el disco raiz de la VM (120GB)
-  # mas el disco dedicado de OpenEBS (100GB). /home esta en una particion
-  # separada con mucho mas espacio libre, asi que el pool completo (ambos
-  # discos + la imagen base + el ISO de cloud-init) vive ahi.
-  description = "Path en el host donde vive el pool de libvirt dedicado a este modulo"
+variable "talos_version" {
+  description = "Version de Talos Linux a usar (debe existir en el Image Factory)"
   type        = string
-  default     = "/home/libvirt/images/homelab"
+  default     = "v1.14.0"
+}
+
+variable "talos_schematic_id" {
+  description = "ID del schematic generado en https://factory.talos.dev (extensiones: qemu-guest-agent, tailscale, zfs)"
+  type        = string
+  default     = "4dc4594391d715ab33e9c2ae96950b98049cc9e7cb24443d0568983914de5b11"
+}
+
+variable "vm_id" {
+  description = "ID numerico de la VM en Proxmox"
+  type        = number
+  default     = 100
+}
+
+variable "vm_name" {
+  description = "Nombre de la VM y hostname del nodo Talos"
+  type        = string
+  default     = "homelab"
 }
 
 variable "memory_mib" {
@@ -32,34 +51,33 @@ variable "vcpu" {
   default     = 8
 }
 
-variable "disk_size_bytes" {
-  description = "Tamano del disco overlay de la VM (bytes)"
+variable "disk_size_gb" {
+  description = "Tamano del disco de instalacion de Talos (GB)"
   type        = number
-  default     = 128849018880 # 120 GiB
+  default     = 120
 }
 
-variable "openebs_disk_size_bytes" {
-  description = "Tamano del disco dedicado (vdb, raw) para el Volume Group LVM de OpenEBS Local PV LVM (bytes)"
+variable "zfs_disk_size_gb" {
+  description = "Tamano del disco dedicado (vdb) para el zpool de OpenEBS ZFS LocalPV (GB)"
   type        = number
-  default     = 107374182400 # 100 GiB
+  default     = 100
 }
 
-variable "libvirt_network_name" {
-  description = "Red libvirt NAT existente a usar (virbr0)"
+variable "proxmox_datastore_id" {
+  description = "Datastore de Proxmox donde viven los discos y el ISO descargado"
   type        = string
-  default     = "default"
+  default     = "local-lvm"
 }
 
-variable "vm_mac" {
-  description = "MAC fija de la NIC de la VM. Necesaria para que el network-config (match: macaddress + set-name) enlace de forma confiable con la interfaz real."
+variable "network_bridge" {
+  description = "Bridge de Proxmox al que se conecta la NIC de la VM (da IP LAN directa, sin NAT)"
   type        = string
-  default     = "52:54:00:12:34:56"
+  default     = "vmbr0"
 }
 
 variable "vm_static_ip" {
-  description = "IP estatica de la VM dentro de la red NAT (192.168.122.0/24)"
+  description = "IP estatica del nodo Talos en la LAN"
   type        = string
-  default     = "192.168.122.10"
 }
 
 variable "vm_ip_prefix" {
@@ -69,40 +87,18 @@ variable "vm_ip_prefix" {
 }
 
 variable "vm_gateway" {
-  description = "Gateway de la red NAT (IP del host en virbr0)"
+  description = "Gateway de la LAN"
   type        = string
-  default     = "192.168.122.1"
 }
 
 variable "vm_dns_servers" {
-  description = "Servidores DNS para la VM"
+  description = "Servidores DNS para el nodo Talos"
   type        = list(string)
   default     = ["1.1.1.1", "8.8.8.8"]
 }
 
-variable "ssh_user" {
-  description = "Usuario creado via cloud-init para SSH/Ansible"
+variable "cluster_name" {
+  description = "Nombre del cluster Talos/Kubernetes"
   type        = string
-  default     = "fedora"
-}
-
-variable "timezone" {
-  description = "Timezone de la VM"
-  type        = string
-  default     = "UTC"
-}
-
-variable "hypervisor_ssh_host" {
-  description = "IP/hostname (Tailscale) del hipervisor fisico, para llegar a libvirt y a la VM (NAT interna) via SSH remoto. Sin default: nunca hardcodear infraestructura de red en el repo."
-  type        = string
-}
-
-variable "hypervisor_ssh_user" {
-  description = "Usuario SSH del hipervisor (debe estar en el grupo libvirt)"
-  type        = string
-}
-
-variable "hypervisor_ssh_keyfile" {
-  description = "Path absoluto, en la maquina donde corre Terraform/Ansible, a la clave privada SSH dedicada para llegar al hipervisor"
-  type        = string
+  default     = "homelab"
 }

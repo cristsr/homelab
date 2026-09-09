@@ -1,13 +1,11 @@
-# Conexion remota por SSH: ni el operador ni CI ejecutan terraform en el
-# propio hipervisor (ver ADR-009). Vale tanto para correrlo desde CI (via
-# Tailscale) como desde una laptop.
-#
-# socket= es obligatorio: este host usa los daemons modulares de libvirt
-# (virtqemud, no el libvirtd monolitico legacy), asi que el socket real es
-# /run/libvirt/virtqemud-sock. Sin este parametro, el transporte SSH remoto
-# asume el path legacy /run/libvirt/libvirt-sock, que existe como archivo
-# huerfano (el socket unit legacy esta "inactive") pero no tiene nada
-# escuchando detras -> "connect failed" al conectar via SSH.
-provider "libvirt" {
-  uri = "qemu+ssh://${var.hypervisor_ssh_user}@${var.hypervisor_ssh_host}/system?keyfile=${var.hypervisor_ssh_keyfile}&no_verify=1&socket=/run/libvirt/virtqemud-sock"
+# Proxmox no usa libvirt: todo pasa por su API REST (:8006), sin SSH. El
+# certificado es autofirmado (instalacion default), de ahi insecure = true.
+provider "proxmox" {
+  endpoint  = var.proxmox_endpoint
+  api_token = var.proxmox_api_token
+  insecure  = true
 }
+
+# Sin bloque de configuracion propio: cada resource/data source de Talos
+# recibe explicitamente su client_configuration/node, no hay endpoint global.
+provider "talos" {}
