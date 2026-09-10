@@ -1,8 +1,13 @@
 ---
 # Corre antes que cualquier otro playbook (y antes de `terraform apply` en
-# CI): valida credenciales sin necesitar la VM ni el inventory generado por
-# Terraform. Si algo falta o es invalido, falla aqui en segundos en vez de a
-# mitad del bootstrap del cluster.
+# CI): valida SOLO las credenciales que Terraform/ArgoCD consumen en este
+# pipeline - no todo lo que eventualmente vive en secrets/homelab.env. Los
+# secretos que solo usa la carga manual de OpenBao (cloudflare_api_token,
+# cloudflared_token, argocd_webhook_secret) los valida
+# scripts/load-secrets-to-openbao.sh por su cuenta cuando corresponda; no
+# tiene sentido que CI (que ya no toca OpenBao) exija esos 3 secrets solo
+# para validarlos sin usarlos. Si algo falta o es invalido, falla aqui en
+# segundos en vez de a mitad del bootstrap del cluster.
 #
 # Las credenciales ya no viven en un vars file del repo (ver
 # secrets/homelab.env.example) - localmente, exporta ese archivo antes de
@@ -15,12 +20,13 @@
   gather_facts: false
 
   vars:
-    argocd_github_username: "{{ lookup('env', 'ARGOCD_GITHUB_USERNAME') | default('cristsr') }}"
-    argocd_repo_url: "{{ lookup('env', 'ARGOCD_REPO_URL') | default('https://github.com/cristsr/homelab') }}"
+    # `lookup('env', ...)` devuelve '' (no Undefined) cuando la env var no
+    # esta seteada - el filtro `default()` solo pisa valores Undefined, asi
+    # que hace falta el segundo argumento `true` para que tambien cubra el
+    # string vacio. Sin el, un ARGOCD_REPO_URL no seteado en CI quedaba en
+    # "" en vez de caer al default.
+    argocd_repo_url: "{{ lookup('env', 'ARGOCD_REPO_URL') | default('https://github.com/cristsr/homelab', true) }}"
     argocd_github_pat: "{{ lookup('env', 'ARGOCD_GITHUB_PAT') }}"
-    argocd_webhook_secret: "{{ lookup('env', 'ARGOCD_WEBHOOK_SECRET') }}"
-    cloudflare_api_token: "{{ lookup('env', 'CLOUDFLARE_API_TOKEN') }}"
-    cloudflared_token: "{{ lookup('env', 'CLOUDFLARED_TOKEN') }}"
     openbao_static_seal_key: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_KEY') }}"
 
   tasks:

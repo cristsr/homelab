@@ -69,16 +69,17 @@ completo es el valor de `TF_VAR_proxmox_api_token` / el secret
 - `PROXMOX_API_TOKEN` - el token generado en el paso 2.
 - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` - backend remoto (sin cambios).
 - `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` - OAuth client de Tailscale (sin cambios).
-- `ARGOCD_GITHUB_PAT` - PAT de GitHub que usa ArgoCD para sincronizar este repo (consumido por Terraform).
-- `OPENBAO_STATIC_SEAL_KEY` - clave de sellado estatico de OpenBao (consumido por Terraform).
-- `ARGOCD_WEBHOOK_SECRET`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN` - solo los usa el preflight para validarlos antes de aprovisionar; la carga real en OpenBao ya no corre en CI, es manual (ver `secrets/homelab.env.example` y `./scripts/load-secrets-to-openbao.sh`).
+- `ARGOCD_GITHUB_PAT` - PAT de GitHub que usa ArgoCD para sincronizar este repo (consumido por Terraform, validado por el preflight).
+- `OPENBAO_STATIC_SEAL_KEY` - clave de sellado estatico de OpenBao (consumido por Terraform, validado por el preflight).
+
+CI **no** necesita `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN` ni `ARGOCD_WEBHOOK_SECRET` como secrets de GitHub - esos solo los usa la carga manual de OpenBao (`secrets/homelab.env` local + `./scripts/load-secrets-to-openbao.sh`), que nunca corre en CI. No los crees a menos que quieras correr ese script vos mismo con otras credenciales.
 
 **Variables** (Settings → Environments → `prod` → Variables):
 - `PROXMOX_ENDPOINT` - ej. `https://192.168.80.20:8006/`.
 - `TALOS_SCHEMATIC_ID` - el ID generado en https://factory.talos.dev (ver `terraform/variables.tf` para el valor actual, que también sirve de default).
 - `VM_STATIC_IP` - IP LAN elegida para el nodo Talos (ej. `192.168.80.30`).
 - `VM_GATEWAY` - gateway de la LAN (ej. `192.168.80.1`).
-- `ARGOCD_REPO_URL` - normalmente `https://github.com/cristsr/homelab` (no es secreto, solo lo valida el preflight).
+- `ARGOCD_REPO_URL` - opcional, normalmente `https://github.com/cristsr/homelab` (el preflight ya trae ese valor por defecto si no la configuras).
 
 ## 4. Qué ya NO hace falta
 

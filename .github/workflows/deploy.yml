@@ -31,18 +31,16 @@ jobs:
         run: pip install ansible
 
       # Falla en segundos si falta o es invalida una credencial, antes de
-      # gastar tiempo conectando Tailscale y aprovisionando la VM. Las
-      # credenciales vienen de GitHub Actions secrets/vars, no de un vars
-      # file del repo (ver secrets/homelab.env.example y
+      # gastar tiempo conectando Tailscale y aprovisionando la VM. Solo
+      # valida lo que Terraform realmente consume mas abajo en este mismo
+      # job - la carga de OpenBao (cloudflare/cloudflared/webhook) es manual
+      # y no corre en CI (ver secrets/homelab.env.example y
       # docs/CI_CD_HYPERVISOR_SETUP.md).
       - name: Preflight - validate secrets
         working-directory: ansible
         env:
           ARGOCD_GITHUB_PAT: ${{ secrets.ARGOCD_GITHUB_PAT }}
           ARGOCD_REPO_URL: ${{ vars.ARGOCD_REPO_URL }}
-          ARGOCD_WEBHOOK_SECRET: ${{ secrets.ARGOCD_WEBHOOK_SECRET }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
           OPENBAO_STATIC_SEAL_KEY: ${{ secrets.OPENBAO_STATIC_SEAL_KEY }}
         run: ansible-playbook preflight.yaml
 
