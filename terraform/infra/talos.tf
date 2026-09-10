@@ -22,12 +22,26 @@ resource "talos_machine_configuration_apply" "this" {
   # no la estatica final: el nodo todavia no la tiene en este punto.
   node = local.maintenance_ip
 
+  # El cambio de hostname (stableHostname -> estatico) no se puede aplicar en
+  # caliente - Talos exige reboot para reprocesar esa parte de la identidad
+  # de red. Unico nodo del cluster: implica downtime breve de todo mientras
+  # reinicia.
+  apply_mode = "reboot"
+
   config_patches = [
     yamlencode({
       machine = {
         install = {
           disk  = "/dev/vda"
           image = "factory.talos.dev/installer/${var.talos_schematic_id}:${var.talos_version}"
+        }
+        # Talos >= 1.12 activa features.stableHostname por defecto (genera un
+        # hostname pseudo-random atado a la identidad de la maquina, ej.
+        # talos-zsu-wum) - conviven mal con un machine.network.hostname
+        # explicito ("static hostname is already set in v1alpha1 config" si
+        # no se desactiva primero).
+        features = {
+          stableHostname = false
         }
         network = {
           hostname = var.vm_name
