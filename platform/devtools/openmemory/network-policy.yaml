@@ -1,0 +1,20 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: openmemory-default-deny
+  namespace: devtools
+spec:
+  endpointSelector:
+    matchLabels:
+      app: openmemory
+  ingress:
+    # openmemory-api.internal... se enruta via Agent Gateway (pod real en
+    # namespace networking, no el cilium-agent embebido) - ver ADR-010/012.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: networking
+      toPorts:
+        - ports:
+            - port: "8765"
+              protocol: TCP
+  egress: []

@@ -108,14 +108,7 @@ Alternativa mas invasiva (sin necesitar el state remoto, requiere apagar la VM u
 wsl.exe -- bash -lc "cd /mnt/d/ruta/al/repo/ansible && ansible-playbook ..."
 ```
 
-Los archivos montados desde NTFS (`/mnt/c`, `/mnt/d`) heredan permisos world-writable/world-executable, lo que hace que `ansible-vault` rechace `.vault-pass` con `Exec format error` (lo interpreta como script en vez de texto plano). Copialo a un path nativo de WSL antes de usarlo:
-
-```bash
-cp /mnt/d/.../.vault-pass /tmp/vault-pass && chmod 600 /tmp/vault-pass
-ansible-vault encrypt_string '...' --name 'mi_var' --vault-password-file /tmp/vault-pass
-```
-
-Lo mismo aplica a cualquier clave SSH que uses desde WSL apuntando a un path bajo `/mnt/`: copiala a `/tmp/` y aplicale `chmod 600` antes de pasarsela a `ssh`/`ansible`.
+Cualquier clave SSH que uses desde WSL apuntando a un path bajo `/mnt/` (permisos world-writable/world-executable heredados de NTFS) hay que copiarla a `/tmp/` y aplicarle `chmod 600` antes de pasarsela a `ssh`/`ansible`.
 
 ---
 
@@ -251,19 +244,16 @@ en el nodo (identificar el LV real con `lvs vg-openebs`, el nombre lo asigna el 
 lvcreate --snapshot --name <lv>-snap --size 1G vg-openebs/<lv>
 ```
 
-### Backup de configuracion de Ansible
+### Backup de secretos
 
 El estado critico esta en:
 
 ```bash
-# Variables cifradas
-ansible/group_vars/all.yaml
-
-# Contrasena del vault (NO versionar)
-ansible/.vault-pass
+# Todas las credenciales (infra + apps), NO versionado
+secrets/homelab.env
 ```
 
-> Guarda una copia de `all.yaml` y la contrasena del vault en un gestor de contrasenas seguro.
+> Guarda una copia de `secrets/homelab.env` en un gestor de contrasenas seguro — es la unica copia fuera de OpenBao. Si se pierde sin backup, hay que regenerar/rotar cada token.
 
 ---
 
@@ -431,10 +421,8 @@ kubectl -n secret-management logs deployment/external-secrets --tail=100
 1. Reinstalar el sistema operativo.
 2. Restaurar las dependencias base (git, pipx, ansible).
 3. Clonar el repositorio.
-4. Restaurar `ansible/group_vars/all.yaml` (debe tener backup seguro).
-5. Recrear `ansible/.vault-pass` con la contrasena del vault.
-6. Ejecutar `ansible-playbook site.yaml`.
-7. Restaurar backups de bases de datos si es necesario.
+4. Restaurar `secrets/homelab.env` (debe tener backup seguro).
+5. Restaurar backups de bases de datos si es necesario.
 
 ### OpenBao sellado y sin acceso
 
@@ -449,11 +437,8 @@ kubectl -n secret-management exec -it openbao-0 -- bao operator unseal <KEY>
 ### Recrear el cluster desde cero
 
 ```bash
-cd ansible
-ansible-playbook teardown.yaml  # Confirma con 'yes'
-ansible-playbook site.yaml
-kubectl apply -f ../gitops/root-app.yaml
-ansible-playbook vault-populate.yaml
+kubectl apply -f gitops/root-app.yaml
+./scripts/load-secrets-to-openbao.sh
 ```
 
 `teardown.yaml` drena el nodo **antes** de detener `k0scontroller` y correr `k0s reset`
@@ -539,7 +524,7 @@ sudo find /var/log/pods -type f -mtime +7 -delete
 - [ ] Verificar metricas en Grafana.
 - [ ] Revisar actualizaciones de seguridad del sistema operativo.
 - [ ] Revisar actualizaciones de k0s, Cilium y charts criticos.
-- [ ] Confirmar que `.vault-pass` y backups de `group_vars/all.yaml` esten seguros.
+- [ ] Confirmar que el backup de `secrets/homelab.env` este seguro y actualizado.
 
 ---
 

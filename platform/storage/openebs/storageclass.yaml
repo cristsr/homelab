@@ -1,4 +1,6 @@
-# El nombre del pool (zfspv-pool) debe coincidir con ansible/group_vars/all.yaml
+# El nombre del pool (zfspv-pool) debe coincidir con terraform/cluster/storage.tf
+# (kubernetes_job_v1.openebs_zpool_create), que es quien lo crea - no hay ninguna
+# variable externa que mantener sincronizada, esta hardcodeado en ambos lados a proposito.
 # (openebs_zfs_pool_name) - ahi se crea el zpool, aca solo se referencia por nombre.
 apiVersion: storage.k8s.io/v1
 kind: StorageClass

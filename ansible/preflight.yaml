@@ -1,12 +1,27 @@
 ---
 # Corre antes que cualquier otro playbook (y antes de `terraform apply` en
-# CI): valida las credenciales en group_vars/all.yaml sin necesitar la VM ni
-# el inventory generado por Terraform. Si algo falta o es invalido, falla
-# aqui en segundos en vez de a mitad del bootstrap del cluster.
+# CI): valida credenciales sin necesitar la VM ni el inventory generado por
+# Terraform. Si algo falta o es invalido, falla aqui en segundos en vez de a
+# mitad del bootstrap del cluster.
+#
+# Las credenciales ya no viven en un vars file del repo (ver
+# secrets/homelab.env.example) - localmente, exporta ese archivo antes de
+# correr esto (`set -a; source secrets/homelab.env; set +a`); en CI vienen
+# como GitHub Actions secrets/vars inyectados como env vars del step (ver
+# .github/workflows/deploy.yml y docs/CI_CD_HYPERVISOR_SETUP.md).
 - name: Preflight - validar credenciales antes de aprovisionar infraestructura
   hosts: localhost
   connection: local
   gather_facts: false
+
+  vars:
+    argocd_github_username: "{{ lookup('env', 'ARGOCD_GITHUB_USERNAME') | default('cristsr') }}"
+    argocd_repo_url: "{{ lookup('env', 'ARGOCD_REPO_URL') | default('https://github.com/cristsr/homelab') }}"
+    argocd_github_pat: "{{ lookup('env', 'ARGOCD_GITHUB_PAT') }}"
+    argocd_webhook_secret: "{{ lookup('env', 'ARGOCD_WEBHOOK_SECRET') }}"
+    cloudflare_api_token: "{{ lookup('env', 'CLOUDFLARE_API_TOKEN') }}"
+    cloudflared_token: "{{ lookup('env', 'CLOUDFLARED_TOKEN') }}"
+    openbao_static_seal_key: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_KEY') }}"
 
   tasks:
     - import_tasks: tasks/preflight-secrets.yaml

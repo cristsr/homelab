@@ -6,7 +6,7 @@ Registro de las principales decisiones técnicas tomadas en el homelab. Cada ent
 
 ## ADR-001: k0s como distribución Kubernetes
 
-**Estado**: Aceptado — reemplazó MicroK8s  
+**Estado**: Superseded por [ADR-014](#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv) — reemplazó MicroK8s  
 **Fecha**: 2026-04
 
 ### Contexto
@@ -216,6 +216,8 @@ La alternativa más simple —poner los secretos directamente como Kubernetes Se
 - External Secrets Operator añade un componente extra, pero desacopla completamente la gestión de secretos de su consumo.
 - Al ser un fork activo de Vault, la API es 100% compatible: la documentación de Vault es válida para OpenBao.
 
+> **Actualización (ADR-015)**: la clave de unseal y el resto de las credenciales ya no viven cifradas en el repositorio con `ansible-vault` — viven en `secrets/homelab.env`, plano y gitignored, cargadas a OpenBao con un script manual.
+
 ---
 
 ## ADR-007: Ansible para aprovisionamiento del nodo
@@ -259,7 +261,7 @@ Además, los secrets de arranque (GitHub PAT, tokens de Cloudflare, clave de Ope
 
 ## ADR-008: VM libvirt provisionada con Terraform
 
-**Estado**: Aceptado
+**Estado**: Superseded por [ADR-014](#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv)
 **Fecha**: 2026-08-30
 
 ### Contexto
@@ -355,6 +357,8 @@ Durante la investigación se descartó una nota previa en la memoria de proyecto
 Fix: **`platform/argocd/httproute-webhook.yaml`**, una `HTTPRoute` nueva contra el Gateway `public`, hostname `argocd.cristianpuenguenan.online`, que expone *solo* el path `/api/webhook` (el resto de ArgoCD sigue sin ruta pública) — el payload va firmado (HMAC) contra `webhook.github.secret`, ya mezclado en `argocd-secret` por `webhook-externalsecret.yaml` desde que se implementó esto (`docs/TODO.md` #3), así que exponer el path es seguro sin cambios adicionales. Y `timeout.reconciliation` pasa de `0s` a `600s` (`bootstrap/argocd/values.yaml`) — el webhook sigue disparando el sync al instante en el caso normal, pero un fallo de entrega ya no deja el cluster sin sincronizar silenciosamente por meses.
 
 **Actualización (2026-09-07): Agent Gateway crasheaba en loop hacía más de un día, causa distinta y también preexistente.** El pod de `agentgateway` (namespace `networking`) nunca llegaba a `Ready` — sus logs mostraban un informer esperando indefinidamente el CRD `tcproutes.gateway.networking.k8s.io`, que no existe en el cluster: `gitops/apps/platform/networking/gateway-api-crds.yaml` instalaba el canal `standard` (v1.6.1) de Gateway API, que no incluye `TCPRoute`/`UDPRoute`/`TLSRoute` (esos viven en el canal `experimental`, superset del `standard` — mismos CRDs base sin cambios de esquema). Fix: cambiar `path: config/crd/standard` → `path: config/crd/experimental`, mismo `targetRevision`. Esto es lo que dejaba las 3 rutas de Agent Gateway (`mcp`, `openmemory-api`, `agentgateway`) en `503` durante toda la migración de dominio de ADR-012 — confirmado que el error era identico en `.internal` y en el dominio nuevo, así que no era una regresión de esa migración.
+
+**Actualización (2026-09-09, ver ADR-015):** `vault-populate.yaml` y `load-extra-secrets.yaml` salen del pipeline automático — la carga de secretos en OpenBao pasa a ser 100% manual (`scripts/load-secrets-to-openbao.sh`), nunca corre en CI. El secret `ANSIBLE_VAULT_PASSWORD` deja de usarse (ya no hay `ansible-vault` en el repo); el preflight ahora toma sus 6 credenciales desde GitHub Actions secrets/vars inyectados como env vars del step (`ARGOCD_GITHUB_PAT`, `OPENBAO_STATIC_SEAL_KEY` ya existían como secrets para Terraform; se suman `ARGOCD_WEBHOOK_SECRET`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN` como secrets nuevos y `ARGOCD_REPO_URL` como variable — ver `docs/CI_CD_HYPERVISOR_SETUP.md`).
 
 ## ADR-010: Cilium Gateway API para ingress genérico, Agent Gateway solo para MCP
 
@@ -477,7 +481,7 @@ Consecuencias:
 
 ## ADR-013: Reemplazo de Longhorn por OpenEBS Local PV LVM
 
-**Estado**: Aceptado  
+**Estado**: Superseded por [ADR-014](#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv) — el motor LVM elegido acá se reemplazó por ZFS al migrar a Talos (ver ADR-014); el razonamiento de esta entrada (por qué no Longhorn) sigue vigente.  
 **Fecha**: 2026-09-08
 
 ### Contexto
@@ -515,4 +519,67 @@ Motores de OpenEBS Local PV evaluados para reemplazar a Longhorn (ver tabla comp
 - Se simplifica el ciclo de shutdown: sin iSCSI de por medio, `ansible/tasks/graceful-shutdown.yaml` ya no necesita esperar "volúmenes detached" ni forzar logout — el drenaje normal de Kubernetes basta, porque LVM-LocalPV monta los LVs directo (sin capa NBD/iSCSI).
 - El argumento original de ADR-004 contra OpenEBS ("más complejo de configurar") se acepta ahora a cambio de performance en single-node: el chart standalone de un solo motor (LVM) es en la práctica más simple de operar que Longhorn con su UI, su manager y su engine-image por réplica.
 
+---
 
+## ADR-014: Migración de k0s/libvirt/Fedora a Talos Linux/Proxmox VE, y de OpenEBS LVM a OpenEBS ZFS LocalPV
+
+**Estado**: Aceptado
+**Fecha**: 2026-09-09
+
+### Contexto
+
+ADR-008 ya había documentado varias fuentes de fragilidad de la VM libvirt/KVM sobre un host generalista: el hang silencioso con firmware UEFI/OVMF (mitigado forzando BIOS legacy), el footegun de `memory` en KiB por defecto del provider `dmacvicar/libvirt`, y la dependencia de NAT (`192.168.122.0/24`) porque bridging sobre WiFi es frágil. A esto se suma que Ansible seguía siendo responsable de aprovisionar el sistema operativo del nodo por SSH (ADR-007): cada drift de paquetes, configuración o estado del host quedaba fuera del control declarativo de Terraform/GitOps, y era la superficie más grande de fallos no reproducibles del proyecto (incluida la causa raíz de ADR-013: iSCSI de Longhorn colgando `k0s reset` en el teardown).
+
+El paso a un hipervisor dedicado (Proxmox VE) con conectividad LAN real vía bridge (`vmbr0`) resuelve la limitación de red de ADR-008. Y Talos Linux — Kubernetes inmutable, sin SSH ni shell, configurado 100% vía API declarativa (`talosctl`/machine config) — elimina por completo la capa de Ansible-sobre-SSH que aprovisionaba el nodo: ya no hay sistema operativo que mantener, parchear ni al que pueda dividergir del estado declarado.
+
+### Decisión
+
+**Talos Linux sobre Proxmox VE**, con Terraform dividido en dos etapas independientes (dos state files, ver `terraform/infra/versions.tf` y `terraform/cluster/versions.tf`):
+
+- **`terraform/infra`** (providers `bpg/proxmox` + `siderolabs/talos`): descarga el ISO de Talos generado por el [Image Factory](https://factory.talos.dev) con un schematic que incluye las extensiones `qemu-guest-agent`, `tailscale` y `zfs` (`terraform/infra/variables.tf`, `talos_schematic_id`); crea la VM en Proxmox con dos discos — uno para la instalación de Talos y uno dedicado, sin formatear, para el zpool de OpenEBS (`terraform/infra/proxmox.tf`); aplica la machine config (incluye `RawVolumeConfig` para particionar el disco de ZFS) y bootstrapea el cluster (`terraform/infra/talos.tf`).
+- **`terraform/cluster`** (providers `kubernetes` + `helm`): namespaces, `helm_release` de Cilium y ArgoCD, y los secrets iniciales del cluster (`terraform/cluster/*.tf`) — reemplaza lo que antes hacía Ansible (`site.yaml`) + Helmfile (`bootstrap/helmfile.yaml`).
+- **Red**: la VM pasa de la NAT interna de libvirt (`192.168.122.0/24`) a una IP estática real en la LAN del homelab (`192.168.80.0/24`, bridge `vmbr0` de Proxmox) con MAC fija reservada en el DHCP del router (`terraform/infra/variables.tf`, `vm_mac_address`) — ya no hace falta el port-forward de firewalld que exigía ADR-008 (`ansible/host-network.yaml`, eliminado).
+- **Ansible** se reduce a lo que no puede resolverse de forma declarativa dentro de Talos ni de Terraform: `preflight.yaml` (valida credenciales antes de que CI gaste tiempo aprovisionando). Ya no existen `site.yaml`, `teardown.yaml`, `host-network.yaml` ni ninguna task que instale paquetes o configure el nodo — Talos no tiene shell (`nsenter`+`chroot` al host falla con "can't execute 'sh'").
+  > **Actualización (ADR-015)**: poblar OpenBao dejó de ser un playbook de Ansible (`vault-populate.yaml`/`load-extra-secrets.yaml`) — es un script standalone (`scripts/load-secrets-to-openbao.sh`) que corre manual, nunca en CI.
+- **Storage: OpenEBS LVM (ADR-013) → OpenEBS ZFS LocalPV** (`zfs-localpv` 2.11.1, `platform/storage/openebs/`): la elección de LVM en ADR-013 asumía un host donde Ansible podía correr `pvcreate`/`vgcreate` por SSH — imposible en Talos, que no expone shell ni permite instalar paquetes arbitrarios en el host. ZFS sí es viable porque el módulo de kernel se carga declarativamente vía la extensión `zfs` del schematic y `machine.kernel.modules` (`terraform/infra/talos.tf`); el zpool se crea con un `Job` de Kubernetes (`kubernetes_job_v1.openebs_zpool_create`, `terraform/cluster/storage.tf`) que corre las herramientas de ZFS *dentro* de un contenedor privilegiado montando `/dev` del host, ya que Talos no trae `zfs`/`blkid` en el host y no corre `udev` (se resuelve el device real vía `blkid -t PARTLABEL=`, no `/dev/disk/by-partlabel/`). Nuevas StorageClasses: `openebs-zfs` (default) y `openebs-zfs-retain`.
+- **Rename**: la VM y el cluster pasan de `talos-01` a `talos` (un solo nodo, sufijo numérico sin objeto).
+
+### Consecuencias
+
+- **Menos superficie de drift**: no hay sistema operativo del nodo que mantener/parchear/divergir — Talos se actualiza reemplazando la imagen completa (`talosctl upgrade`), no con `apt`/`dnf`.
+- **CI/CD (ADR-009) cambia de variables, no de forma**: `TF_VAR_proxmox_endpoint`, `TF_VAR_proxmox_api_token`, `TF_VAR_talos_schematic_id`, `TF_VAR_vm_static_ip`, `TF_VAR_vm_gateway` reemplazan a las variables de libvirt/Fedora en `.github/workflows/deploy.yml` y `terraform-plan.yml`. El flujo de dos `terraform apply` secuenciales (infra → cluster) y el gate de aprobación manual no cambian.
+- **Troubleshooting cambia de herramientas**: ya no hay `ssh`/`journalctl`/`k0s ctr` contra el nodo — el equivalente es `talosctl` (logs, dashboard, `talosctl upgrade`) contra la IP del nodo, con el `talosconfig` que genera `terraform/infra/talos.tf` (`local_file.talosconfig`).
+- **Deuda pendiente identificada durante esta revisión**: varios manifiestos de `platform/networking/` (Gateway, `CiliumLoadBalancerIPPool`, DNS interno) seguían hardcodeados a la subred vieja de libvirt (`192.168.122.x`) después de la migración — corregido a `192.168.80.x` como parte de este ADR. `docs/ARCHITECTURE.md`, `docs/INSTALL.md` y `docs/OPERATIONS.md` seguían describiendo k0s/libvirt/Fedora — actualizados junto con este ADR.
+- **Storage sin réplicas** (igual que con LVM/Longhorn): sigue siendo copia única, local al nodo — no es una regresión de esta migración, es una decisión ya aceptada en ADR-004/013.
+
+---
+
+## ADR-015: Carga de secretos en OpenBao sale de CI/CD, siempre manual
+
+**Estado**: Aceptado
+**Fecha**: 2026-09-09
+
+### Contexto
+
+`vault-populate.yaml` y `load-extra-secrets.yaml` corrían automáticamente en cada push a `master` (`.github/workflows/deploy.yml`), escribiendo en OpenBao las credenciales de infraestructura y de aplicaciones (`ansible/group_vars/all.yaml`, cifrado con `ansible-vault` y commiteado; `ansible/extra-secrets.yaml`, plano y gitignored). El operador decidió que la carga de secretos reales en el cluster **nunca** debe depender de un runner de CI, sin importar qué tan controlado esté el pipeline — quiere ejecutarlo a mano siempre. También pidió sacar la dependencia de Ansible específicamente para esta tarea (ansible sigue en uso para `preflight.yaml`).
+
+### Opciones consideradas
+
+| Opción | Razón de descarte |
+|--------|-------------------|
+| Mantener Ansible pero solo invocarlo a mano | El operador pidió explícitamente no depender de Ansible para esto — prefiere un script sin esa dependencia |
+| Dos archivos de secretos separados (infra cifrada con vault + apps en plano) | El operador prefirió unificar en un único archivo plano — más simple de mantener, a costa de perder el respaldo cifrado-en-git de los 5 secretos de infra |
+
+### Decisión
+
+- **`secrets/homelab.env`** (gitignored) + `secrets/homelab.env.example` (commiteado): único archivo con todas las credenciales, infra y apps, formato `KEY=value`. Reemplaza a `ansible/group_vars/all.yaml` (borrado, ya no hay `ansible-vault` en el repo) y `ansible/extra-secrets.yaml.example` (borrado).
+- **`scripts/load-secrets-to-openbao.sh`**: bash standalone, sin Ansible. Espera OpenBao/`openbao-init`, hace port-forward, y escribe cada path de KV vía `curl`+`jq`. Reemplaza a `vault-populate.yaml`, `load-extra-secrets.yaml` y `tasks/openbao-kv-write.yaml` (los tres borrados). Se ejecuta a mano, nunca en CI.
+- **`.github/workflows/deploy.yml`**: se quitan los steps que corrían esos playbooks. El preflight de credenciales (`ansible/preflight.yaml`, sigue en Ansible) ahora toma sus 6 valores desde GitHub Actions secrets/vars inyectados como env vars del step, en vez de `group_vars/all.yaml` + `ANSIBLE_VAULT_PASSWORD`.
+- Las Applications de ArgoCD que dependen de esos secretos (webhook de ArgoCD, `cloudflared`, bases de datos, SonarQube, OpenMemory, Flow) quedan en `Progressing`/`Degraded` hasta que el operador corra el script manualmente — comportamiento esperado, no un fallo del pipeline (los sync-waves ya ordenan OpenBao antes que sus consumidores, y `ExternalSecret` reintenta por `refreshInterval`).
+
+### Consecuencias
+
+- Ningún secreto real puede terminar en el cluster por un push accidental a `master` — requiere una acción manual explícita del operador.
+- Se pierde el respaldo cifrado-en-git de los 5 secretos de infra que antes vivían en `group_vars/all.yaml`: si se pierde el `secrets/homelab.env` local sin backup aparte, hay que regenerar/rotar esos tokens.
+- Nuevos GitHub Actions secrets a crear a mano (`ARGOCD_WEBHOOK_SECRET`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN`) y una variable (`ARGOCD_REPO_URL`) — ver `docs/CI_CD_HYPERVISOR_SETUP.md`. `ARGOCD_GITHUB_PAT` y `OPENBAO_STATIC_SEAL_KEY` ya existían como secrets (los usa Terraform).
+- Un solo lenguaje (bash) para todo el script en vez de YAML+Jinja de Ansible — más fácil de leer de punta a punta, a costa de perder el manejo de errores/retries estructurado que Ansible daba gratis (reimplementado a mano con `set -euo pipefail` + loops de espera).
