@@ -1,7 +1,8 @@
 community:
   enabled: true
 
-monitoringPasscode: "homelab"
+monitoringPasscodeSecretName: sonarqube-monitoring-secret
+monitoringPasscodeSecretKey: passcode
 
 deploymentAnnotations:
   reloader.stakater.com/auto: "true"

@@ -3,6 +3,8 @@ kind: Application
 metadata:
   name: tetragon
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
   annotations:
     argocd.argoproj.io/sync-wave: "4"
 spec:
@@ -15,11 +17,11 @@ spec:
         releaseName: tetragon
         valueFiles:
           - $values/platform/security/tetragon/values.yaml
-    - repoURL: https://github.com/cristsr/homelab.git
-      targetRevision: master
+    - repoURL: https://github.com/cristsr/homelab
+      targetRevision: HEAD
       ref: values
-    - repoURL: https://github.com/cristsr/homelab.git
-      targetRevision: master
+    - repoURL: https://github.com/cristsr/homelab
+      targetRevision: HEAD
       path: platform/security/tetragon/policies
   destination:
     server: https://kubernetes.default.svc

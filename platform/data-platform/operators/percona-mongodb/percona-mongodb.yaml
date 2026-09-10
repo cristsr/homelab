@@ -3,4 +3,4 @@ watchAllNamespaces: true
 namespaceOverride: ""
 
 logLevel: INFO
-logStructured: falses
+logStructured: false

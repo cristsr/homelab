@@ -3,13 +3,15 @@ kind: Application
 metadata:
   name: cilium-hubble-pki
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
   annotations:
     argocd.argoproj.io/sync-wave: "3"
 spec:
   project: homelab
   source:
-    repoURL: https://github.com/cristsr/homelab.git
-    targetRevision: master
+    repoURL: https://github.com/cristsr/homelab
+    targetRevision: HEAD
     path: platform/networking/hubble/pki
   destination:
     server: https://kubernetes.default.svc
