@@ -30,6 +30,7 @@ resource "talos_machine_configuration_apply" "this" {
           image = "factory.talos.dev/installer/${var.talos_schematic_id}:${var.talos_version}"
         }
         network = {
+          hostname = var.vm_name
           interfaces = [
             {
               interface = "ens18"
