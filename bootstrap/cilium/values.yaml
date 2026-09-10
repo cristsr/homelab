@@ -59,8 +59,20 @@ hubble:
   enabled: true
   relay:
     enabled: true
+    # A diferencia del agent, hubble-relay/ui no heredan tolerations por
+    # defecto del chart - se quedan Pending para siempre en este cluster de
+    # un solo nodo (mismo taint NoSchedule del control-plane, ver
+    # bootstrap/argocd/values.yaml).
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
   ui:
     enabled: true
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
   metrics:
     enabled:
       - dns
