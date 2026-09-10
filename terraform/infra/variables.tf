@@ -36,7 +36,7 @@ variable "vm_id" {
 variable "vm_name" {
   description = "Nombre de la VM y hostname del nodo Talos"
   type        = string
-  default     = "talos-01"
+  default     = "talos"
 }
 
 variable "memory_mib" {
@@ -106,5 +106,5 @@ variable "vm_dns_servers" {
 variable "cluster_name" {
   description = "Nombre del cluster Talos/Kubernetes"
   type        = string
-  default     = "talos-01"
+  default     = "talos"
 }
