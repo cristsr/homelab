@@ -29,16 +29,7 @@ resource "talos_machine_configuration_apply" "this" {
           disk  = "/dev/vda"
           image = "factory.talos.dev/installer/${var.talos_schematic_id}:${var.talos_version}"
         }
-        # Talos >= 1.12 activa features.stableHostname por defecto (genera un
-        # hostname pseudo-random atado a la identidad de la maquina, ej.
-        # talos-zsu-wum) - conviven mal con un machine.network.hostname
-        # explicito ("static hostname is already set in v1alpha1 config" si
-        # no se desactiva primero).
-        features = {
-          stableHostname = false
-        }
         network = {
-          hostname = var.vm_name
           interfaces = [
             {
               interface = "ens18"
@@ -66,6 +57,15 @@ resource "talos_machine_configuration_apply" "this" {
           disabled = true
         }
       }
+    }),
+    # Talos >= 1.12 gestiona el hostname via este documento dedicado, no via
+    # machine.network.hostname (legacy) - mezclar ambos, o incluso solo
+    # declarar el legacy, choca con el controller de hostname ya activo por
+    # defecto ("static hostname is already set in v1alpha1 config").
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "HostnameConfig"
+      hostname   = var.vm_name
     }),
     # Particiona el disco dedicado a ZFS (virtio1, ver proxmox.tf) sin
     # formatearlo - "!system_disk" matchea el unico disco que no es el de
