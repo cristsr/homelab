@@ -1,5 +1,13 @@
 global:
   domain: argocd.cristianpuenguenan.online
+  # Cluster de un solo nodo: el control-plane tambien corre workloads, sin
+  # esto el hook redis-secret-init (y el resto de componentes) se quedan
+  # Pending para siempre por el taint NoSchedule del nodo (mismo problema
+  # que ya resuelve el toleration de storage.tf).
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
 
 server:
   ingress:
