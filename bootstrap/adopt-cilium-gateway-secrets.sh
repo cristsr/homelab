@@ -1,5 +1,7 @@
 #!/bin/bash
-# Presync hook de `helmfile sync` (bootstrap/helmfile.yaml, release cilium).
+# Invocado por null_resource.adopt_cilium_gateway_secrets
+# (terraform/cluster/bootstrap.tf) antes de cada apply/upgrade del
+# helm_release "cilium".
 #
 # Con gatewayAPI.enabled=true (bootstrap/cilium/values.yaml), varios de los
 # recursos que el chart de Cilium templa para Gateway API terminan siendo
@@ -11,7 +13,7 @@
 # objeto entero por fuera de Helm y le borra las anotaciones de ownership -
 # confirmado en la practica, se fueron rompiendo de a uno por corrida de CI
 # (Role del agent, despues el del operator, despues el GatewayClass). El
-# siguiente `helm upgrade` (via helmfile sync, en cada deploy) ve un
+# siguiente `helm upgrade` (via terraform apply, en cada deploy) ve un
 # recurso ajeno y aborta con "cannot be imported into the current release".
 #
 # Recursos identificados leyendo el chart cilium/cilium 1.20.1 real

@@ -1,9 +1,9 @@
 credentials.txt
 .claude
 .agents
-ansible/.vault-pass
 .idea/
 hs_err_pid*.log
+secrets/homelab.env
 
 # Terraform (terraform/*/.terraform.lock.hcl SI se commitea, fija versiones de providers)
 terraform/*/.terraform/
@@ -13,3 +13,11 @@ terraform/*/terraform.tfvars
 terraform/*/generated/
 terraform/*/backend.hcl
 terraform/*/.destroy-secrets
+
+# Defensa en profundidad: si alguien corre `terraform init`/`apply` por error
+# desde terraform/ en vez de terraform/infra o terraform/cluster, estos
+# archivos sueltos no deben poder colarse al repo.
+terraform/terraform.tfstate
+terraform/terraform.tfstate.*
+terraform/backend.hcl
+terraform/.terraform/

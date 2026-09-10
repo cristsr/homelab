@@ -1,0 +1,20 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: openmemory-ui-default-deny
+  namespace: devtools
+spec:
+  endpointSelector:
+    matchLabels:
+      app: openmemory-ui
+  ingress:
+    # openmemory.internal... se enruta directo por el Gateway `main` de
+    # Cilium - proxy embebido en el cilium-agent (hostNetwork), llega como
+    # trafico host-originado (mismo caso que openbao, ver esa policy).
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+  egress: []

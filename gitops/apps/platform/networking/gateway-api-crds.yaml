@@ -11,7 +11,7 @@ spec:
   project: homelab
   source:
     repoURL: https://github.com/kubernetes-sigs/gateway-api
-    # Cilium 1.20 (ver bootstrap/helmfile.yaml y cilium-service-mesh.yaml)
+    # Cilium 1.20 (ver bootstrap/cilium/values.yaml y platform/networking/cilium/service-mesh-values.yaml)
     # requiere Gateway API v1.6.1 como minimo - ya no depende de TLSRoute
     # en v1alpha2 (servido por el canal standard en v1), a diferencia de
     # Cilium 1.19.x (cilium/cilium#38420, #44920, #45139).

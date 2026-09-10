@@ -128,9 +128,9 @@ spec:
               bao write auth/kubernetes/config \
                 kubernetes_host="$K8S" \
                 kubernetes_ca_cert="$(cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)" \
-                token_reviewer_jwt="$KUBE_TOKEN" || true
+                token_reviewer_jwt="$KUBE_TOKEN"
 
-              bao policy write external-secrets - << 'POLICY' || true
+              bao policy write external-secrets - << 'POLICY'
               path "secret/data/*"     { capabilities = ["read"] }
               path "secret/metadata/*" { capabilities = ["list", "read"] }
               POLICY
@@ -139,6 +139,6 @@ spec:
                 bound_service_account_names=external-secrets-sa \
                 bound_service_account_namespaces=secret-management \
                 policies=external-secrets \
-                ttl=24h || true
+                ttl=24h
 
               echo "=== OpenBao init completed successfully ==="

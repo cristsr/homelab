@@ -3,6 +3,8 @@ kind: Application
 metadata:
   name: cilium
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
   annotations:
     argocd.argoproj.io/sync-wave: "3"
 spec:
@@ -21,8 +23,8 @@ spec:
         valueFiles:
           - $values/bootstrap/cilium/values.yaml
           - $values/platform/networking/cilium/service-mesh-values.yaml
-    - repoURL: https://github.com/cristsr/homelab.git
-      targetRevision: master
+    - repoURL: https://github.com/cristsr/homelab
+      targetRevision: HEAD
       ref: values
   destination:
     server: https://kubernetes.default.svc

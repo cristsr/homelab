@@ -11,7 +11,7 @@ metadata:
   name: cilium-gateway-main
 spec:
   blocks:
-    - cidr: "192.168.122.240/32"
+    - cidr: "192.168.80.240/32"
   serviceSelector:
     matchLabels:
       "io.kubernetes.service.namespace": networking
@@ -23,7 +23,7 @@ metadata:
   name: private-dns
 spec:
   blocks:
-    - cidr: "192.168.122.253/32"
+    - cidr: "192.168.80.253/32"
   serviceSelector:
     matchLabels:
       "io.kubernetes.service.namespace": networking
