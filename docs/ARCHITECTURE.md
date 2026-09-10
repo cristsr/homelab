@@ -18,22 +18,24 @@
 
 ## 1. Vision General
 
-Homelab de un solo nodo construido sobre k0s con GitOps completo. ArgoCD gestiona todas las aplicaciones desde este repositorio. El ingress esta dividido entre dos Gateway API implementations: **Cilium Gateway API** para el trafico HTTP generico y **Agent Gateway** retenido solo para las rutas de servidores MCP (ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp)). Cloudflare Tunnel expone servicios seleccionados a Internet sin abrir puertos en el router.
+Homelab de un solo nodo construido sobre Talos Linux (VM en Proxmox VE) con GitOps completo. ArgoCD gestiona todas las aplicaciones desde este repositorio. El ingress esta dividido entre dos Gateway API implementations: **Cilium Gateway API** para el trafico HTTP generico y **Agent Gateway** retenido solo para las rutas de servidores MCP (ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp)). Cloudflare Tunnel expone servicios seleccionados a Internet sin abrir puertos en el router. Ver [ADR-014](DECISIONS.md#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv) para el contexto completo de la migración desde k0s/libvirt/Fedora.
 
 ### Stack tecnologico
 
 | Capa | Tecnologia |
 |------|-----------|
-| Kubernetes | k0s v1.35.3+k0s.0 |
-| CNI / NetworkPolicy | Cilium 1.19.3 (eBPF, kube-proxy replacement) |
+| Hipervisor | Proxmox VE (provider Terraform `bpg/proxmox`) |
+| Kubernetes | Talos Linux v1.14.0 (inmutable, sin SSH) |
+| CNI / NetworkPolicy | Cilium 1.20.1 (eBPF, kube-proxy replacement) |
 | Ingress / Gateway (generico) | Cilium Gateway API |
 | Ingress / Gateway (MCP) | Agent Gateway 1.1.0 |
 | GitOps | Argo CD 9.5.13 |
-| Certificados TLS | cert-manager: Let's Encrypt (publico, DNS-01) + CA interna (rutas `.internal`) |
-| Storage | OpenEBS Local PV LVM 1.10.0 |
+| Certificados TLS | cert-manager: Let's Encrypt (publico y privado, DNS-01 via Cloudflare) |
+| Storage | OpenEBS ZFS LocalPV 2.11.1 |
 | Tunel Internet | Cloudflare Tunnel (cloudflared) |
 | Monitoreo | kube-prometheus-stack + Grafana Operator |
 | Secrets | OpenBao 2.5.3 + External Secrets Operator |
+| Runtime security | Tetragon |
 | Operador PostgreSQL | CloudNative-PG |
 | Operador MongoDB | Percona PSMDB Operator |
 
@@ -41,43 +43,39 @@ Homelab de un solo nodo construido sobre k0s con GitOps completo. ArgoCD gestion
 
 ```
 homelab/
-├── terraform/                  # Aprovisionamiento de la VM (Terraform + libvirt)
-│   ├── versions.tf              # Providers: dmacvicar/libvirt, tls, local
-│   ├── provider.tf               # qemu:///system
-│   ├── variables.tf               # Imagen base, sizing, red, IP estatica
-│   ├── main.tf                     # Pool, volumenes (base + overlay), cloud-init, dominio
-│   ├── outputs.tf                   # vm_static_ip, vm_mac, ssh_private_key_path
-│   ├── cloud-init/
-│   │   ├── user-data.yaml.tpl        # hostname/usuario/ssh-key/growpart (nada de k0s)
-│   │   └── network-config.yaml.tpl    # IP estatica (match por MAC + set-name)
-│   ├── templates/
-│   │   └── inventory.yaml.tftpl        # Genera ansible/inventory.yaml
-│   └── generated/                       # Llave SSH generada (gitignored)
+├── terraform/
+│   ├── infra/                   # VM Talos en Proxmox (provider bpg/proxmox + siderolabs/talos)
+│   │   ├── proxmox.tf            # VM, discos (instalacion + dedicado a ZFS), ISO de Talos
+│   │   ├── talos.tf              # machine config, bootstrap, kubeconfig/talosconfig generados
+│   │   ├── variables.tf          # Sizing, red, schematic de Talos
+│   │   ├── outputs.tf            # vm_static_ip, kubeconfig_path, talosconfig_path
+│   │   └── generated/            # kubeconfig/talosconfig (gitignored)
+│   └── cluster/                  # Bootstrap de Kubernetes (una vez el cluster ya arranco)
+│       ├── bootstrap.tf          # helm_release: Cilium, ArgoCD
+│       ├── namespaces.tf         # Namespaces base
+│       ├── secrets.tf            # Secrets iniciales (repo-creds, in-cluster, unseal key)
+│       ├── storage.tf            # Job que crea el zpool de OpenEBS ZFS LocalPV
+│       └── variables.tf          # kubeconfig_path, credenciales de ArgoCD/OpenBao
 │
-├── ansible/                    # Aprovisionamiento del nodo (dentro de la VM) y secretos
+├── ansible/                    # Preflight de secrets y poblado de OpenBao (Talos no tiene SSH)
 │   ├── tasks/
-│   │   ├── k0s.yaml            # Instalacion y configuracion de k0s
-│   │   ├── kubeconfig.yaml     # Export de kubeconfig e instalacion de kubectl
-│   │   ├── helm.yaml           # Instalacion de Helm
-│   │   ├── openebs-prereqs.yaml  # Prerequisitos de OpenEBS (lvm2 + Volume Group)
-│   │   ├── helmfile.yaml       # Instalacion de Helmfile y bootstrap Cilium/ArgoCD
-│   │   ├── argocd-secret.yaml  # Secret repo-creds de GitHub para ArgoCD
-│   │   └── vault-secrets.yaml  # Namespace secret-management y static unseal key
-│   ├── templates/
-│   │   └── k0s-config.yaml.j2  # Configuracion de k0s (single node)
-│   ├── group_vars/all.yaml     # Variables globales + secrets cifrados (ansible-vault)
+│   │   ├── preflight-secrets.yaml        # Valida que las credenciales no esten vacias
+│   │   ├── preflight-remote-checks.yaml  # Chequeos de conectividad remota
+│   │   └── openbao-kv-write.yaml         # Port-forward + write generico a OpenBao KV
 │   ├── ansible.cfg             # Configuracion de Ansible
-│   ├── inventory.yaml          # Generado por `terraform apply` (grupos k0s + hypervisor)
-│   ├── site.yaml               # Playbook principal de instalacion (corre por SSH sobre la VM)
-│   ├── host-network.yaml       # Port-forward LAN (firewalld) del host hacia la VM
-│   ├── teardown.yaml           # Playbook para destruir el cluster
-│   └── vault-populate.yaml     # Playbook para poblar OpenBao KV
+│   ├── inventory.yaml          # localhost - Talos no expone SSH/shell al nodo
+│   └── preflight.yaml          # Corre antes de `terraform apply` en CI (falla rapido)
 │
-├── bootstrap/                  # Bootstrap inicial del cluster
-│   ├── cilium/values.yaml      # Valores de Cilium (CNI)
-│   ├── argocd/values.yaml      # Valores de ArgoCD (GitOps)
-│   ├── namespaces.yaml         # Namespaces base
-│   └── helmfile.yaml           # Orquesta Cilium + ArgoCD
+├── secrets/
+│   └── homelab.env.example     # Plantilla de credenciales (infra + apps), gitignored el real
+│
+├── scripts/
+│   └── load-secrets-to-openbao.sh  # Poblar OpenBao (manual, no corre en CI)
+│
+├── bootstrap/                   # Values/scripts que consume terraform/cluster/bootstrap.tf
+│   ├── cilium/values.yaml       # Valores de Cilium (incluye ajustes especificos de Talos)
+│   ├── argocd/values.yaml       # Valores de ArgoCD (GitOps)
+│   └── adopt-cilium-gateway-secrets.sh  # Hook de idempotencia para el chart de Cilium
 │
 ├── gitops/                     # Aplicaciones de ArgoCD (App of Apps)
 │   ├── root-app.yaml           # Aplicacion raiz que apunta a gitops/apps/
@@ -113,34 +111,36 @@ homelab/
 └── docs/                       # Documentacion del proyecto
     ├── ARCHITECTURE.md
     ├── INSTALL.md
-    └── OPERATIONS.md
+    ├── OPERATIONS.md
+    ├── DECISIONS.md
+    └── CI_CD_HYPERVISOR_SETUP.md
 ```
 
 ---
 
 ## 2. Infraestructura Base
 
-### 2.1 k0s (Kubernetes)
+### 2.1 Talos Linux (Kubernetes)
 
-**Version**: `v1.35.3+k0s.0` — **Modo**: Single node controller
+**Version**: `v1.14.0` — **Modo**: Single node (controlplane, sin workers separados)
 
-- Corre dentro de una VM libvirt provisionada por Terraform (`terraform/`, ver [ADR-008](DECISIONS.md#adr-008-vm-libvirt-provisionada-con-terraform)), no directamente sobre el hardware del host.
-- Descarga el binario de k0s y lo registra como servicio systemd (`k0scontroller`) — via Ansible, por SSH a la VM.
-- Configuracion en `/etc/k0s/k0s.yaml` generada desde plantilla Jinja2.
-- kube-proxy esta deshabilitado (reemplazado por Cilium eBPF).
-- CIDRs configurables via variables de Ansible.
+- Corre en una VM sobre Proxmox VE, provisionada por Terraform (`terraform/infra/`, ver [ADR-014](DECISIONS.md#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv)).
+- Talos es inmutable y no tiene SSH ni shell: la configuracion es 100% declarativa via machine config, aplicada por el provider Terraform `siderolabs/talos` (`terraform/infra/talos.tf`). Ya no hay Ansible aprovisionando el sistema operativo del nodo.
+- El ISO se genera con el [Image Factory](https://factory.talos.dev) a partir de un schematic con las extensiones `qemu-guest-agent`, `tailscale` y `zfs` (`talos_schematic_id` en `terraform/infra/variables.tf`).
+- kube-proxy esta deshabilitado (`cluster.proxy.disabled = true`, reemplazado por Cilium eBPF); el CNI tambien queda deshabilitado a nivel de Talos (`cluster.network.cni.name = "none"`) para que lo instale Cilium.
+- El control-plane corre workloads (cluster de un solo nodo): varios charts (ArgoCD, el Job de OpenEBS ZFS) necesitan `tolerations` explicitas para el taint `node-role.kubernetes.io/control-plane:NoSchedule`.
 
-| Parametro | Valor por defecto |
-|-----------|-------------------|
-| `k0s_node_ip` | `192.168.122.10` (IP interna de la VM en la red NAT `default`) |
-| `k0s_pod_cidr` | `10.244.0.0/16` |
-| `k0s_service_cidr` | `10.96.0.0/12` |
-
-> `192.168.80.20` sigue siendo la IP del host en la LAN — ya no es la IP del nodo, es el destino del port-forward (ver §7).
+| Parametro | Valor |
+|-----------|-------|
+| `vm_static_ip` (nodo) | `192.168.80.x` (LAN real, bridge `vmbr0` de Proxmox) |
+| Pod CIDR (Cilium `ipam.operator.clusterPoolIPv4PodCIDRList`) | `10.244.0.0/16` |
+| Service CIDR | `10.96.0.0/12` (default de Talos) |
+| Disco de instalacion | `/dev/vda` (`virtio0`) |
+| Disco dedicado a ZFS | `/dev/vdb` (`virtio1`, particionado declarativamente con `RawVolumeConfig`, label `r-openebs-zfs`) |
 
 ### 2.2 Cilium (CNI)
 
-**Chart**: `cilium/cilium` — **Namespace**: `kube-system` — **Version**: `1.19.3`
+**Chart**: `cilium/cilium` — **Namespace**: `kube-system` — **Version**: `1.20.1`
 
 Reemplaza completamente kube-proxy con eBPF. Provee conectividad de pods, NetworkPolicies y observabilidad via Hubble.
 
@@ -155,8 +155,9 @@ Reemplaza completamente kube-proxy con eBPF. Provee conectividad de pods, Networ
 | `bpf.masquerade` | `true` |
 | `hubble.relay.enabled` | `true` |
 | `hubble.ui.enabled` | `true` |
-| CNI bin path | `/opt/cni/bin` |
 | Daemon run path | `/var/run/cilium` |
+| `cgroup.autoMount.enabled` | `false` (Talos ya monta cgroupv2/bpffs) |
+| `securityContext.capabilities` | Ajustado sin `SYS_MODULE` — Talos no permite a los workloads cargar modulos de kernel |
 
 ### 2.3 Argo CD (GitOps)
 
@@ -168,25 +169,27 @@ Controla el ciclo de vida de todas las aplicaciones del cluster. La `root-app` a
 |-----------|-------|
 | `server.ingress.enabled` | `false` (gestionado por HTTPRoute contra el Gateway de Cilium) |
 | `server.insecure` | `true` (TLS terminado en el Gateway `main` con Let's Encrypt — el backend siempre habla HTTP plano, ver §3.1 TLS) |
-| Timeout de reconciliacion | `180s` |
+| Timeout de reconciliacion | `600s` (fallback de seguridad — el sync real lo dispara un webhook de GitHub en segundos, ver `docs/TODO.md`) |
 | RBAC por defecto | `role:readonly` |
 | Dominio | `argocd.internal.cristianpuenguenan.online` |
+| Tolerations | `node-role.kubernetes.io/control-plane:NoSchedule` (cluster de un solo nodo, ver §2.1) |
 
 ### 2.4 Namespaces
 
-Declarados en `bootstrap/namespaces.yaml` y creados por el hook presync de Cilium en el helmfile:
+Creados por `terraform/cluster/namespaces.tf` (`kubernetes_namespace_v1.namespaces`, `for_each` sobre una lista fija) o con `syncOptions: CreateNamespace=true` en la Application de ArgoCD correspondiente:
 
 | Namespace | Contenido |
 |-----------|-----------|
 | `argocd` | Argo CD |
 | `apps` | Flow API, Portfolio |
-| `data-platform` | CloudNative-PG, Percona operators |
-| `infra` | PostgreSQL, MongoDB, Redis, Qdrant |
+| `data-platform` | Operadores: CloudNative-PG, Percona PSMDB |
+| `infra` | PostgreSQL, MongoDB, Redis, Qdrant (instancias, no operadores) |
 | `devtools` | OpenMemory |
-| `openebs` | OpenEBS Local PV LVM |
-| `networking` | Cilium Gateway, Agent Gateway (MCP), cloudflared, cert-manager |
+| `openebs` | OpenEBS ZFS LocalPV |
+| `networking` | Cilium Gateway, Agent Gateway (MCP), cloudflared, cert-manager, private-dns |
 | `observability` | Prometheus, Grafana, Alertmanager, Headlamp |
-| `secret-management` | OpenBao, External Secrets |
+| `secret-management` | OpenBao, External Secrets, Reloader |
+| `tetragon` | Tetragon |
 | `sonarqube` | SonarQube, SonarQube DB, MCP server |
 
 ---
@@ -210,7 +213,7 @@ Ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-age
 
 #### 3.1.b Cilium Gateway API — privado (`main`)
 
-**`GatewayClass`**: `cilium` (creada automaticamente por Cilium al habilitar `gatewayAPI.enabled: true`) — **`Gateway`**: `main` (`platform/networking/cilium-gateway/gateway.yaml`) — **Service generado**: `cilium-gateway-main` — IP LAN fija `192.168.122.240` (Cilium L2 Announcements, ver §7) — listeners: `https` (443, TLS terminate con `wildcard-internal-online-tls`) y `http` (80, solo redirect)
+**`GatewayClass`**: `cilium` (creada automaticamente por Cilium al habilitar `gatewayAPI.enabled: true`) — **`Gateway`**: `main` (`platform/networking/cilium-gateway/gateway.yaml`) — **Service generado**: `cilium-gateway-main` — IP LAN fija `192.168.80.240` (Cilium L2 Announcements, ver §7) — listeners: `https` (443, TLS terminate con `wildcard-internal-online-tls`) y `http` (80, solo redirect)
 
 Herramientas de administracion/observabilidad — solo alcanzables por LAN/Tailscale, nunca por el wildcard de Cloudflare:
 
@@ -259,27 +262,23 @@ Automatiza la emision y renovacion de certificados TLS.
 
 ### 3.3 OpenEBS Local PV LVM (Storage)
 
-**Chart**: `lvm-localpv` (`https://openebs.github.io/lvm-localpv`) — **Namespace**: `openebs`
+**Chart**: `zfs-localpv` (`https://openebs.github.io/zfs-localpv`, version `2.11.1`) — **Namespace**: `openebs`
 
-Ver ADR-013 en [DECISIONS.md](DECISIONS.md) (reemplaza a Longhorn/ADR-004). PVCs provisionados como
-Logical Volumes dentro de un Volume Group LVM (`vg-openebs`) sobre un disco dedicado de la VM
-(`vdb`, ver ADR-008/terraform). Sin replicacion (copia unica, local al nodo) — igual trade-off
-que ya aceptaba Longhorn con `replicaCount: 1`.
+Ver [ADR-013](DECISIONS.md#adr-013-reemplazo-de-longhorn-por-openebs-local-pv-lvm) y [ADR-014](DECISIONS.md#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv) en [DECISIONS.md](DECISIONS.md) (reemplaza a Longhorn/ADR-004, y al motor LVM de ADR-013). PVCs provisionados como datasets ZFS dentro de un zpool (`zfspv-pool`) sobre un disco dedicado de la VM (`vdb`/`virtio1`, ver `terraform/infra/proxmox.tf`). El zpool lo crea un `Job` de Kubernetes (`kubernetes_job_v1.openebs_zpool_create`, `terraform/cluster/storage.tf`) — Talos no expone shell para correr herramientas de ZFS en el host. Sin replicacion (copia unica, local al nodo) — igual trade-off que ya aceptaba Longhorn con `replicaCount: 1`.
 
 | Parametro | Valor |
 |-----------|-------|
-| `global.kubeletDir` / `lvmNode.kubeletDir` | `/var/lib/k0s/kubelet/` |
-| `lvmNode.serviceMonitor.enabled` | `true` |
+| `zfsNode.kubeletDir` | Default del chart (`/var/lib/kubelet/`) — Talos usa el path estandar, a diferencia de k0s |
 | `analytics.enabled` | `false` |
-| StorageClass por defecto | `openebs-lvm` |
-| Volume Group | `vg-openebs` (creado por Ansible, ver `ansible/tasks/openebs-prereqs.yaml`) |
+| StorageClass por defecto | `openebs-zfs` |
+| Pool ZFS | `zfspv-pool` (`compression=zstd`, `ashift=12`, `atime=off`) |
 
 #### StorageClasses
 
 | Nombre | ReclaimPolicy | Uso |
 |--------|--------------|-----|
-| `openebs-lvm` | Delete | Por defecto |
-| `openebs-lvm-retain` | Retain | Bases de datos |
+| `openebs-zfs` | Delete | Por defecto |
+| `openebs-zfs-retain` | Retain | Bases de datos |
 
 ### 3.4 Cloudflared (Tunel Internet)
 
@@ -311,7 +310,7 @@ KV v2 secrets engine como backend central de todos los secrets del cluster.
 | Modo | Production (standalone) |
 | Autenticacion | Kubernetes auth |
 | KV mount | `secret` (v2) |
-| Storage | PVC (`openebs-lvm`, default del cluster) |
+| Storage | PVC (`openebs-zfs`, default del cluster) |
 | UI | habilitada en `:8200` |
 
 **Init jobs** (`platform/secret-management/openbao/init.yaml`):
@@ -382,47 +381,47 @@ DB:       PostgreSQL en data-platform
 
 ## 5. Bases de Datos
 
-Todas en namespace `data-platform`.
+Los operadores viven en `data-platform`; las instancias de bases de datos que administran viven en `infra`.
 
 ### 5.1 PostgreSQL — CloudNative-PG
 
-**Operador**: `cloudnative-pg` — **CRD**: `kind: Cluster`
+**Operador**: `cloudnative-pg` (namespace `data-platform`) — **CRD**: `kind: Cluster` (namespace `infra`)
 
 | Parametro | Valor |
 |-----------|-------|
 | Imagen | `ghcr.io/cloudnative-pg/postgresql:17-standard` |
-| Storage | `openebs-lvm-retain` |
+| Storage | `openebs-zfs-retain` |
 
 Servicios generados: `-rw`, `-r`, `-ro`.
 
 ### 5.2 MongoDB — Percona Operator
 
-**Operador**: `percona/psmdb-operator` — **CRD**: `kind: PerconaServerMongoDB`
+**Operador**: `percona/psmdb-operator` (namespace `data-platform`) — **CRD**: `kind: PerconaServerMongoDB` (namespace `infra`)
 
 | Parametro | Valor |
 |-----------|-------|
 | Replica set | `rs0` (1 miembro en nodo unico) |
-| Storage | `openebs-lvm-retain` |
+| Storage | `openebs-zfs-retain` |
 
 ### 5.3 Redis
 
-**Imagen**: `redis:8-alpine` — **Namespace**: `data-platform`
+**Imagen**: `redis:8-alpine` — **Namespace**: `infra`
 
 | Parametro | Valor |
 |-----------|-------|
 | Puerto | 6379 |
 | Auth | via Secret |
-| Storage | `openebs-lvm-retain` |
+| Storage | `openebs-zfs-retain` |
 
 ### 5.4 Qdrant (Vector DB)
 
-**Chart**: `qdrant/qdrant` — **Namespace**: `data-platform`
+**Chart**: `qdrant/qdrant` — **Namespace**: `infra`
 
 | Parametro | Valor |
 |-----------|-------|
 | Puerto REST | 6333 |
 | Puerto gRPC | 6334 |
-| Storage | `openebs-lvm-retain` |
+| Storage | `openebs-zfs-retain` |
 
 ---
 
@@ -453,10 +452,12 @@ Cada Gateway tiene una IP LAN fija, asignada via Cilium L2 Announcements (`Ciliu
 
 | Gateway / Servicio | IP fija |
 |---------|---------|
-| `cilium-gateway-main` (rutas genericas, incluidas las 3 de Agent Gateway via proxy) | `192.168.122.240` |
-| `private-dns` (CoreDNS, resuelve `internal.cristianpuenguenan.online` para LAN/Tailscale) | `192.168.122.253` |
+| `cilium-gateway-main` (rutas genericas, incluidas las 3 de Agent Gateway via proxy) | `192.168.80.240` |
+| `private-dns` (CoreDNS, resuelve `internal.cristianpuenguenan.online` para LAN/Tailscale) | `192.168.80.253` |
 
 `agentgateway-mcp` ya no tiene IP LAN fija — es `ClusterIP`, solo alcanzable por el proxy interno de `main` (ver TLS en §3.1).
+
+Con la VM en el bridge real de Proxmox (`vmbr0`, ver [ADR-014](DECISIONS.md#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv)), las IPs de los Gateway son direcciones LAN reales — cualquier dispositivo de la LAN las alcanza directo, sin el port-forward de firewalld que exigia la NAT de libvirt (`ansible/host-network.yaml`, eliminado).
 
 ```
 Internet (solo portfolio + api /webhooks)
@@ -464,31 +465,28 @@ Internet (solo portfolio + api /webhooks)
         └── Cloudflare Tunnel (egreso desde cloudflared, dentro del cluster)
               └── cilium-gateway-public:80 ──► Backend ClusterIP (portfolio/flow-api, por HTTPRoute)
 
-LAN fisica (sin Tailscale) — via de acceso NO soportada (ADR-012); los
-forward-port siguen existiendo pero el puerto 80 responde solo redirect
-hacia IPs internas inalcanzables desde la LAN
-  └── Host 192.168.80.20 (firewalld forward-port, ansible/host-network.yaml)
-        ├── 80/443   → 192.168.122.240:80/443 (cilium-gateway-main)
-        └── 53/udp+tcp → 192.168.122.253:53 (private-dns)
+LAN fisica del homelab — acceso directo, sin forward-port
+  ├── 192.168.80.240:443 TLS / :80 redirect (cilium-gateway-main,
+  │   incluidas las 3 rutas de agentgateway-mcp, reenviadas puertas
+  │   adentro en HTTP plano hacia su Service ClusterIP)
+  └── 192.168.80.253:53 (private-dns)
 
-Tailscale (cualquier dispositivo del usuario, desde cualquier lado) — via prioritaria
-  └── Subnet router en el hipervisor (`tailscale up --advertise-routes=192.168.122.0/24`)
-        ├── 192.168.122.240:443 TLS / :80 redirect (cilium-gateway-main,
-        │   incluidas las 3 rutas de agentgateway-mcp, reenviadas puertas
-        │   adentro en HTTP plano hacia su Service ClusterIP)
-        └── 192.168.122.253:53 (private-dns, via Tailscale Split DNS)
+Tailscale (dispositivos fuera de la LAN fisica, y el runner de CI)
+  └── Nodo Tailscale del hipervisor, rutas /32 acotadas a Proxmox y a la VM
+      (ver docs/CI_CD_HYPERVISOR_SETUP.md — NO se anuncia el /24 completo,
+      para no forzar todo el trafico LAN del operador por el tunel)
+        ├── 192.168.80.240 (cilium-gateway-main)
+        └── 192.168.80.253 (private-dns, via Tailscale Split DNS)
 ```
 
-Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git); para LAN/Tailscale, `private-dns` (CoreDNS, `platform/networking/private-dns/`) resuelve `internal.cristianpuenguenan.online` a la IP fija correspondiente — ver §11 en `docs/OPERATIONS.md` para configurar Tailscale Split DNS.
-
-La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo tiene WiFi activa — bridging de una VM sobre WiFi es fragil con la mayoria de drivers/APs (ver ADR-008).
+Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git); para LAN/Tailscale, `private-dns` (CoreDNS, `platform/networking/private-dns/`) resuelve `internal.cristianpuenguenan.online` a la IP fija correspondiente — ver `docs/OPERATIONS.md` para configurar Tailscale Split DNS.
 
 ### Puertos expuestos
 
 | Puerto | Protocolo | Descripcion |
 |--------|-----------|-------------|
-| 80/443 | TCP | 80 = redirect a HTTPS, 443 = TLS de `cilium-gateway-main` (host → IP fija via forward-port); incluye las 3 rutas de `agentgateway-mcp`, reenviadas puertas adentro |
-| 53 | UDP/TCP | DNS de `private-dns` (host → IP fija via forward-port) |
+| 80/443 | TCP | 80 = redirect a HTTPS, 443 = TLS de `cilium-gateway-main` (IP LAN directa); incluye las 3 rutas de `agentgateway-mcp`, reenviadas puertas adentro |
+| 53 | UDP/TCP | DNS de `private-dns` (IP LAN directa) |
 
 ### DNS y subdominios
 
@@ -498,53 +496,64 @@ La VM corre en la red NAT de libvirt (`192.168.122.0/24`) porque el host solo ti
 
 ## 8. Seguridad y Secretos
 
-### Ansible Vault
+### Archivo local de secretos
 
-Todas las variables sensibles se almacenan cifradas en `ansible/group_vars/all.yaml` usando `ansible-vault`.
+Todas las credenciales (infra + apps) viven en `secrets/homelab.env`, plano y **nunca commiteado** (`.gitignore`). No hay cifrado en reposo en git — la carga a OpenBao es siempre manual, nunca corre en CI (ver [ADR-009](DECISIONS.md#adr-009-cicd-con-github-actions-hosted--tailscale--cloudflare-r2)). En CI, el preflight de credenciales usa GitHub Actions secrets/vars en su lugar (ver `docs/CI_CD_HYPERVISOR_SETUP.md`).
 
-| Variable | Descripcion |
+| Variable (`secrets/homelab.env`) | Descripcion |
 |----------|-------------|
-| `argocd_github_pat` | PAT de GitHub para ArgoCD |
-| `cloudflare_api_token` | Token API Cloudflare (DNS-01) |
-| `cloudflared_token` | Token del tunel Cloudflare |
-| `openbao_static_seal_key` | Clave AES-256 para Static Seal de OpenBao |
-
-El archivo de contrasena del vault es `ansible/.vault-pass` (referenciado en `ansible.cfg` y excluido de Git via `.gitignore`).
+| `ARGOCD_GITHUB_PAT` | PAT de GitHub para ArgoCD |
+| `ARGOCD_WEBHOOK_SECRET` | Secret del webhook de GitHub que dispara el sync de ArgoCD |
+| `CLOUDFLARE_API_TOKEN` | Token API Cloudflare (DNS-01) |
+| `CLOUDFLARED_TOKEN` | Token del tunel Cloudflare |
+| `OPENBAO_STATIC_SEAL_KEY` | Clave AES-256 para Static Seal de OpenBao |
 
 ### Gestion de Secretos en el Cluster
 
-1. **Ansible** crea el secret `openbao-static-unseal-key` en `secret-management`.
+1. **Terraform** (`terraform/cluster/secrets.tf`) crea el secret `openbao-static-unseal-key` en `secret-management`.
 2. **GitOps** despliega OpenBao, que usa la static seal key.
-3. **vault-populate.yaml** escribe secrets de infraestructura en OpenBao KV.
+3. **`./scripts/load-secrets-to-openbao.sh`** (manual) escribe los secrets de infraestructura y de apps en OpenBao KV, leyendo `secrets/homelab.env`.
 4. **External Secrets Operator** sincroniza desde OpenBao hacia Kubernetes Secrets.
 
 #### Estructura de secretos en OpenBao
 
 ```
-secret/argocd          -> github_pat, username, url
-secret/infra/cloudflare -> api_token
-secret/infra/cloudflared -> token
+secret/argocd               -> github_pat, username, url, webhook_secret
+secret/infra/cloudflare     -> api_token
+secret/infra/cloudflared    -> token
+secret/databases/*          -> credenciales de Redis/Qdrant/PostgreSQL/MongoDB
+secret/monitoring/grafana   -> username, password
+secret/sonarqube/*          -> db-credentials, monitoring (passcode)
+secret/devtools/openmemory  -> OPENAI_API_KEY
+secret/apps/flow            -> database-url, mongodb-url, redis-url
 ```
 
 ---
 
 ## 9. GitOps y Orden de Despliegue
 
+Orden real por `argocd.argoproj.io/sync-wave` (verificado en `gitops/apps/**`, no un valor estimado):
+
 ```
 root-app (gitops/root-app.yaml)
   └── App of Apps (gitops/apps/)
+        ├── Wave -1: homelab-project (AppProject)
         ├── platform/
-        │     ├── Wave 1:  openebs, cert-manager, operators (cloudnative-pg, percona)
-        │     ├── Wave 2:  openbao, external-secrets, init jobs, gateway-api-crds
-        │     ├── Wave 3:  agentgateway, cilium (con gatewayAPI.enabled)
-        │     ├── Wave 4:  agentgateway-config, cilium-gateway, private-dns, argocd-config, cert-manager-config
-        │     ├── Wave 5:  monitoring, cloudflared, headlamp
-        │     ├── Wave 6:  postgresql, mongodb, redis, qdrant
-        │     └── Wave 8:  openmemory
+        │     ├── Wave 1: openebs, cert-manager, cloudnative-pg (operador), percona-mongodb (operador), reloader
+        │     ├── Wave 2: openebs-config, agentgateway-crds, gateway-api-crds, cert-manager-config,
+        │     │           external-secrets(-config), openbao(-init)
+        │     ├── Wave 3: agentgateway, cilium-service-mesh, cilium-hubble-pki, openbao-config
+        │     ├── Wave 4: argocd-config, observability/secrets, agentgateway-config, tetragon,
+        │     │           cilium-gateway, private-dns
+        │     ├── Wave 5: prometheus, cloudflared, headlamp(-config), hubble-config
+        │     ├── Wave 6: redis, qdrant, postgresql, mongodb (instancias en `infra`), grafana-config,
+        │     │           service-monitors
+        │     ├── Wave 7: hubble-dashboards
+        │     └── Wave 8: openmemory, openmemory-ui
         └── workloads/
-              ├── Wave 7:  sonarqube-db
-              ├── Wave 8:  sonarqube, sonarqube-config, sonarqube-mcp
-              └── Wave 9:  flow, portfolio
+              ├── Wave 7: sonarqube-db
+              ├── Wave 8: sonarqube, sonarqube-config, sonarqube-mcp
+              └── Wave 9: flow, portfolio
 ```
 
 ### Dependencias implicitas
@@ -570,57 +579,59 @@ Qdrant ────────────────────────�
 
 | Componente | Tamanio | StorageClass |
 |-----------|---------|-------------|
-| PostgreSQL | 10Gi | openebs-lvm-retain |
-| MongoDB | 10Gi | openebs-lvm-retain |
-| Redis | 5Gi | openebs-lvm-retain |
-| Qdrant | 10Gi | openebs-lvm-retain |
-| OpenBao | 1Gi | openebs-lvm |
-| Prometheus | 20Gi | openebs-lvm |
-| Grafana | 5Gi | openebs-lvm |
-| Alertmanager | 1Gi | openebs-lvm |
-| SonarQube | 10Gi | openebs-lvm |
+| PostgreSQL | 10Gi | openebs-zfs-retain |
+| MongoDB | 10Gi | openebs-zfs-retain |
+| Redis | 5Gi | openebs-zfs-retain |
+| Qdrant | 10Gi | openebs-zfs-retain |
+| OpenBao | 1Gi | openebs-zfs |
+| Prometheus | 20Gi | openebs-zfs |
+| Grafana | 5Gi | openebs-zfs |
+| Alertmanager | 1Gi | openebs-zfs |
+| SonarQube | 10Gi | openebs-zfs |
 | **Total** | **~72Gi** | |
 
 ### Requerimiento minimo de la VM
 
-- **CPU**: 4 cores (default de este repo: 8 vCPU)
-- **RAM**: 8 GB (default: 16 GB)
-- **Disco**: 2 discos - raiz (100 GB SSD recomendado, default: 120 GB overlay qcow2) + dedicado para el VG LVM de OpenEBS (default: 100 GB raw, `vdb`)
-- **OS**: Fedora Cloud Base (imagen descargada por Terraform)
+- **CPU**: 4 cores (default de este repo: 8 vCPU, `var.vcpu`)
+- **RAM**: 8 GB (default: 16 GB, `var.memory_mib`)
+- **Disco**: 2 discos — instalacion de Talos (default: 120 GB, `var.disk_size_gb`, `virtio0`) + dedicado al zpool de OpenEBS ZFS (default: 100 GB, `var.zfs_disk_size_gb`, `virtio1`, sin formatear)
+- **OS**: Talos Linux (ISO generado por el Image Factory, descargado por `proxmox_download_file.talos_iso`)
 
-El **host** (hipervisor) necesita margen adicional sobre estos numeros para SO + libvirt/KVM + overhead de la VM.
+El **host** (Proxmox VE) necesita margen adicional sobre estos numeros para el hipervisor + overhead de la VM.
 
 ---
 
 ## 11. Flujo de Instalacion Inicial
 
-### Fase 0 — Aprovisionamiento de la VM (Terraform)
+### Fase 0 — Preflight (Ansible)
 
-Terraform crea la VM libvirt (disco overlay sobre una plantilla pristina de Fedora Cloud, cloud-init con IP estatica) y regenera `ansible/inventory.yaml` apuntando a ella.
-
-```bash
-cd terraform
-terraform init
-terraform apply
-```
-
-### Fase 1 — Aprovisionamiento del nodo (Ansible)
-
-Ansible instala k0s, exporta kubeconfig, instala kubectl, Helm, Helmfile, prerequisitos de OpenEBS (lvm2 + Volume Group), secret de ArgoCD y secret de OpenBao.
+Valida que las credenciales en `secrets/homelab.env` no esten vacias/invalidas antes de gastar tiempo aprovisionando infraestructura.
 
 ```bash
+set -a; source secrets/homelab.env; set +a
 cd ansible
-ansible-playbook site.yaml
-kubectl get nodes
+ansible-playbook preflight.yaml
 ```
 
-### Fase 2 — Bootstrap del cluster (Helmfile)
+### Fase 1 — VM Talos en Proxmox (`terraform/infra`)
 
-Helmfile (ejecutado via Ansible) crea namespaces, instala Cilium y ArgoCD en orden.
+Terraform descarga el ISO de Talos (Image Factory), crea la VM en Proxmox con dos discos, aplica la machine config (incluye el particionado declarativo del disco de ZFS), bootstrapea el cluster y genera `terraform/infra/generated/{kubeconfig,talosconfig}`.
 
 ```bash
-cd ../bootstrap
-helmfile sync
+cd terraform/infra
+terraform init -backend-config=backend.hcl
+terraform apply
+kubectl --kubeconfig generated/kubeconfig get nodes
+```
+
+### Fase 2 — Bootstrap de Kubernetes (`terraform/cluster`)
+
+Crea los namespaces, instala Cilium y ArgoCD (`helm_release`) y el Job que crea el zpool de OpenEBS ZFS, en orden via `depends_on`.
+
+```bash
+cd ../cluster
+terraform init -backend-config=backend.hcl
+terraform apply
 ```
 
 ### Fase 3 — Activar GitOps
@@ -635,13 +646,13 @@ Seguir progreso:
 kubectl -n argocd get applications -w
 ```
 
-### Fase 4 — Poblar OpenBao
+### Fase 4 — Poblar OpenBao (manual, no corre en CI)
 
 Una vez que OpenBao este inicializado:
 
 ```bash
-cd ansible
-ansible-playbook vault-populate.yaml
+cp secrets/homelab.env.example secrets/homelab.env   # completar valores
+./scripts/load-secrets-to-openbao.sh
 ```
 
 ---
@@ -680,8 +691,14 @@ kubectl exec -n secret-management openbao-0 -- bao operator unseal <UNSEAL_KEY>
 
 **Volumen OpenEBS no provisiona (Pending):**
 ```bash
-kubectl get lvmnode -n openebs
-kubectl -n openebs logs -l app=openebs-lvm-controller -c openebs-lvm-plugin
-# En el nodo: confirmar que el VG existe y tiene espacio libre
-vgs vg-openebs
+kubectl get zfsnode -n openebs
+kubectl -n openebs logs -l app=openebs-zfs-controller -c openebs-zfs-plugin
+
+# Talos no tiene shell ni herramientas de ZFS en el host: se inspecciona
+# desde un pod privilegiado con /dev montado (mismo patron que
+# kubernetes_job_v1.openebs_zpool_create en terraform/cluster/storage.tf) -
+# las syscalls/ioctls de ZFS son a nivel de kernel, compartidas por todos
+# los containers del nodo, sin necesidad de chroot al host.
+kubectl debug node/talos -it --image=alpine:3.20 -- \
+  sh -c "apk add --no-cache zfs >/dev/null && zpool status zfspv-pool"
 ```

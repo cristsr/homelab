@@ -30,15 +30,20 @@ jobs:
       - name: Install Ansible
         run: pip install ansible
 
-      - name: Write vault password
-        run: |
-          printf '%s' "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > ansible/.vault-pass
-          chmod 600 ansible/.vault-pass
-
       # Falla en segundos si falta o es invalida una credencial, antes de
-      # gastar tiempo conectando Tailscale y aprovisionando la VM.
+      # gastar tiempo conectando Tailscale y aprovisionando la VM. Las
+      # credenciales vienen de GitHub Actions secrets/vars, no de un vars
+      # file del repo (ver secrets/homelab.env.example y
+      # docs/CI_CD_HYPERVISOR_SETUP.md).
       - name: Preflight - validate secrets
         working-directory: ansible
+        env:
+          ARGOCD_GITHUB_PAT: ${{ secrets.ARGOCD_GITHUB_PAT }}
+          ARGOCD_REPO_URL: ${{ vars.ARGOCD_REPO_URL }}
+          ARGOCD_WEBHOOK_SECRET: ${{ secrets.ARGOCD_WEBHOOK_SECRET }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
+          OPENBAO_STATIC_SEAL_KEY: ${{ secrets.OPENBAO_STATIC_SEAL_KEY }}
         run: ansible-playbook preflight.yaml
 
       # Necesario porque Proxmox y la VM Talos viven en la LAN del homelab
@@ -136,16 +141,13 @@ jobs:
           done
 
       # Ultimo paso del bootstrap: registra la Application raiz de ArgoCD,
-      # que ya tiene su namespace/secrets creados por terraform/cluster.
+      # que ya tiene su namespace/secrets creados por terraform/cluster. La
+      # carga de secretos en OpenBao NO corre en CI a proposito - es un paso
+      # manual (./scripts/load-secrets-to-openbao.sh, ver README y
+      # docs/OPERATIONS.md). Las Applications que dependen de esos secretos
+      # quedan en Progressing/Degraded hasta que se corra ese script - es
+      # esperado, no un fallo del pipeline.
       - name: Register ArgoCD root Application
         env:
           KUBECONFIG: ${{ github.workspace }}/terraform/infra/generated/kubeconfig
         run: kubectl apply -f gitops/root-app.yaml
-
-      - name: Populate OpenBao secrets
-        working-directory: ansible
-        run: ansible-playbook vault-populate.yaml
-
-      - name: Populate extra secrets
-        working-directory: ansible
-        run: ansible-playbook load-extra-secrets.yaml

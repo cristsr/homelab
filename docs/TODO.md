@@ -44,27 +44,16 @@ Este documento lista las tareas planificadas para mejorar la automatizacion y el
 
 ---
 
-## 3. Migrar ArgoCD de polling a webhook de GitHub
+## 3. Migrar ArgoCD de polling a webhook de GitHub — RESUELTO (con matiz)
 
-**Motivacion:** El polling actual tiene un intervalo de 180s (ahora 600s como fallback). Un webhook de GitHub entrega notificaciones en segundos tras cada push, eliminando la latencia innecesaria.
+**Motivacion:** El polling original tenia un intervalo de 180s. Un webhook de GitHub entrega notificaciones en segundos tras cada push, eliminando la latencia innecesaria.
 
-**Tareas:**
+**Estado real:** El webhook esta implementado y funcionando (`scripts/load-secrets-to-openbao.sh` escribe `webhook_secret` en OpenBao, `platform/argocd/webhook-externalsecret.yaml` lo sincroniza a `argocd-secret`). Sin embargo `timeout.reconciliation` **no** quedo en `0s`: se dejo en `600s` a proposito, como fallback de seguridad. El 2026-05-13 el webhook se rompio silenciosamente y el cluster estuvo sin sincronizar hasta el 2026-09-07 sin que nadie lo notara (con polling en `0s` no hay red de seguridad si el webhook falla). Ver el comentario en `bootstrap/argocd/values.yaml` y `docs/DECISIONS.md` para el detalle del incidente.
 
-- [ ] Generar un secret aleatorio: `openssl rand -hex 32`.
-- [ ] Cifrarlo con ansible-vault: `ansible-vault encrypt_string 'VALOR' --name 'argocd_webhook_secret'`.
-- [ ] Agregar `argocd_webhook_secret: !vault |` al archivo `ansible/group_vars/all.yaml`.
-- [ ] Ejecutar `vault-populate.yaml` para que escriba `webhook_secret` en el path `argocd` de OpenBao.
-- [ ] Configurar webhook en GitHub → Settings → Webhooks:
-  - URL: `https://argocd.cristianpuenguenan.online/api/webhook`
-  - Content type: `application/json`
-  - Secret: el mismo valor generado
-  - Trigger: `push`
-- [ ] Verificar en ArgoCD que el sync se dispara en segundos tras un push.
-
-**Archivos afectados (ya implementados):**
-- `ansible/vault-populate.yaml` — añade `webhook_secret` al path `argocd`
+**Archivos afectados (implementados):**
+- `scripts/load-secrets-to-openbao.sh` — añade `webhook_secret` al path `argocd` (ver `secrets/homelab.env.example`, `ARGOCD_WEBHOOK_SECRET`)
 - `platform/argocd/webhook-externalsecret.yaml` — ExternalSecret con `creationPolicy: Merge` sobre `argocd-secret`
-- `bootstrap/argocd/values.yaml` — `timeout.reconciliation: 0s` deshabilita el polling
+- `bootstrap/argocd/values.yaml` — `timeout.reconciliation: 600s` (fallback intencional, no bug)
 
 ---
 

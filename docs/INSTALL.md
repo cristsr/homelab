@@ -1,18 +1,18 @@
 # Guia de Instalacion
 
-> El nodo k0s corre dentro de una VM libvirt provisionada por Terraform (`terraform/`).
-> Ni Terraform ni Ansible se ejecutan en el propio hipervisor (ver [ADR-009](DECISIONS.md#adr-009-cicd-con-github-actions-hosted--tailscale--cloudflare-r2)): ambos corren en remoto — por SSH (`qemu+ssh://`) desde tu equipo de control o, de forma automatica, desde GitHub Actions via Tailscale. Esta guia documenta el flujo **manual**; para el automatico ver [`.github/workflows/`](../.github/workflows/) y ADR-009.
+> El nodo Talos Linux corre como una VM sobre Proxmox VE, provisionada con Terraform en dos etapas (`terraform/infra`, `terraform/cluster`).
+> Ni Terraform ni Ansible corren en el hipervisor (ver [ADR-009](DECISIONS.md#adr-009-cicd-con-github-actions-hosted--tailscale--cloudflare-r2)): hablan con la API REST de Proxmox y la API de Talos (mTLS) en remoto — desde tu equipo de control o, de forma automatica, desde GitHub Actions via Tailscale. Esta guia documenta el flujo **manual**; para el automatico ver [`.github/workflows/`](../.github/workflows/), ADR-009 y [CI_CD_HYPERVISOR_SETUP.md](CI_CD_HYPERVISOR_SETUP.md).
 
 ---
 
 ## Tabla de Contenidos
 
-0. [Aprovisionar la VM (Terraform)](#0-aprovisionar-la-vm-terraform)
+0. [Preflight de credenciales](#0-preflight-de-credenciales)
 1. [Requisitos Previos](#1-requisitos-previos)
-2. [Preparar el Servidor](#2-preparar-el-servidor)
-3. [Configurar Ansible y Secrets](#3-configurar-ansible-y-secretos)
-4. [Instalar el Cluster con Ansible](#4-instalar-el-cluster-con-ansible)
-5. [Bootstrap del Cluster](#5-bootstrap-del-cluster)
+2. [Preparar el Equipo de Control](#2-preparar-el-equipo-de-control)
+3. [Configurar Secretos](#3-configurar-secretos)
+4. [Aprovisionar la VM Talos (`terraform/infra`)](#4-aprovisionar-la-vm-talos-terraforminfra)
+5. [Bootstrap de Kubernetes (`terraform/cluster`)](#5-bootstrap-de-kubernetes-terraformcluster)
 6. [Activar GitOps](#6-activar-gitops)
 7. [Poblar OpenBao](#7-poblar-openbao)
 8. [Verificar y Acceder](#8-verificar-y-acceder)
@@ -21,87 +21,35 @@
 
 ---
 
-## 0. Aprovisionar la VM (Terraform)
+## 0. Preflight de credenciales
 
-> Ver [ADR-008](DECISIONS.md#adr-008-vm-libvirt-provisionada-con-terraform) para el contexto completo de esta decision.
-
-El nodo ya no se instala sobre el hardware directamente: `terraform/` crea una VM libvirt (KVM) a partir de una imagen pristina de Fedora Cloud Base, con disco overlay copy-on-write (la imagen descargada nunca se escribe) y arranque via cloud-init (usuario, llave SSH, IP estatica).
-
-### 0.1 Prerequisitos del host (hipervisor)
-
-Esto se instala **en el hipervisor fisico**, no en tu equipo de control:
+Antes de tocar Terraform, valida que las credenciales existen y no estan vacias — falla en segundos en vez de a mitad del aprovisionamiento. Las credenciales se exportan desde `secrets/homelab.env` (ver seccion 3):
 
 ```bash
-sudo dnf install -y '@Virtualization' libvirt qemu-kvm
-sudo usermod -aG libvirt $USER   # requiere volver a iniciar sesion
-sudo systemctl enable --now libvirtd
+set -a; source secrets/homelab.env; set +a
+cd ansible
+ansible-playbook preflight.yaml
 ```
-
-Ademas, el hipervisor necesita estar en tu tailnet (`tailscale up --ssh`) y tener autorizada por SSH la clave dedicada que usaras para conectarte de forma remota (ver ADR-009). Terraform **no** se instala en el hipervisor: corre en tu equipo de control (o en CI).
-
-### 0.1.1 Prerequisitos del equipo de control
-
-```bash
-# Terraform (repo oficial de HashiCorp)
-sudo dnf install -y dnf-plugins-core
-sudo dnf config-manager addrepo --from-repofile=https://rpm.releases.hashicorp.com/fedora/hashicorp.repo
-sudo dnf install -y terraform
-```
-
-### 0.2 Configurar variables
-
-```bash
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
-cp backend.hcl.example backend.hcl
-```
-
-Edita `terraform.tfvars`: la URL del qcow2 vigente desde https://fedoraproject.org/cloud/download (cambia por release; no hay un default fijo a proposito), y `hypervisor_ssh_host`/`hypervisor_ssh_user`/`hypervisor_ssh_keyfile` con los datos de tu hipervisor (IP Tailscale, usuario del grupo `libvirt`, y la clave privada dedicada). Ajusta memoria/vcpu/disco si hace falta (defaults: 16GB RAM, 8 vCPU, 120GB disco).
-
-Edita `backend.hcl` con el Account ID de tu cuenta Cloudflare (para el bucket R2 `homelab-tfstate` que guarda el state remoto — ver ADR-009).
-
-### 0.3 Aplicar
-
-```bash
-terraform init -backend-config=backend.hcl
-terraform plan
-terraform apply
-```
-
-Esto:
-- Descarga la imagen base de Fedora Cloud (una sola vez, se cachea en el pool `homelab`).
-- Crea el disco overlay de la VM, una llave SSH dedicada (`terraform/generated/id_ed25519`), y el dominio libvirt con IP estatica en la red NAT `default` (`192.168.122.0/24`).
-- Regenera `ansible/inventory.yaml` apuntando a la VM por SSH.
-
-Verificar que la VM arranco bien. La VM esta en la red NAT interna de libvirt (solo alcanzable desde el hipervisor), asi que hay que saltar por el mismo `ProxyCommand` que usa Ansible:
-
-```bash
-ssh -i terraform/generated/id_ed25519 \
-  -o ProxyCommand="ssh -i <hypervisor_ssh_keyfile> -W %h:%p <hypervisor_ssh_user>@<hypervisor_ssh_host>" \
-  fedora@$(terraform -chdir=terraform output -raw vm_static_ip) "cloud-init status --long"
-```
-
-Debe mostrar `status: done` sin errores.
 
 ---
 
 ## 1. Requisitos Previos
 
-### Hardware minimo de la VM (definido en `terraform/variables.tf`)
+### Hardware minimo de la VM (definido en `terraform/infra/variables.tf`)
 
-| Recurso | Minimo (ARCHITECTURE.md) | Default de este repo |
-|---------|--------------------------|-----------------------|
-| CPU | 4 cores | 8 vCPU |
-| RAM | 8 GB | 16 GB |
-| Disco | 100 GB SSD | 120 GB (overlay) |
-| Red | Acceso a Internet | IP estatica (`192.168.122.10`, NAT libvirt) |
+| Recurso | Minimo | Default de este repo |
+|---------|--------|-----------------------|
+| CPU | 4 cores | 8 vCPU (`var.vcpu`) |
+| RAM | 8 GB | 16 GB (`var.memory_mib`) |
+| Disco instalacion | 100 GB | 120 GB (`var.disk_size_gb`) |
+| Disco ZFS dedicado | - | 100 GB (`var.zfs_disk_size_gb`) |
+| Red | IP estatica en la LAN | `var.vm_static_ip`, bridge `vmbr0` |
 
 ### Software
 
-- Host: Fedora con libvirt/KVM + Terraform (ver [0. Aprovisionar la VM](#0-aprovisionar-la-vm-terraform)).
-- Ansible corre desde el **host** (equipo de control), no dentro de la VM.
-- La VM (Fedora Cloud Base) no requiere preparacion manual: cloud-init crea el usuario, la llave SSH y el sudo sin contrasena.
-- Conexion a Internet estable (para descargar la imagen base y los binarios que instala Ansible).
+- **Hipervisor**: Proxmox VE, con la API accesible (`:8006`) y un API token dedicado (ver [CI_CD_HYPERVISOR_SETUP.md §2](CI_CD_HYPERVISOR_SETUP.md)).
+- **Equipo de control**: Terraform (`>= 1.10.0`) y Ansible. Ninguno de los dos se instala en el hipervisor ni en la VM.
+- La VM no requiere preparacion manual: Talos es inmutable, la configuracion completa la aplica Terraform via API.
 
 ### Cuentas y tokens externos necesarios
 
@@ -109,34 +57,31 @@ Antes de comenzar, asegurate de tener a mano los siguientes valores:
 
 | Token/Cuenta | Descripcion | Como obtenerlo |
 |--------------|-------------|----------------|
-| **GitHub PAT** | Personal Access Token con permisos `repo` para acceder al repositorio privado | GitHub Settings > Developer settings > Personal access tokens |
-| **Cloudflare API Token** | Token con permisos `Zone:Edit` y `Zone:Read` para el dominio | Cloudflare Dashboard > My Profile > API Tokens |
+| **API Token de Proxmox** | `usuario@realm!tokenid=uuid` para que Terraform cree la VM | Proxmox UI → Datacenter → Permissions → API Tokens (ver CI_CD_HYPERVISOR_SETUP.md §2) |
+| **Schematic ID de Talos** | ID generado en https://factory.talos.dev con las extensiones `qemu-guest-agent`, `tailscale`, `zfs` | Image Factory — ver default en `terraform/infra/variables.tf` |
+| **GitHub PAT** | Personal Access Token con permisos `repo` para que ArgoCD acceda al repositorio privado | GitHub Settings → Developer settings → Personal access tokens |
+| **Cloudflare API Token** | Token con permisos `Zone:Edit` y `Zone:Read` para el dominio (cert-manager DNS-01) | Cloudflare Dashboard → My Profile → API Tokens |
 | **Cloudflared Tunnel Token** | Token del tunel de Cloudflare | `cloudflared tunnel create <nombre>` o desde Zero Trust Dashboard |
-
-### DNS configurado
-
-- Un dominio propio (ej: `cristianpuenguenan.online`) gestionado en Cloudflare.
-- Registro A apuntando a la IP del nodo: `192.168.80.20`.
-- Registro wildcard `*.cristianpuenguenan.online` apuntando a la misma IP.
 
 ---
 
 ## 2. Preparar el Equipo de Control
 
-> Estos pasos son en el **host** (el mismo que corre Terraform), no dentro de la VM.
-
-### 2.1 Instalar dependencias del sistema
+### 2.1 Instalar dependencias
 
 ```bash
-sudo dnf install -y git pipx curl
-pipx install --include-deps ansible
-pipx ensurepath
+# Terraform (repo oficial de HashiCorp)
+sudo dnf install -y dnf-plugins-core
+sudo dnf config-manager addrepo --from-repofile=https://rpm.releases.hashicorp.com/fedora/hashicorp.repo
+sudo dnf install -y terraform git pipx curl
+pipx install --include-deps ansible && pipx ensurepath
 source ~/.bashrc
 ```
 
 Verificar instalacion:
 
 ```bash
+terraform version
 ansible --version
 ```
 
@@ -149,114 +94,93 @@ cd homelab
 
 ---
 
-## 3. Configurar Ansible y Secretos
+## 3. Configurar Secretos
 
-### 3.1 Revisar inventario y variables
-
-`ansible/inventory.yaml` ya no se edita a mano: lo genera `terraform apply` (ver [0. Aprovisionar la VM](#0-aprovisionar-la-vm-terraform)) con la IP estatica de la VM y la llave SSH dedicada. Si necesitas verlo:
-
-```yaml
-all:
-  children:
-    k0s:
-      hosts:
-        homelab:
-          ansible_host: 192.168.122.10
-          ansible_user: fedora
-          ansible_connection: ssh
-          ansible_ssh_private_key_file: /ruta/a/homelab/terraform/generated/id_ed25519
-          ansible_ssh_common_args: '-o ProxyCommand="ssh -i <hypervisor_ssh_keyfile> -W %h:%p ... <hypervisor_ssh_user>@<hypervisor_ssh_host>"'
-    hypervisor:
-      hosts:
-        homelab-host:
-          ansible_host: <hypervisor_ssh_host>
-          ansible_user: <hypervisor_ssh_user>
-          ansible_connection: ssh
-          ansible_ssh_private_key_file: <hypervisor_ssh_keyfile>
-```
-
-El grupo `hypervisor` apunta al hipervisor fisico por SSH remoto (ya no `ansible_connection: local` — ver ADR-009) — lo usa `ansible/host-network.yaml` (ver [8.3](#83-acceso-lan-directo)) para el port-forward LAN hacia la VM. El grupo `k0s` llega a la VM saltando por el hipervisor (`ProxyCommand`), porque la VM vive en la red NAT interna de libvirt, solo alcanzable desde el propio hipervisor.
-
-Edita `ansible/group_vars/all.yaml` para ajustar versiones y el username de GitHub:
-
-```yaml
-argocd_github_username: cristsr
-argocd_repo_url: https://github.com/cristsr/homelab
-```
-
-### 3.2 Cifrar las variables sensibles con ansible-vault
-
-Todas las variables marcadas con valor plano o placeholder en `group_vars/all.yaml` deben cifrarse antes de ejecutar el playbook.
-
-**Formato**: ejecuta el siguiente comando por cada variable, copia el bloque `!vault |` generado y reemplaza el valor correspondiente en `group_vars/all.yaml`.
+Todas las credenciales (infra + apps) viven en un unico archivo plano, **nunca commiteado** (`secrets/homelab.env` esta en `.gitignore`):
 
 ```bash
+cp secrets/homelab.env.example secrets/homelab.env
+$EDITOR secrets/homelab.env
+```
+
+Completa al menos los campos de la seccion `# --- Infra (obligatorios) ---`: `ARGOCD_GITHUB_PAT`, `ARGOCD_WEBHOOK_SECRET`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN`, `OPENBAO_STATIC_SEAL_KEY` (genera esta ultima con `openssl rand -base64 32` y **guardala en un gestor de contrasenas** — se usa para el unseal de OpenBao). Los campos de Databases/Monitoring/SonarQube/DevTools/Apps son opcionales, se completan mas adelante en la seccion 7.
+
+> Este mismo archivo lo consume `./scripts/load-secrets-to-openbao.sh` (seccion 7) y el preflight de abajo. La IP fija del Gateway/DNS interno ya no se configura por variable — se edita directo en `platform/networking/cilium-gateway/gateway.yaml` y `platform/networking/private-dns/` si hace falta cambiarla.
+
+### 3.1 Correr el preflight
+
+```bash
+set -a; source secrets/homelab.env; set +a
 cd ansible
-ansible-vault encrypt_string 'EL_VALOR' --name 'NOMBRE_VARIABLE'
+ansible-playbook preflight.yaml
 ```
-
-**Variables obligatorias a cifrar**:
-
-| Variable | Descripcion |
-|----------|-------------|
-| `argocd_github_pat` | PAT de GitHub para que ArgoCD acceda al repo GitOps |
-| `cloudflare_api_token` | Token de API de Cloudflare (cert-manager DNS-01) |
-| `cloudflared_token` | Token del tunel Cloudflare |
-| `openbao_static_seal_key` | Clave AES-256 para Static Seal de OpenBao |
-
-Ejemplo para la clave de OpenBao:
-
-```bash
-ansible-vault encrypt_string "$(openssl rand -base64 32)" --name 'openbao_static_seal_key'
-```
-
-> **IMPORTANTE**: Guarda la clave de OpenBao en un lugar seguro (gestor de contrasenas). Se usa para el unseal del vault.
-
-### 3.3 Configurar contrasena del vault
-
-Crea el archivo de contrasena para que Ansible pueda descifrar automaticamente:
-
-```bash
-echo "tu-contrasena-vault" > ansible/.vault-pass
-chmod 600 ansible/.vault-pass
-```
-
-El archivo `ansible/.vault-pass` ya esta en `.gitignore` para evitar subirlo accidentalmente.
 
 ---
 
-## 4. Instalar el Cluster con Ansible
+## 4. Aprovisionar la VM Talos (`terraform/infra`)
 
-### 4.1 Ejecutar el playbook principal
+### 4.1 Configurar variables
 
 ```bash
-cd ansible
-ansible-playbook site.yaml
+cd terraform/infra
+cp terraform.tfvars.example terraform.tfvars
+cp backend.hcl.example backend.hcl
 ```
 
-> El flag `-K` (sudo password) no es necesario si el usuario tiene sudo sin contrasena.
+Edita `terraform.tfvars`: `proxmox_endpoint`, `proxmox_api_token`, `talos_schematic_id`, `vm_static_ip`, `vm_gateway`. Ajusta memoria/vcpu/discos si hace falta (defaults: 16GB RAM, 8 vCPU, 120GB + 100GB disco).
 
-El playbook `site.yaml` realiza automaticamente:
+Edita `backend.hcl` con el Account ID de tu cuenta Cloudflare (bucket R2 `homelab-tfstate` que guarda el state remoto — ver ADR-009).
 
-1. **k0s**: Descarga e instala k0s como servicio systemd single-node.
-2. **kubeconfig**: Exporta la config de admin y la coloca en `~/.kube/config`.
-3. **kubectl**: Descarga el binario standalone de kubectl.
-4. **helm**: Descarga e instala Helm.
-5. **openebs-prereqs**: Instala `lvm2` y crea el Volume Group `vg-openebs` sobre el disco dedicado (`vdb`).
-6. **helmfile**: Descarga Helmfile y ejecuta `helmfile sync` desde `../bootstrap`.
-7. **argocd-secret**: Crea el secret `github-repo-creds` en namespace `argocd` y el `in-cluster-secret` para que ArgoCD gestione el cluster local.
-8. **vault-secrets**: Crea el namespace `secret-management` y el secret `openbao-static-unseal-key`.
-
-Verificar que el cluster esta listo:
+### 4.2 Aplicar
 
 ```bash
+terraform init -backend-config=backend.hcl
+terraform plan
+terraform apply
+```
+
+Esto:
+- Descarga el ISO de Talos generado por el Image Factory (`talos_schematic_id`), una sola vez.
+- Crea la VM en Proxmox con dos discos (instalacion + dedicado a ZFS) e IP estatica en la LAN real (bridge `vmbr0`).
+- Aplica la machine config de Talos (particiona el disco de ZFS, configura la red) y bootstrapea el cluster.
+- Genera `terraform/infra/generated/kubeconfig` y `generated/talosconfig`.
+
+Verificar que el nodo esta listo:
+
+```bash
+export KUBECONFIG=terraform/infra/generated/kubeconfig
 kubectl get nodes
-kubectl -n kube-system get pods
 ```
 
-### 4.2 Verificar bootstrap
+---
 
-Comprueba que Cilium y ArgoCD estan corriendo:
+## 5. Bootstrap de Kubernetes (`terraform/cluster`)
+
+### 5.1 Configurar variables
+
+```bash
+cd ../cluster
+cp terraform.tfvars.example terraform.tfvars
+cp backend.hcl.example backend.hcl
+```
+
+Edita `terraform.tfvars`: `kubeconfig_path` (apunta a `../infra/generated/kubeconfig`), `argocd_github_pat`, `openbao_static_seal_key`.
+
+### 5.2 Aplicar
+
+```bash
+terraform init -backend-config=backend.hcl
+terraform apply
+```
+
+Esto crea, en orden (via `depends_on`):
+- **Namespaces base** (`terraform/cluster/namespaces.tf`).
+- **Cilium** (`helm_release`, con el hook de idempotencia `bootstrap/adopt-cilium-gateway-secrets.sh`).
+- **ArgoCD** (`helm_release`).
+- **Secrets iniciales**: `github-repo-creds`, `in-cluster-secret`, `openbao-static-unseal-key` (`terraform/cluster/secrets.tf`).
+- **Job de OpenEBS ZFS**: crea el zpool `zfspv-pool` sobre el disco dedicado (`terraform/cluster/storage.tf`).
+
+Verificar:
 
 ```bash
 kubectl -n kube-system rollout status daemonset/cilium
@@ -272,32 +196,13 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 
 ---
 
-## 5. Bootstrap del Cluster
-
-> **Nota**: El playbook de Ansible ya ejecuta `helmfile sync` automaticamente.
-> Solo necesitas ejecutarlo manualmente si quieres repetir el bootstrap o si fallo.
-
-```bash
-cd bootstrap
-helmfile sync
-```
-
-Esto despliega:
-- **Namespaces base** (via hook presync)
-- **Cilium** (CNI con eBPF, kube-proxy replacement)
-- **ArgoCD** (GitOps controller)
-
----
-
 ## 6. Activar GitOps
-
-### 6.1 Aplicar la aplicacion raiz
 
 ```bash
 kubectl apply -f gitops/root-app.yaml
 ```
 
-A partir de aqui ArgoCD sincroniza el cluster con el repositorio Git siguiendo el orden de sync-waves.
+A partir de aqui ArgoCD sincroniza el cluster con el repositorio Git siguiendo el orden de sync-waves (ver `docs/ARCHITECTURE.md` §9).
 
 Seguir progreso:
 
@@ -309,25 +214,19 @@ kubectl -n argocd get applications -w
 
 ## 7. Poblar OpenBao
 
-> **Cuando hacerlo**: Despues de que GitOps active el cluster y el job `openbao-init` termine.
-> Este paso escribe los secrets de infraestructura en OpenBao KV desde Ansible.
+> **Cuando hacerlo**: Despues de que GitOps active el cluster y el job `openbao-init` termine. **Este paso es siempre manual** — no corre en CI a proposito (ver [ADR-009](DECISIONS.md#adr-009-cicd-con-github-actions-hosted--tailscale--cloudflare-r2)), asi que hasta que lo corras las Applications que dependen de estos secretos (ArgoCD webhook, cloudflared, las bases de datos, SonarQube, OpenMemory, Flow) van a quedar en `Progressing`/`Degraded`. Es esperado, no un fallo.
 
-### 7.1 Ejecutar vault-populate
+Completa en `secrets/homelab.env` los campos que todavia falten (Databases/Monitoring/SonarQube/DevTools/Apps — vacio es valido, significa "no uso esa app todavia") y corre:
 
 ```bash
-cd ansible
-ansible-playbook vault-populate.yaml
+./scripts/load-secrets-to-openbao.sh
 ```
 
-El playbook escribe los siguientes secrets en OpenBao KV:
+El script espera a que OpenBao y el job `openbao-init` esten listos, abre un port-forward temporal, y escribe todos los secrets en OpenBao KV (infra: `secret/argocd`, `secret/infra/cloudflare`, `secret/infra/cloudflared`; apps: `secret/databases/*`, `secret/monitoring/grafana`, `secret/sonarqube/*`, `secret/devtools/openmemory`, `secret/apps/flow`). Si `cloudflared` ya esta corriendo, tambien espera a que el `ExternalSecret` sincronice el token nuevo y reinicia el Deployment.
 
-| Path KV | Contenido |
-|---------|-----------|
-| `secret/argocd` | `github_pat`, `username`, `url` |
-| `secret/infra/cloudflare` | `api_token` |
-| `secret/infra/cloudflared` | `token` |
+Podes volver a correrlo cuando quieras rotar o agregar un valor — es idempotente, solo sobreescribe los paths que tengan datos en `secrets/homelab.env`.
 
-### 7.2 Leer y guardar la recovery key de OpenBao
+### 7.1 Leer y guardar la recovery key de OpenBao
 
 La recovery key permite regenerar un root token en caso de emergencia.
 
@@ -336,34 +235,7 @@ kubectl get secret openbao-recovery-key -n secret-management \
   -o jsonpath='{.data.key}' | base64 -d && echo
 ```
 
-**Guardala de forma segura** (gestor de contrasenas o vault fisico).
-
-### 7.3 Secrets de aplicaciones (extra-secrets.yaml)
-
-`ansible/extra-secrets.yaml` cubre los secrets *por aplicación* (redis, postgresql-app, mongodb-app, grafana admin, sonarqube-db, openmemory, GHCR pull secret) — a diferencia de `secret/argocd`/`secret/infra/*` de arriba, que son core de infraestructura. Vive cifrado con `ansible-vault` (mismo patrón que `group_vars/all.yaml`) y corre automáticamente en `deploy.yml` (ver [ADR-009 en DECISIONS.md](DECISIONS.md), actualización 2026-09-06) — no hace falta correrlo a mano salvo para probar un cambio antes de pushear:
-
-```bash
-cd ansible
-ansible-playbook load-extra-secrets.yaml
-```
-
-Para agregar o rotar un valor (ej. completar `OPENAI_API_KEY` o el `dockerconfigjson` de GHCR, dejados vacíos a propósito):
-
-```bash
-cd ansible
-ansible-vault edit extra-secrets.yaml
-```
-
-Un valor vacío (`""`) es válido — significa "no uso esta app todavía", no rompe el playbook. Tras un cambio, el `ExternalSecret` correspondiente lo recoge en menos de un minuto (`refreshInterval: 1m` en los que dependen de este archivo) y Reloader reinicia el pod solo.
-
-Opcionalmente, puedes cifrar la recovery key de OpenBao y guardarla en `group_vars/all.yaml`:
-
-```bash
-cd ansible
-ansible-vault encrypt_string 'LA_KEY_DEL_PASO_ANTERIOR' --name 'openbao_recovery_key'
-```
-
-Y luego eliminar la recovery key del cluster:
+**Guardala de forma segura** (gestor de contrasenas o vault fisico) y luego eliminala del cluster:
 
 ```bash
 kubectl delete secret openbao-recovery-key -n secret-management
@@ -384,7 +256,7 @@ kubectl get pods -A
 
 | URL | Servicio | Credenciales |
 |-----|----------|--------------|
-| `https://argocd.cristianpuenguenan.online` | Argo CD | admin / (contrasena inicial del paso 4.2) |
+| `https://argocd.cristianpuenguenan.online` | Argo CD | admin / (contrasena inicial del paso 5.2) |
 | `https://grafana.cristianpuenguenan.online` | Grafana | admin / (configurada en OpenBao) |
 | `https://agentgateway.cristianpuenguenan.online` | Agent Gateway | admin / admin |
 | `https://headlamp.cristianpuenguenan.online` | Headlamp | Token de servicio |
@@ -398,37 +270,25 @@ Token para Headlamp:
 kubectl create token headlamp -n observability
 ```
 
-### 8.3 Acceso LAN directo
+### 8.3 Acceso LAN y Tailscale
 
-La VM vive en la red NAT de libvirt (`192.168.122.0/24`), no es alcanzable directamente desde la LAN. `ansible/host-network.yaml` configura firewalld en el **host** para reenviar `192.168.80.20:80/443` hacia la VM.
-
-Antes de correrlo, revisa `host_lan_interface` en `ansible/group_vars/all.yaml` — tiene que coincidir con la interfaz de red real del host (`ip -br link` para verla), no es portable entre máquinas.
+La VM tiene IP real en la LAN (bridge `vmbr0` de Proxmox) — los Gateway (`cilium-gateway-main` en `192.168.80.240`, `private-dns` en `192.168.80.253`) son alcanzables directo desde cualquier dispositivo de la LAN, sin ningun port-forward. Para acceder desde fuera de la LAN fisica, usa Tailscale: el hipervisor advierte rutas `/32` acotadas a esas IPs (ver [CI_CD_HYPERVISOR_SETUP.md §1](CI_CD_HYPERVISOR_SETUP.md)), no el `/24` completo.
 
 ```bash
-cd ansible
-ansible-playbook host-network.yaml
+curl -kI https://192.168.80.240 -H "Host: argocd.internal.cristianpuenguenan.online"
 ```
 
-Verificar desde otro equipo de la LAN:
-
-```bash
-curl -I http://192.168.80.20
-```
-
-Cloudflare Tunnel (acceso WAN) no necesita este paso — es una conexion saliente desde dentro de la VM, no le afecta el NAT.
+Cloudflare Tunnel (acceso WAN, rutas públicas) no depende de la LAN ni de Tailscale — es una conexión saliente desde dentro del cluster.
 
 ---
 
 ## 9. DNS
 
-Registros requeridos en Cloudflare:
+Las rutas **públicas** (`portfolio`, `api`) no requieren registros A manuales: se configuran como *Public Hostnames* en el dashboard de Cloudflare Zero Trust, apuntando al tunel de `cloudflared` — gestionado fuera de Git.
 
-| Registro | Tipo | Valor |
-|----------|------|-------|
-| `cristianpuenguenan.online` | A | `192.168.80.20` |
-| `*.cristianpuenguenan.online` | A | `192.168.80.20` |
+Las rutas **privadas** (`*.internal.cristianpuenguenan.online`) resuelven vía `private-dns` (CoreDNS in-cluster, IP fija `192.168.80.253`), no vía Cloudflare. Para que tu equipo las resuelva automáticamente, configura Tailscale Split DNS (Admin console → DNS → Nameservers → Split DNS) apuntando el dominio `internal.cristianpuenguenan.online` a `192.168.80.253`.
 
-Verificar certificado:
+Verificar certificado (ambos wildcards, público y privado, los emite el mismo `ClusterIssuer` DNS-01):
 
 ```bash
 kubectl get certificate -n networking
@@ -440,7 +300,7 @@ kubectl get certificate -n networking
 
 ### Apps en estado Unknown
 
-El playbook de Ansible ya crea automaticamente el `in-cluster-secret` para ArgoCD. Si por algun motivo las aplicaciones quedan en estado `Unknown`, verifica que el secret existe y reinicia el controller:
+Terraform ya crea automaticamente el `in-cluster-secret` para ArgoCD (`terraform/cluster/secrets.tf`). Si por algun motivo las aplicaciones quedan en estado `Unknown`, verifica que el secret existe y reinicia el controller:
 
 ```bash
 kubectl -n argocd get secrets -l argocd.argoproj.io/secret-type=cluster
@@ -484,43 +344,40 @@ kubectl -n secret-management exec openbao-0 -- bao operator unseal <UNSEAL_KEY>
 
 ### Volumen OpenEBS no provisiona
 
-```bash
-kubectl get lvmnode -n openebs
-kubectl -n openebs logs -l app=openebs-lvm-controller -c openebs-lvm-plugin
-# En el nodo: confirmar que el VG existe y tiene espacio libre
-vgs vg-openebs
-```
-
-### Actualizar paquetes del SO de la VM
-
-`update-vm-packages.yaml` no corre en `deploy.yml` a proposito: un `dnf upgrade` puede traer un kernel nuevo, y reiniciar el unico nodo del cluster no es algo que deba pasar sin supervision en cada push a master. Se ejecuta manualmente, en una ventana de mantenimiento elegida:
+Talos no tiene shell: no hay `vgs`/`lvs` que correr por SSH. Se inspecciona desde un pod privilegiado (ver `docs/ARCHITECTURE.md`, Troubleshooting):
 
 ```bash
-cd ansible
-ansible-playbook update-vm-packages.yaml
+kubectl get zfsnode -n openebs
+kubectl -n openebs logs -l app=openebs-zfs-controller -c openebs-zfs-plugin
+kubectl debug node/talos -it --image=alpine:3.20 -- \
+  sh -c "apk add --no-cache zfs >/dev/null && zpool status zfspv-pool"
 ```
 
-Si el output indica que se requiere reboot (kernel u otro paquete critico actualizado), el cluster completo queda caido mientras la VM reinicia (single-node). Para aplicar el reboot en el mismo paso:
+### Actualizar Talos
+
+Talos se actualiza reemplazando la imagen completa del nodo, no con un gestor de paquetes:
 
 ```bash
-ansible-playbook update-vm-packages.yaml -e reboot_if_needed=true
+talosctl --talosconfig terraform/infra/generated/talosconfig upgrade \
+  --nodes <vm_static_ip> --image factory.talos.dev/installer/<schematic_id>:<version>
 ```
+
+Como es un cluster de un solo nodo, el upgrade reinicia el nodo y el cluster completo queda caido durante el proceso — hacelo en una ventana de mantenimiento elegida.
 
 ### Reinstalar desde cero
 
-Para resetear solo el cluster (mantener la VM):
+Para destruir y recrear solo el bootstrap de Kubernetes (mantener la VM):
 
 ```bash
-cd ansible
-ansible-playbook teardown.yaml
+cd terraform/cluster
+terraform destroy
+terraform apply
 ```
 
-> **ADVERTENCIA**: `teardown.yaml` elimina el cluster k0s, certificados, etcd y unidades systemd, y borra los Logical Volumes de OpenEBS (`vg-openebs`) segun la politica de reclaim de cada StorageClass.
-
-Para destruir tambien la VM y recrearla desde cero:
+Para destruir también la VM y recrearla desde cero:
 
 ```bash
-cd terraform
+cd terraform/infra
 terraform destroy
 terraform apply
 ```
@@ -530,41 +387,39 @@ terraform apply
 ## Resumen de comandos
 
 ```bash
-# 0. Clonar repo, preparar host (libvirt + terraform + ansible)
+# 0. Clonar repo, preparar equipo de control
 git clone git@github.com:cristsr/homelab.git && cd homelab
-sudo dnf install -y '@Virtualization' libvirt qemu-kvm dnf-plugins-core git pipx curl
-sudo usermod -aG libvirt $USER   # re-login despues de esto
-sudo systemctl enable --now libvirtd
+sudo dnf install -y dnf-plugins-core git pipx curl
 sudo dnf config-manager addrepo --from-repofile=https://rpm.releases.hashicorp.com/fedora/hashicorp.repo
 sudo dnf install -y terraform
 pipx install --include-deps ansible && pipx ensurepath
 
-# 1. Aprovisionar la VM
-cd terraform
-cp terraform.tfvars.example terraform.tfvars   # completar fedora_cloud_image_url
-terraform init && terraform apply
-
-# 2. Configurar vault y secrets
-cd ../ansible
-echo "tu-contrasena" > .vault-pass
-chmod 600 .vault-pass
-# (editar group_vars/all.yaml con valores cifrados)
-
-# 3. Instalar cluster (via SSH a la VM)
-ansible-playbook site.yaml
-
-# 4. Port-forward LAN
-ansible-playbook host-network.yaml
-
-# 5. Activar GitOps
+# 1. Configurar secretos y preflight
+cp secrets/homelab.env.example secrets/homelab.env
+# (editar secrets/homelab.env con los valores de infra)
+set -a; source secrets/homelab.env; set +a
+cd ansible
+ansible-playbook preflight.yaml
 cd ..
+
+# 2. Aprovisionar la VM Talos en Proxmox
+cd ../terraform/infra
+cp terraform.tfvars.example terraform.tfvars   # completar proxmox_*/talos_schematic_id/vm_*
+terraform init -backend-config=backend.hcl && terraform apply
+
+# 3. Bootstrap de Kubernetes (Cilium, ArgoCD, ZFS)
+cd ../cluster
+cp terraform.tfvars.example terraform.tfvars
+terraform init -backend-config=backend.hcl && terraform apply
+
+# 4. Activar GitOps
+cd ../..
 kubectl apply -f gitops/root-app.yaml
 
-# 6. Poblar OpenBao
-cd ansible
-ansible-playbook vault-populate.yaml
+# 5. Poblar OpenBao (manual siempre - completa el resto de secrets/homelab.env antes)
+./scripts/load-secrets-to-openbao.sh
 
-# 7. Verificar
+# 6. Verificar
 kubectl -n argocd get applications
 kubectl get pods -A
 ```
