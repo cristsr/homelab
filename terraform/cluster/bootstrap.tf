@@ -59,16 +59,3 @@ resource "helm_release" "argocd" {
     kubernetes_namespace_v1.namespaces
   ]
 }
-
-# Cilium y ArgoCD ya estaban instalados (fuera de este state) por corridas
-# anteriores del bootstrap. El import evita el "cannot re-use a name that is
-# still in use" al primer apply de este modulo con el nuevo helm_release.
-import {
-  to = helm_release.cilium
-  id = "kube-system/cilium"
-}
-
-import {
-  to = helm_release.argocd
-  id = "argocd/argocd"
-}
