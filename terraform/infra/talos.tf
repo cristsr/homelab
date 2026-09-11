@@ -62,9 +62,13 @@ resource "talos_machine_configuration_apply" "this" {
     # machine.network.hostname (legacy) - mezclar ambos, o incluso solo
     # declarar el legacy, choca con el controller de hostname ya activo por
     # defecto ("static hostname is already set in v1alpha1 config").
+    # El data source emite HostnameConfig con auto: stable y el strategic
+    # merge patch no elimina claves, solo las sobrescribe: hay que pisar
+    # auto con "off", unico valor que la validacion permite junto a hostname.
     yamlencode({
       apiVersion = "v1alpha1"
       kind       = "HostnameConfig"
+      auto       = "off"
       hostname   = var.vm_name
     }),
     # Particiona el disco dedicado a ZFS (virtio1, ver proxmox.tf) sin
