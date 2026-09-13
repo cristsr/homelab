@@ -48,6 +48,10 @@ resource "talos_machine_configuration_apply" "this" {
         }
       }
       cluster = {
+        # Single-node: sin esta clave Talos deja el taint por defecto
+        # node-role.kubernetes.io/control-plane en el unico nodo y ningun
+        # workload de las apps se programa (todo queda Pending).
+        allowSchedulingOnControlPlanes = true
         network = {
           cni = {
             name = "none"
