@@ -1,0 +1,14 @@
+# El admission del cluster aplica PodSecurity baseline por defecto en
+# namespaces sin labels, y el node plugin CSI (DaemonSet
+# openebs-zfs-localpv-node) necesita privileged por diseno (hostNetwork,
+# hostPath y contenedor privileged para crear/manejar volumenes ZFS).
+# Sin este label el DaemonSet queda en FailedCreate eterno y todos los
+# PVCs de openebs-zfs quedan Pending.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openebs
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
