@@ -7,8 +7,4 @@ spec:
   endpointSelector:
     matchLabels:
       app: cloudflared
-  # cloudflared no expone ningun Service/listener - solo abre el tunel
-  # saliente hacia Cloudflare. Nada necesita conectarle, por eso el deny
-  # de ingress es total. Egress sin restringir (destino es el edge de
-  # Cloudflare, sin CIDR/hostname fijo practico para acotarlo).
   ingress: []
