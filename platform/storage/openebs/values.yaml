@@ -11,3 +11,10 @@
 # Sin telemetria hacia OpenEBS/Mayadata en un homelab.
 analytics:
   enabled: false
+
+# Talos tiene el rootfs inmutable y /home no existe: el default del chart
+# (/home/keys, directorio de llaves de encripcion ZFS) hace fallar el node
+# plugin con "mkdir /home: read-only file system" (CreateContainerError).
+# /var es el unico path writable persistente en Talos.
+zfsNode:
+  encrKeysDir: "/var/openebs/keys"
