@@ -18,7 +18,7 @@
 
 ## 1. Vision General
 
-Homelab de un solo nodo construido sobre Talos Linux (VM en Proxmox VE) con GitOps completo. ArgoCD gestiona todas las aplicaciones desde este repositorio. El ingress esta dividido entre dos Gateway API implementations: **Cilium Gateway API** para el trafico HTTP generico y **Agent Gateway** retenido solo para las rutas de servidores MCP (ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp)). Cloudflare Tunnel expone servicios seleccionados a Internet sin abrir puertos en el router. Ver [ADR-014](DECISIONS.md#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv) para el contexto completo de la migración desde k0s/libvirt/Fedora.
+Homelab de un solo nodo construido sobre Talos Linux (VM en Proxmox VE) con GitOps completo. ArgoCD gestiona todas las aplicaciones desde este repositorio. El ingress esta dividido entre dos Gateway API implementations: **Cilium Gateway API** para el trafico HTTP generico y **Agent Gateway** retenido solo para las rutas de servidores MCP (ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp)). Cloudflare Tunnel expone servicios seleccionados a Internet sin abrir puertos en el router. Ver [ADR-014](DECISIONS.md#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv) para el contexto completo de la migración desde k0s/libvirt/Fedora. Los servicios de datos (PostgreSQL, MongoDB, Qdrant, Redis) corren **fuera del cluster**, en LXC de Proxmox (ver [ADR-016](DECISIONS.md) y §5).
 
 ### Stack tecnologico
 
@@ -32,20 +32,20 @@ Homelab de un solo nodo construido sobre Talos Linux (VM en Proxmox VE) con GitO
 | GitOps | Argo CD 9.5.13 |
 | Certificados TLS | cert-manager: Let's Encrypt (publico y privado, DNS-01 via Cloudflare) |
 | Storage | OpenEBS ZFS LocalPV 2.11.1 |
+| Bases de datos | PostgreSQL 17, MongoDB 8.0, Qdrant v1.x, Redis 8 en LXC de Proxmox (ADR-016) |
 | Tunel Internet | Cloudflare Tunnel (cloudflared) |
 | Monitoreo | kube-prometheus-stack + Grafana Operator |
 | Secrets | OpenBao 2.5.3 + External Secrets Operator |
 | Runtime security | Tetragon |
-| Operador PostgreSQL | CloudNative-PG |
-| Operador MongoDB | Percona PSMDB Operator |
 
 ### Estructura del repositorio
 
 ```
 homelab/
 ├── terraform/
-│   ├── infra/                   # VM Talos en Proxmox (provider bpg/proxmox + siderolabs/talos)
+│   ├── infra/                   # VM Talos + LXC de datos en Proxmox (provider bpg/proxmox + siderolabs/talos)
 │   │   ├── proxmox.tf            # VM, discos (instalacion + dedicado a ZFS), ISO de Talos
+│   │   ├── lxc.tf                # Cuatro LXC de datos: PostgreSQL, MongoDB, Qdrant, Redis
 │   │   ├── talos.tf              # machine config, bootstrap, kubeconfig/talosconfig generados
 │   │   ├── variables.tf          # Sizing, red, schematic de Talos
 │   │   ├── outputs.tf            # vm_static_ip, kubeconfig_path, talosconfig_path
@@ -83,8 +83,7 @@ homelab/
 │       ├── platform/           # ArgoCD Applications de infraestructura
 │       │   ├── argocd/         # Configuracion adicional de ArgoCD
 │       │   ├── networking/     # cert-manager, cloudflared, agentgateway, cilium-gateway
-│       │   ├── storage/        # OpenEBS Local PV LVM
-│       │   ├── data-platform/  # PostgreSQL, MongoDB, Redis, Qdrant
+│       │   ├── storage/        # OpenEBS ZFS LocalPV
 │       │   ├── devtools/       # OpenMemory
 │       │   ├── observability/  # Prometheus, Grafana, Headlamp
 │       │   ├── secret-management/ # OpenBao, External Secrets
@@ -98,15 +97,15 @@ homelab/
 │   ├── argocd/
 │   ├── networking/
 │   ├── storage/
-│   ├── data-platform/
 │   ├── devtools/
 │   ├── observability/
-│   └── secret-management/
+│   ├── secret-management/
+│   └── security/
 │
 ├── workloads/                  # Aplicaciones de usuario/negocio
 │   ├── flow/                   # Flow API (Deployment, ExternalSecret, HTTPRoute)
 │   ├── portfolio/              # Sitio personal (Deployment, ConfigMap, HTTPRoute)
-│   └── sonarqube/              # SonarQube + DB + MCP server
+│   └── sonarqube/              # SonarQube + MCP server (DB externa, ver §5)
 │
 └── docs/                       # Documentacion del proyecto
     ├── ARCHITECTURE.md
@@ -182,15 +181,13 @@ Creados por `terraform/cluster/namespaces.tf` (`kubernetes_namespace_v1.namespac
 |-----------|-----------|
 | `argocd` | Argo CD |
 | `apps` | Flow API, Portfolio |
-| `data-platform` | Operadores: CloudNative-PG, Percona PSMDB |
-| `infra` | PostgreSQL, MongoDB, Redis, Qdrant (instancias, no operadores) |
 | `devtools` | OpenMemory |
 | `openebs` | OpenEBS ZFS LocalPV |
 | `networking` | Cilium Gateway, Agent Gateway (MCP), cloudflared, cert-manager, private-dns |
 | `observability` | Prometheus, Grafana, Alertmanager, Headlamp |
 | `secret-management` | OpenBao, External Secrets, Reloader |
 | `tetragon` | Tetragon |
-| `sonarqube` | SonarQube, SonarQube DB, MCP server |
+| `sonarqube` | SonarQube, MCP server |
 
 ---
 
@@ -361,7 +358,7 @@ Agente de memoria vectorial para LLMs. Almacena embeddings en Qdrant.
 ```
 Replicas: 1
 Port:     8080
-Env:      QDRANT_HOST=qdrant.data-platform.svc.cluster.local
+Env:      QDRANT_HOST=qdrant.internal.cristianpuenguenan.online (LXC externo, §5)
 Secrets:  openmemory-secrets (OPENAI_API_KEY) via ExternalSecret
 ```
 
@@ -374,54 +371,35 @@ Analisis estatico de calidad de codigo.
 ```
 Edition:  Community
 Port:     9000
-DB:       PostgreSQL en data-platform
+DB:       PostgreSQL en el LXC externo (§5): jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube
 ```
 
 ---
 
 ## 5. Bases de Datos
 
-Los operadores viven en `data-platform`; las instancias de bases de datos que administran viven en `infra`.
+Los servicios de datos **no corren en el cluster**: viven en cuatro LXC de Proxmox VE, creados por Terraform (`terraform/infra/lxc.tf`) como Debian 13 base — bridge `vmbr0`, datastore `local-lvm`, IP estatica en la LAN. Ver [ADR-016](DECISIONS.md) para la decision y sus trade-offs. La instalacion de los motores dentro de los LXC esta pendiente (aprovisionamiento posterior); los consumidores ya apuntan a los hostnames que `private-dns` (§7) resuelve, igual que las rutas privadas HTTP.
 
-### 5.1 PostgreSQL — CloudNative-PG
+### 5.1 Los cuatro LXC
 
-**Operador**: `cloudnative-pg` (namespace `data-platform`) — **CRD**: `kind: Cluster` (namespace `infra`)
+| LXC | vmid | IP | Hostname (`private-dns`) | Motor |
+|-----|------|----|--------------------------|-------|
+| `postgresql` | 121 | `192.168.80.31` | `postgres.internal.cristianpuenguenan.online` | PostgreSQL 17 — bases `homelab` y `sonarqube` |
+| `mongodb` | 122 | `192.168.80.32` | `mongodb.internal.cristianpuenguenan.online` | MongoDB 8.0 |
+| `qdrant` | 123 | `192.168.80.33` | `qdrant.internal.cristianpuenguenan.online` | Qdrant v1.x (REST 6333, gRPC 6334) |
+| `redis` | 124 | `192.168.80.34` | `redis.internal.cristianpuenguenan.online` | Redis 8 (puerto 6379) |
 
-| Parametro | Valor |
-|-----------|-------|
-| Imagen | `ghcr.io/cloudnative-pg/postgresql:17-standard` |
-| Storage | `openebs-zfs-retain` |
+Un unico PostgreSQL multi-base (`homelab` + `sonarqube`) reemplaza las dos instancias separadas que corrian en el cluster. Ya no hay operadores ni CRDs de bases de datos dentro de Kubernetes — el ciclo de vida de los LXC es responsabilidad de Terraform, y su SO se actualiza como cualquier Debian, independiente del cluster. Los motores de la tabla son el estado objetivo: los contenedores se crean base y la instalacion de cada motor queda pendiente de un aprovisionamiento posterior (ver ADR-016).
 
-Servicios generados: `-rw`, `-r`, `-ro`.
+### 5.2 Endpoints de los consumidores
 
-### 5.2 MongoDB — Percona Operator
+| Consumidor | Endpoint |
+|------------|----------|
+| SonarQube | `jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube` (`SONAR_JDBC_URL`, credenciales via ExternalSecret) |
+| OpenMemory | `qdrant.internal.cristianpuenguenan.online:6333` (`QDRANT_HOST`/`QDRANT_PORT`) |
+| Flow API | URLs de PostgreSQL/MongoDB/Redis en OpenBao (`secret/apps/flow`), como valores planos |
 
-**Operador**: `percona/psmdb-operator` (namespace `data-platform`) — **CRD**: `kind: PerconaServerMongoDB` (namespace `infra`)
-
-| Parametro | Valor |
-|-----------|-------|
-| Replica set | `rs0` (1 miembro en nodo unico) |
-| Storage | `openebs-zfs-retain` |
-
-### 5.3 Redis
-
-**Imagen**: `redis:8-alpine` — **Namespace**: `infra`
-
-| Parametro | Valor |
-|-----------|-------|
-| Puerto | 6379 |
-| Auth | via Secret |
-| Storage | `openebs-zfs-retain` |
-
-### 5.4 Qdrant (Vector DB)
-
-**Chart**: `qdrant/qdrant` — **Namespace**: `infra`
-
-| Parametro | Valor |
-|-----------|-------|
-| Puerto REST | 6333 |
-| Puerto gRPC | 6334 |
-| Storage | `openebs-zfs-retain` |
+Los backups y tareas operativas sobre las bases se documentan en `docs/OPERATIONS.md` §3.
 
 ---
 
@@ -479,7 +457,7 @@ Tailscale (dispositivos fuera de la LAN fisica, y el runner de CI)
         └── 192.168.80.253 (private-dns, via Tailscale Split DNS)
 ```
 
-Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git); para LAN/Tailscale, `private-dns` (CoreDNS, `platform/networking/private-dns/`) resuelve `internal.cristianpuenguenan.online` a la IP fija correspondiente — ver `docs/OPERATIONS.md` para configurar Tailscale Split DNS.
+Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git); para LAN/Tailscale, `private-dns` (CoreDNS, `platform/networking/private-dns/`) resuelve `internal.cristianpuenguenan.online` a la IP fija correspondiente, y los hostnames de los LXC de datos (§5) a sus IPs en la LAN — ver `docs/OPERATIONS.md` para configurar Tailscale Split DNS.
 
 ### Puertos expuestos
 
@@ -539,19 +517,18 @@ root-app (gitops/root-app.yaml)
   └── App of Apps (gitops/apps/)
         ├── Wave -1: homelab-project (AppProject)
         ├── platform/
-        │     ├── Wave 1: openebs, cert-manager, cloudnative-pg (operador), percona-mongodb (operador), reloader
+        │     ├── Wave 1: openebs, cert-manager, reloader
         │     ├── Wave 2: openebs-config, agentgateway-crds, gateway-api-crds, cert-manager-config,
         │     │           external-secrets(-config), openbao(-init)
         │     ├── Wave 3: agentgateway, cilium-service-mesh, cilium-hubble-pki, openbao-config
         │     ├── Wave 4: argocd-config, observability/secrets, agentgateway-config, tetragon,
         │     │           cilium-gateway, private-dns
         │     ├── Wave 5: prometheus, cloudflared, headlamp(-config), hubble-config
-        │     ├── Wave 6: redis, qdrant, postgresql, mongodb (instancias en `infra`), grafana-config,
-        │     │           service-monitors
+        │     ├── Wave 6: grafana-config, service-monitors
         │     ├── Wave 7: hubble-dashboards
-        │     └── Wave 8: openmemory, openmemory-ui
+        │     ├── Wave 8: openmemory
+        │     └── Wave 9: openmemory-ui
         └── workloads/
-              ├── Wave 7: sonarqube-db
               ├── Wave 8: sonarqube, sonarqube-config, sonarqube-mcp
               └── Wave 9: flow, portfolio
 ```
@@ -559,16 +536,18 @@ root-app (gitops/root-app.yaml)
 ### Dependencias implicitas
 
 ```
-OpenEBS ───────────────────────► Todas las bases de datos y PVCs
+OpenEBS ───────────────────────► PVCs del cluster (OpenBao, Prometheus, Grafana, SonarQube, Alertmanager)
 
 cert-manager (letsencrypt-prod-cloudflare-dns01) ──► wildcard-internal-online-tls ──► listener HTTPS de main
                                                 └──► wildcard-home-tls (emitido, no referenciado — ver §3.1 TLS)
 
 OpenBao ──► openbao-init ──► ExternalSecrets sync ──► todos los secrets
 
-PostgreSQL ────────────────────► SonarQube, Flow API
+LXC postgresql (externo, §5) ──► SonarQube (base sonarqube), Flow API (base homelab)
+LXC qdrant (externo, §5) ──────► OpenMemory
+LXC mongodb / redis (externos) ─► Flow API (URLs desde OpenBao, secret/apps/flow)
 
-Qdrant ────────────────────────► OpenMemory
+private-dns ──► los hostnames *.internal de los LXC resuelven para los consumers del cluster
 ```
 
 ---
@@ -577,18 +556,16 @@ Qdrant ────────────────────────�
 
 ### Volumenes persistentes (estimado)
 
+Las bases de datos ya no consumen PVCs del cluster — viven en los LXC de Proxmox (§5), con disco en `local-lvm` del host de Proxmox.
+
 | Componente | Tamanio | StorageClass |
 |-----------|---------|-------------|
-| PostgreSQL | 10Gi | openebs-zfs-retain |
-| MongoDB | 10Gi | openebs-zfs-retain |
-| Redis | 5Gi | openebs-zfs-retain |
-| Qdrant | 10Gi | openebs-zfs-retain |
 | OpenBao | 1Gi | openebs-zfs |
 | Prometheus | 20Gi | openebs-zfs |
 | Grafana | 5Gi | openebs-zfs |
 | Alertmanager | 1Gi | openebs-zfs |
 | SonarQube | 10Gi | openebs-zfs |
-| **Total** | **~72Gi** | |
+| **Total** | **~37Gi** | |
 
 ### Requerimiento minimo de la VM
 
@@ -615,7 +592,7 @@ ansible-playbook preflight.yaml
 
 ### Fase 1 — VM Talos en Proxmox (`terraform/infra`)
 
-Terraform descarga el ISO de Talos (Image Factory), crea la VM en Proxmox con dos discos, aplica la machine config (incluye el particionado declarativo del disco de ZFS), bootstrapea el cluster y genera `terraform/infra/generated/{kubeconfig,talosconfig}`.
+Terraform descarga el ISO de Talos (Image Factory), crea la VM en Proxmox con dos discos, aplica la machine config (incluye el particionado declarativo del disco de ZFS), bootstrapea el cluster y genera `terraform/infra/generated/{kubeconfig,talosconfig}`. En la misma etapa aprovisiona los cuatro LXC de datos (§5, `terraform/infra/lxc.tf`).
 
 ```bash
 cd terraform/infra

@@ -584,3 +584,51 @@ El paso a un hipervisor dedicado (Proxmox VE) con conectividad LAN real vía bri
 - Un solo lenguaje (bash) para todo el script en vez de YAML+Jinja de Ansible — más fácil de leer de punta a punta, a costa de perder el manejo de errores/retries estructurado que Ansible daba gratis (reimplementado a mano con `set -euo pipefail` + loops de espera).
 
 > **Actualización (2026-09-09, mismo día):** la primera versión de este ADR hacía que el preflight de CI validara los 6 secretos (incluidos `cloudflare_api_token`, `cloudflared_token`, `argocd_webhook_secret`), exigiendo 3 GitHub Actions secrets nuevos solo para eso. Al revisar antes de desplegar se confirmó que **CI no consume esos 3 valores en ningún paso** — solo los usa `scripts/load-secrets-to-openbao.sh`, que ya los valida por su cuenta antes de escribir en OpenBao. El preflight de CI quedó acotado a lo que Terraform realmente necesita (`argocd_github_pat`, `openbao_static_seal_key`, más `argocd_repo_url` para el chequeo de acceso al repo) — ya no hace falta crear esos 3 secrets en GitHub. De paso se corrigió un bug real: `lookup('env', 'VAR') | default('x')` en Ansible no cae al default cuando la env var existe pero está vacía (que es lo que pasa si un secret de GitHub no está configurado) — hace falta `default('x', true)`.
+
+---
+
+## ADR-016: Servicios de datos fuera del cluster, en LXC de Proxmox — un único PostgreSQL multi-base
+
+**Estado**: Aceptado
+**Fecha**: 2026-09-13
+
+### Contexto
+
+El cluster corría cinco servicios de datos dentro de Kubernetes: dos instancias de PostgreSQL gestionadas por **CloudNative-PG** (la del app `homelab` y una dedicada a SonarQube), **MongoDB** vía Percona PSMDB Operator, **Qdrant** y **Redis** — en total dos operadores, seis Applications de ArgoCD y varios PVCs de OpenEBS ZFS con copia única (`openebs-zfs-retain`).
+
+En un cluster de un solo nodo eso no compra ninguna de las ventajas de correr datos en Kubernetes: no hay réplicas, no hay live migration, no hay multitenancy que aislar. Lo que sí suma es superficie — dos operadores y sus CRDs que mantener, NetworkPolicies por servicio, PVCs que compiten con las apps por el zpool del nodo — y, lo peor, **el ciclo de vida de los datos queda atado al del cluster**: cada `talosctl upgrade`, teardown o rebuild del cluster (el propio ADR-014 migró de plataforma completa) arriesga justo lo que debería sobrevivirle.
+
+Proxmox VE ya es el hipervisor del proyecto; un LXC es la forma natural de correr un servicio con estado que no necesita nada de Kubernetes.
+
+### Opciones consideradas
+
+| Opción | Razón de descarte |
+|--------|-------------------|
+| **Mantener los datos en el cluster** | Sigue acoplando el ciclo de vida de los datos al del cluster; operadores y PVCs consumen el único nodo sin dar nada a cambio (single-node = sin réplicas) |
+| **Una VM completa por servicio** | Cuatro VMs con kernel propio para servicios livianos — overhead de RAM/disco innecesario frente a un contenedor de sistema |
+| **Un LXC por servicio, PostgreSQL separado por consumidor** | Duplica instancia, RAM, disco y backups de un mismo motor para dos bases pequeñas, sin ganar aislamiento real (mismo hipervisor, mismo host de Proxmox) |
+
+### Decisión
+
+**Cuatro LXC de Debian 13** creados de forma declarativa por Terraform (`terraform/infra/lxc.tf`) — bridge `vmbr0`, datastore `local-lvm`, IP estática en la LAN. Proxmox no soporta cloud-init para LXC (cicustom es exclusivo de QEMU), así que los contenedores se entregan **sin motor instalado**: la instalación de cada motor y sus credenciales (`TF_VAR_*` desde `secrets/homelab.env`) quedan como aprovisionamiento posterior, registrado como deuda en una historia propia:
+
+| LXC | vmid | IP | Motor |
+|-----|------|----|-------|
+| `postgresql` | 121 | `192.168.80.31` | PostgreSQL 17, bases `homelab` y `sonarqube` |
+| `mongodb` | 122 | `192.168.80.32` | MongoDB 8.0 |
+| `qdrant` | 123 | `192.168.80.33` | Qdrant v1.x |
+| `redis` | 124 | `192.168.80.34` | Redis 8 |
+
+- **Un único PostgreSQL multi-base** reemplaza las dos instancias separadas de antes (la de `homelab` y la de SonarQube): un solo motor que actualizar y respaldar, dos bases lógicas.
+- Los consumidores los alcanzan por hostname a través de `private-dns`, con cuatro registros nuevos en el Corefile: `postgres.internal.cristianpuenguenan.online`, `mongodb.internal...`, `qdrant.internal...`, `redis.internal...`. SonarQube apunta a `jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube`; OpenMemory a `qdrant.internal.cristianpuenguenan.online:6333`; las URLs de Flow ya viven en OpenBao (`secret/apps/flow`) como valores planos — solo se actualizan ahí. Reloader reinicia los Deployments afectados por el cambio de env.
+- **Desaparecen del repositorio** los operadores CloudNative-PG y Percona PSMDB, los manifiestos de las instancias y las seis Applications de ArgoCD que los desplegaban, junto con los namespaces que los albergaban. Al mergear, la root app poda las Applications eliminadas y sus finalizers cascaden a los clusters CNPG/PSMDB, Services y NetworkPolicies.
+- El ExternalSecret de credenciales de la base de SonarQube se conserva: sigue alimentando `SONAR_JDBC_USERNAME`/`SONAR_JDBC_PASSWORD`, ahora contra la instancia externa compartida.
+
+### Consecuencias
+
+- Los datos sobreviven a upgrades, teardowns y rebuilds del cluster — el cluster vuelve a ser efímero por diseño, tal como lo quiere el enfoque GitOps.
+- **Un solo punto de falla compartido**: un upgrade o restart del PostgreSQL LXC afecta a `homelab` y `sonarqube` a la vez. Aceptado a escala homelab (un operador, dos bases pequeñas); si una base llegara a necesitar aislamiento real, se separa en su propio LXC.
+- Los backups pasan de `kubectl exec` en pods a herramientas estándar contra la red (`pg_dump`/`mongodump` apuntando a los hostnames `*.internal`), con el backup a nivel de contenedor de Proxmox (`vzdump`) como complemento.
+- El cluster libera ~35Gi del zpool de OpenEBS y la RAM/CPU de operadores e instancias; el disco de los LXC vive en `local-lvm` del host de Proxmox, fuera del cluster.
+- Las NetworkPolicies de Kubernetes dejaban de aplicar: el perímetro de las bases pasa a ser la LAN del homelab (los LXC viven en `vmbr0`) — la misma confianza que ya asumen los Gateway de Cilium en esa red.
+- **La instalación de los motores dentro de los LXC queda pendiente** (deuda registral): hasta ese aprovisionamiento, SonarQube y OpenMemory no tienen base de datos operativa — ventana aceptada por el operador, los datos arrancan desde cero de todos modos.

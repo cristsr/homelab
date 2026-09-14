@@ -14,7 +14,7 @@ Este repositorio contiene la configuracion completa para levantar un cluster Kub
 - **Secretos**: OpenBao como backend de secretos, sincronizado con Kubernetes via External Secrets Operator.
 - **Almacenamiento**: OpenEBS ZFS LocalPV como storage local (ver ADR-013 y ADR-014).
 - **Monitoreo**: Prometheus, Grafana y Headlamp.
-- **Bases de datos**: PostgreSQL (CloudNative-PG), MongoDB (Percona), Redis y Qdrant.
+- **Bases de datos**: PostgreSQL, MongoDB, Redis y Qdrant en LXC de Proxmox, fuera del cluster (ver ADR-016).
 - **Herramientas**: SonarQube, OpenMemory.
 - **Acceso externo**: Cloudflare Tunnel para exponer servicios sin abrir puertos.
 
@@ -39,7 +39,7 @@ La VM se crea con **Terraform** (provider `bpg/proxmox` + `siderolabs/talos`) en
 | Ingress TLS | cert-manager + Let's Encrypt + Cloudflare DNS-01 | - |
 | Tunel WAN | Cloudflare Tunnel (cloudflared) | - |
 | Runtime security | Tetragon | - |
-| Bases de datos | CloudNative-PG, Percona MongoDB, Redis, Qdrant | - |
+| Bases de datos | PostgreSQL 17, MongoDB 8.0, Qdrant, Redis 8 (LXC de Proxmox) | - |
 
 ---
 
@@ -48,8 +48,9 @@ La VM se crea con **Terraform** (provider `bpg/proxmox` + `siderolabs/talos`) en
 ```
 homelab/
 ├── terraform/
-│   ├── infra/                   # VM Talos en Proxmox: disco, red, bootstrap de Talos
+│   ├── infra/                   # VM Talos + LXC de datos en Proxmox: disco, red, bootstrap de Talos
 │   │   ├── proxmox.tf           # VM, discos (instalacion + dedicado a ZFS), ISO de Talos
+│   │   ├── lxc.tf               # Cuatro LXC de datos: PostgreSQL, MongoDB, Qdrant, Redis
 │   │   ├── talos.tf             # machine config, bootstrap, kubeconfig/talosconfig generados
 │   │   └── generated/           # kubeconfig/talosconfig (gitignored)
 │   └── cluster/                 # Bootstrap de Kubernetes sobre el cluster ya arrancado
@@ -83,7 +84,6 @@ homelab/
 ├── platform/                    # Manifiestos y valores Helm de infraestructura
 │   ├── networking/
 │   ├── storage/
-│   ├── data-platform/
 │   ├── devtools/
 │   ├── observability/
 │   ├── secret-management/
