@@ -108,6 +108,11 @@ write_secret "argocd" \
   "webhook_secret=$ARGOCD_WEBHOOK_SECRET"
 write_secret "infra/cloudflare" "api_token=$CLOUDFLARE_API_TOKEN"
 write_secret "infra/cloudflared" "token=$CLOUDFLARED_TOKEN"
+# ghcr-pull-secret (devtools/ghcr) espera la propiedad dockerconfigjson con
+# el auth JSON completo del registry (ver el ExternalSecret ghcr-pull-secret).
+write_secret "devtools/ghcr" \
+  "dockerconfigjson=$(jq -nc --arg u "${ARGOCD_GITHUB_USERNAME:-cristsr}" --arg p "${GHCR_PAT:-}" \
+    '{auths:{"ghcr.io":{username:$u,password:$p,auth:($u+":"+$p|@base64)}}}')"
 write_secret "databases/redis" "redis-password=${REDIS_PASSWORD:-}"
 write_secret "databases/qdrant" "api_key=${QDRANT_API_KEY:-}"
 write_secret "databases/postgresql-app" \
