@@ -21,3 +21,5 @@ terraform/terraform.tfstate
 terraform/terraform.tfstate.*
 terraform/backend.hcl
 terraform/.terraform/
+
+work
