@@ -1,0 +1,91 @@
+# Contenedores LXC de los servicios de datos, en el mismo nodo Proxmox que
+# la VM de Talos. Se crean sin motor instalado (solo disco, CPU/memoria y
+# red con IP estatica); la instalacion de cada motor queda para un
+# aprovisionamiento posterior.
+
+locals {
+  data_services = {
+    postgresql = {
+      vmid       = 121
+      ip         = "192.168.80.31"
+      memory_mib = 1024
+      cores      = 1
+      disk_gb    = 15
+    }
+    mongodb = {
+      vmid       = 122
+      ip         = "192.168.80.32"
+      memory_mib = 1024
+      cores      = 1
+      disk_gb    = 10
+    }
+    qdrant = {
+      vmid       = 123
+      ip         = "192.168.80.33"
+      memory_mib = 1024
+      cores      = 1
+      disk_gb    = 10
+    }
+    redis = {
+      vmid       = 124
+      ip         = "192.168.80.34"
+      memory_mib = 512
+      cores      = 1
+      disk_gb    = 5
+    }
+  }
+}
+
+resource "proxmox_download_file" "data_vztmpl" {
+  content_type = "vztmpl"
+  datastore_id = "local"
+  node_name    = var.proxmox_node_name
+  url          = "http://download.proxmox.com/images/system/debian-13-standard_13.6-1_amd64.tar.zst"
+  file_name    = "debian-13-standard_13.6-1_amd64.tar.zst"
+}
+
+resource "proxmox_virtual_environment_container" "data_service" {
+  for_each = local.data_services
+
+  node_name    = var.proxmox_node_name
+  vm_id        = each.value.vmid
+  unprivileged = true
+
+  cpu {
+    cores = each.value.cores
+  }
+
+  memory {
+    dedicated = each.value.memory_mib
+  }
+
+  disk {
+    datastore_id = var.proxmox_datastore_id
+    size         = each.value.disk_gb
+  }
+
+  initialization {
+    hostname = each.key
+
+    dns {
+      servers = var.vm_dns_servers
+    }
+
+    ip_config {
+      ipv4 {
+        address = "${each.value.ip}/24"
+        gateway = var.vm_gateway
+      }
+    }
+  }
+
+  network_interface {
+    name   = "eth0"
+    bridge = var.network_bridge
+  }
+
+  operating_system {
+    template_file_id = proxmox_download_file.data_vztmpl.id
+    type             = "debian"
+  }
+}
