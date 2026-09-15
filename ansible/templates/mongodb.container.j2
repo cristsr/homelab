@@ -1,0 +1,16 @@
+[Unit]
+Description=MongoDB data engine
+
+[Container]
+Image=docker.io/library/mongo:8.0
+Volume=/srv/mongodb:/data/db:Z
+Network=host
+AutoUpdate=registry
+Environment=MONGO_INITDB_ROOT_USERNAME=admin
+Environment=MONGO_INITDB_ROOT_PASSWORD={{ mongodb_app_password }}
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target podman-auto-update.timer

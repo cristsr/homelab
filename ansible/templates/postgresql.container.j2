@@ -1,0 +1,17 @@
+[Unit]
+Description=PostgreSQL data engine
+
+[Container]
+Image=docker.io/library/postgres:17
+Volume=/srv/postgresql:/var/lib/postgresql/data:Z
+Network=host
+AutoUpdate=registry
+Environment=POSTGRES_USER={{ postgresql_app_username }}
+Environment=POSTGRES_PASSWORD={{ postgresql_app_password }}
+Environment=POSTGRES_DB=homelab
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target podman-auto-update.timer

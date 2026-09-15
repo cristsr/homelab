@@ -1,0 +1,15 @@
+# Instalacion compartida de Podman + el timer de auto-update, incluida por
+# data-services.yaml y openbao.yaml - ambos modulos idempotentes por si
+# mismos, sin guard adicional necesario.
+---
+- name: Install Podman
+  ansible.builtin.apt:
+    name: podman
+    state: present
+    update_cache: true
+
+- name: Enable and start the Podman auto-update timer
+  ansible.builtin.systemd:
+    name: podman-auto-update.timer
+    enabled: true
+    state: started
