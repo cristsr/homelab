@@ -2,7 +2,41 @@
 # ahora corre en localhost (la maquina que ejecuta Terraform/Ansible - el
 # runner de CI, o el operador), usando el kubeconfig que Terraform deja en
 # terraform/generated/kubeconfig.
+#
+# The data and secrets LXCs (terraform/infra/lxc.tf) do have shell and SSH,
+# unlike the Talos node: the groups below target them. `ansible_ssh_private_key_file`
+# is passed via -e or an environment variable, never hardcoded here.
 all:
   hosts:
     localhost:
       ansible_connection: local
+  children:
+    proxmox:
+      hosts:
+        proxmox-host:
+          ansible_host: 192.168.80.20
+          ansible_user: "{{ proxmox_ssh_user }}"
+          ansible_ssh_private_key_file: "{{ proxmox_ssh_private_key_file }}"
+    data_lxcs:
+      hosts:
+        postgresql:
+          ansible_host: 192.168.80.31
+          pct_vmid: 121
+        mongodb:
+          ansible_host: 192.168.80.32
+          pct_vmid: 122
+        qdrant:
+          ansible_host: 192.168.80.33
+          pct_vmid: 123
+        redis:
+          ansible_host: 192.168.80.34
+          pct_vmid: 124
+      vars:
+        ansible_user: root
+    secrets_lxc:
+      hosts:
+        openbao:
+          ansible_host: 192.168.80.35
+          pct_vmid: 125
+      vars:
+        ansible_user: root

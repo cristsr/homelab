@@ -1,0 +1,15 @@
+[Unit]
+Description=Redis data engine
+
+[Container]
+Image=docker.io/library/redis:8
+Volume=/srv/redis:/data:Z
+Network=host
+AutoUpdate=registry
+Exec=redis-server --requirepass {{ redis_password }}
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target podman-auto-update.timer

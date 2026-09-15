@@ -1,0 +1,155 @@
+# Deploys the external OpenBao instance (secrets_lxc) as a Podman Quadlet
+# unit, mirroring what the (now retired) in-cluster init Job used to do,
+# but against the LXC directly instead of a Kubernetes Job.
+---
+- name: Deploy OpenBao on the secrets LXC
+  hosts: secrets_lxc
+  become: true
+  vars:
+    openbao_data_dir: /srv/openbao
+    openbao_quadlet_path: /etc/containers/systemd/openbao.container
+    # Real value comes from -e/--extra-vars or an Ansible Vault file kept
+    # outside this repo - never a literal here.
+    openbao_unseal_key_bootstrap: "{{ lookup('env', 'OPENBAO_UNSEAL_KEY_BOOTSTRAP') }}"
+
+  tasks:
+    - name: Fail loudly if no unseal key bootstrap value was provided
+      ansible.builtin.fail:
+        msg: >-
+          openbao_unseal_key_bootstrap is empty. Set the
+          OPENBAO_UNSEAL_KEY_BOOTSTRAP environment variable (or pass
+          -e openbao_unseal_key_bootstrap=...) before running this playbook.
+      when: openbao_unseal_key_bootstrap | length == 0
+      delegate_to: localhost
+      run_once: true
+
+    - name: Install Podman and enable auto-update
+      ansible.builtin.include_tasks: tasks/install-podman.yaml
+
+    - name: Ensure the OpenBao data directory exists
+      ansible.builtin.file:
+        path: "{{ openbao_data_dir }}"
+        state: directory
+        mode: "0750"
+
+    - name: Create the Podman secret holding the unseal key
+      containers.podman.podman_secret:
+        name: openbao-unseal-key
+        data: "{{ openbao_unseal_key_bootstrap }}"
+        state: present
+        skip_existing: true
+      no_log: true
+
+    - name: Template the OpenBao Quadlet unit
+      ansible.builtin.template:
+        src: templates/openbao.container.j2
+        dest: "{{ openbao_quadlet_path }}"
+        mode: "0644"
+      register: openbao_quadlet
+
+    - name: Reload systemd to pick up the Quadlet unit
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when: openbao_quadlet.changed
+
+    - name: Start and enable the OpenBao service
+      ansible.builtin.systemd:
+        name: openbao.service
+        state: started
+        enabled: true
+
+    - name: Check whether OpenBao has already been initialized
+      ansible.builtin.stat:
+        path: "{{ openbao_data_dir }}/.initialized"
+      register: openbao_initialized_marker
+
+    - name: Initialize OpenBao once, mirroring the in-cluster init Job
+      when: not openbao_initialized_marker.stat.exists
+      block:
+        - name: Run bao operator init
+          ansible.builtin.command:
+            cmd: podman exec openbao bao operator init -recovery-shares=1 -recovery-threshold=1 -format=json
+          register: openbao_init_output
+          changed_when: true
+          no_log: true
+
+        - name: Store the recovery key back into the unseal Podman secret
+          containers.podman.podman_secret:
+            name: openbao-unseal-key
+            data: "{{ (openbao_init_output.stdout | from_json).recovery_keys_b64[0] }}"
+            state: present
+            force: true
+          no_log: true
+
+        - name: Store the root token so later runs can authenticate without re-initializing
+          containers.podman.podman_secret:
+            name: openbao-root-token
+            data: "{{ (openbao_init_output.stdout | from_json).root_token }}"
+            state: present
+            force: true
+          no_log: true
+
+        - name: Mark OpenBao as initialized
+          ansible.builtin.copy:
+            dest: "{{ openbao_data_dir }}/.initialized"
+            content: ""
+            mode: "0600"
+
+    - name: Check whether the Kubernetes auth backend for External Secrets is already configured
+      ansible.builtin.stat:
+        path: "{{ openbao_data_dir }}/.kubernetes-auth-configured"
+      register: openbao_kubernetes_auth_marker
+
+    - name: Point Kubernetes auth at the external OpenBao instance
+      when: not openbao_kubernetes_auth_marker.stat.exists
+      block:
+        - name: Read the root token back from its Podman secret
+          ansible.builtin.shell: >-
+            podman secret inspect openbao-root-token --showsecret
+            {% raw %}--format '{{ .SecretData }}'{% endraw %}
+          register: openbao_root_token_lookup
+          changed_when: false
+          no_log: true
+
+        - name: Enable the Kubernetes auth method
+          ansible.builtin.command:
+            cmd: podman exec -e BAO_TOKEN={{ openbao_root_token_lookup.stdout }} openbao bao auth enable kubernetes
+          register: openbao_auth_enable
+          failed_when: openbao_auth_enable.rc != 0 and 'already in use' not in openbao_auth_enable.stderr
+          changed_when: openbao_auth_enable.rc == 0
+          no_log: true
+
+        - name: Point the Kubernetes auth method at the Talos control plane
+          ansible.builtin.command:
+            cmd: podman exec -e BAO_TOKEN={{ openbao_root_token_lookup.stdout }} openbao bao write auth/kubernetes/config kubernetes_host=https://192.168.80.30:6443
+          changed_when: true
+          no_log: true
+
+        # Same policy/role External Secrets already used against the
+        # (now retired) in-cluster instance - moved here, never re-defined.
+        - name: Write the external-secrets policy
+          ansible.builtin.shell: |
+            podman exec -e BAO_TOKEN={{ openbao_root_token_lookup.stdout }} openbao bao policy write external-secrets - <<'POLICY'
+            path "secret/data/*"     { capabilities = ["read"] }
+            path "secret/metadata/*" { capabilities = ["list", "read"] }
+            POLICY
+          changed_when: true
+          no_log: true
+
+        - name: Write the external-secrets Kubernetes auth role
+          ansible.builtin.command:
+            cmd: >-
+              podman exec -e BAO_TOKEN={{ openbao_root_token_lookup.stdout }} openbao
+              bao write auth/kubernetes/role/external-secrets
+              bound_service_account_names=external-secrets-sa
+              bound_service_account_namespaces=secret-management
+              policies=external-secrets
+              ttl=24h
+          changed_when: true
+          no_log: true
+
+        - name: Mark the Kubernetes auth backend as configured
+          ansible.builtin.copy:
+            dest: "{{ openbao_data_dir }}/.kubernetes-auth-configured"
+            content: ""
+            mode: "0600"
