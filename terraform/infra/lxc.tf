@@ -1,7 +1,7 @@
-# Contenedores LXC de los servicios de datos, en el mismo nodo Proxmox que
-# la VM de Talos. Se crean sin motor instalado (solo disco, CPU/memoria y
-# red con IP estatica); la instalacion de cada motor queda para un
-# aprovisionamiento posterior.
+# Data and secrets-service LXC containers, on the same Proxmox node as the
+# Talos VM. Created with no engine installed (only disk, CPU/memory and a
+# static-IP network); installing each engine is left for a later
+# provisioning step.
 
 locals {
   data_services = {
@@ -29,6 +29,13 @@ locals {
     redis = {
       vmid       = 124
       ip         = "192.168.80.34"
+      memory_mib = 512
+      cores      = 1
+      disk_gb    = 5
+    }
+    openbao = {
+      vmid       = 125
+      ip         = "192.168.80.35"
       memory_mib = 512
       cores      = 1
       disk_gb    = 5
