@@ -1,0 +1,31 @@
+# Provisions SSH access to the data and secrets LXCs from the Proxmox host,
+# via `pct exec` - the only path available, since Proxmox has no cloud-init
+# for LXC (cicustom is QEMU-only) and Terraform manages no key/user for these
+# containers (see ADR-016). Never touches terraform/infra/lxc.tf or any other
+# Terraform file.
+---
+- name: Bootstrap SSH access to the data and secrets LXCs
+  hosts: data_lxcs, secrets_lxc
+  gather_facts: false
+  vars:
+    ansible_ssh_bootstrap_pubkey: "{{ lookup('env', 'ANSIBLE_SSH_BOOTSTRAP_PUBKEY') }}"
+
+  tasks:
+    - name: Fail loudly if no bootstrap public key was provided
+      ansible.builtin.fail:
+        msg: >-
+          ansible_ssh_bootstrap_pubkey is empty. Set the
+          ANSIBLE_SSH_BOOTSTRAP_PUBKEY environment variable (or pass
+          -e ansible_ssh_bootstrap_pubkey=...) before running this playbook.
+      when: ansible_ssh_bootstrap_pubkey | length == 0
+      delegate_to: localhost
+      run_once: true
+
+    - name: Seed authorized_keys via pct exec from the Proxmox host
+      ansible.builtin.shell: >-
+        pct exec {{ pct_vmid }} --
+        sh -c "mkdir -p /root/.ssh &&
+        grep -qxF '{{ ansible_ssh_bootstrap_pubkey }}' /root/.ssh/authorized_keys 2>/dev/null ||
+        echo '{{ ansible_ssh_bootstrap_pubkey }}' >> /root/.ssh/authorized_keys"
+      delegate_to: proxmox-host
+      changed_when: true
