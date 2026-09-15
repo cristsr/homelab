@@ -20,7 +20,7 @@ jdbcOverwrite:
 
 env:
   - name: SONAR_JDBC_URL
-    value: "jdbc:postgresql://sonarqube-db-rw.sonarqube.svc.cluster.local:5432/sonarqube"
+    value: "jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube"
   - name: SONAR_JDBC_USERNAME
     valueFrom:
       secretKeyRef:

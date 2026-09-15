@@ -50,7 +50,7 @@ resource "helm_release" "argocd" {
     file("${path.module}/../../bootstrap/argocd/values.yaml")
   ]
 
-  wait    = true
+  wait = true
   # ArgoCD image pull on a residential connection can be slow, keeping the 900s timeout.
   timeout = 900
 

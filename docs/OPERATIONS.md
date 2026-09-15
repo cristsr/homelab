@@ -218,22 +218,26 @@ kubectl apply -f mi-externalsecret.yaml
 
 ## 3. Backups
 
-### Backup de PostgreSQL (CloudNative-PG)
+Las bases de datos no corren en el cluster: viven en cuatro LXC de Proxmox (ver [ADR-016](DECISIONS.md) y `docs/ARCHITECTURE.md` §5). Los backups se hacen contra la red, usando los hostnames que resuelve `private-dns` — desde cualquier equipo de la LAN o del tailnet.
 
-CloudNative-PG soporta backups continuos a S3. Verificar configuracion en:
-`platform/data-platform/operators/cloudnative-pg/`
+### Backup de PostgreSQL (LXC `postgresql`, 192.168.80.31)
 
-Backup manual:
-
-```bash
-kubectl -n data-platform exec -it postgresql-1 -- pg_dump -U admin homelab > backup.sql
-```
-
-### Backup de MongoDB
+Dos bases en la misma instancia (`homelab` y `sonarqube`) — volcarlas por separado:
 
 ```bash
-kubectl -n data-platform exec -it mongodb-rs0-0 -- mongodump --out /tmp/backup
+pg_dump -h postgres.internal.cristianpuenguenan.online -U <usuario> homelab > homelab.sql
+pg_dump -h postgres.internal.cristianpuenguenan.online -U <usuario> sonarqube > sonarqube.sql
 ```
+
+### Backup de MongoDB (LXC `mongodb`, 192.168.80.32)
+
+```bash
+mongodump --host mongodb.internal.cristianpuenguenan.online --out ./backup-mongodb
+```
+
+### Backup a nivel hipervisor (vzdump)
+
+Los cuatro LXC (`postgresql` 121, `mongodb` 122, `qdrant` 123, `redis` 124) se pueden respaldar como contenedores completos desde el host de Proxmox con `vzdump` — cubre tambien Qdrant y Redis, que no tienen dump logico en estas recetas. Es complemento de los dumps logicos de arriba (mas granulares, mas faciles de restaurar selectivamente), no reemplazo.
 
 ### Backup de PersistentVolumes (OpenEBS LVM)
 

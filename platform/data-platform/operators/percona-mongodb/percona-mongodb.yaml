@@ -1,6 +1,0 @@
-watchAllNamespaces: true
-
-namespaceOverride: ""
-
-logLevel: INFO
-logStructured: false

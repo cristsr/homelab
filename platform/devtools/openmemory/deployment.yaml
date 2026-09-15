@@ -40,7 +40,7 @@ spec:
             - name: EMBEDDER_BASE_URL
               value: "https://openrouter.ai/api/v1"
             - name: QDRANT_HOST
-              value: "qdrant.infra.svc.cluster.local"
+              value: "qdrant.internal.cristianpuenguenan.online"
             - name: QDRANT_PORT
               value: "6333"
             - name: DATABASE_URL
