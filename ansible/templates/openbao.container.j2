@@ -1,0 +1,28 @@
+# Podman Quadlet unit for the external OpenBao instance (secrets_lxc).
+# AutoUpdate=registry lets podman-auto-update.timer (tasks/install-podman.yaml)
+# pull a newer digest for this same tag without a manual re-template.
+[Unit]
+Description=OpenBao (external secrets engine)
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=docker.io/openbao/openbao:2.5.3
+ContainerName=openbao
+Volume=/srv/openbao:/openbao/data:Z
+Network=host
+AutoUpdate=registry
+Secret=openbao-unseal-key,type=env,target=BAO_UNSEAL_KEY
+Environment=BAO_LOCAL_CONFIG={"storage":{"file":{"path":"/openbao/data"}},"listener":{"tcp":{"address":"0.0.0.0:8200","tls_disable":true}},"disable_mlock":true}
+
+[Service]
+Restart=always
+# Unseals right after the container starts. BAO_UNSEAL_KEY only exists
+# inside the container's own environment (injected by the Secret= line
+# above), never on the host running this unit - `sh -c` runs the expansion
+# in that container namespace instead of the host's, where the var doesn't
+# exist and `podman exec` alone (no shell) would never expand it anyway.
+ExecStartPost=/usr/bin/podman exec openbao sh -c 'bao operator unseal "$BAO_UNSEAL_KEY"'
+
+[Install]
+WantedBy=multi-user.target podman-auto-update.timer

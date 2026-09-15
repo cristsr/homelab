@@ -1,0 +1,76 @@
+# Levanta los cuatro motores de datos (PostgreSQL, MongoDB, Qdrant, Redis)
+# como contenedores Podman gestionados por systemd (Quadlet), con
+# auto-update via `podman-auto-update.timer`. Las credenciales nunca se
+# hardcodean aca: se leen del mismo `secrets/homelab.env` que ya exporta
+# `ansible/preflight.yaml` (`set -a; source secrets/homelab.env; set +a`),
+# asi cada motor termina usando las mismas credenciales que los
+# ExternalSecret de Kubernetes ya referencian.
+---
+- name: Provision data-service engines via Podman Quadlet
+  hosts: data_lxcs
+  vars:
+    postgresql_app_username: "{{ lookup('env', 'POSTGRESQL_APP_USERNAME') }}"
+    postgresql_app_password: "{{ lookup('env', 'POSTGRESQL_APP_PASSWORD') }}"
+    mongodb_app_password: "{{ lookup('env', 'MONGODB_APP_PASSWORD') }}"
+    redis_password: "{{ lookup('env', 'REDIS_PASSWORD') }}"
+    qdrant_api_key: "{{ lookup('env', 'QDRANT_API_KEY') }}"
+    sonarqube_db_username: "{{ lookup('env', 'SONARQUBE_DB_USERNAME') }}"
+    sonarqube_db_password: "{{ lookup('env', 'SONARQUBE_DB_PASSWORD') }}"
+
+  tasks:
+    - name: Fail loudly if any engine credential is missing
+      ansible.builtin.fail:
+        msg: >-
+          {{ item }} is empty. Source secrets/homelab.env (the same way
+          ansible/preflight.yaml already does) before running this playbook.
+      when: vars[item] | length == 0
+      loop:
+        - postgresql_app_username
+        - postgresql_app_password
+        - mongodb_app_password
+        - redis_password
+        - qdrant_api_key
+        - sonarqube_db_username
+        - sonarqube_db_password
+      delegate_to: localhost
+      run_once: true
+
+    - name: Install Podman and enable the auto-update timer
+      ansible.builtin.include_tasks: tasks/install-podman.yaml
+
+    - name: Template the Quadlet unit for this engine
+      ansible.builtin.template:
+        src: "templates/{{ inventory_hostname }}.container.j2"
+        dest: "/etc/containers/systemd/{{ inventory_hostname }}.container"
+        mode: "0600"
+      no_log: true
+
+    - name: Provision the sonarqube database on the shared PostgreSQL instance
+      when: inventory_hostname == 'postgresql'
+      no_log: true
+      block:
+        - name: Create the sonarqube role
+          community.postgresql.postgresql_user:
+            name: "{{ sonarqube_db_username }}"
+            password: "{{ sonarqube_db_password }}"
+            login_user: "{{ postgresql_app_username }}"
+            login_password: "{{ postgresql_app_password }}"
+            login_host: localhost
+
+        - name: Create the sonarqube database owned by that role
+          community.postgresql.postgresql_db:
+            name: sonarqube
+            owner: "{{ sonarqube_db_username }}"
+            login_user: "{{ postgresql_app_username }}"
+            login_password: "{{ postgresql_app_password }}"
+            login_host: localhost
+
+    - name: Reload systemd so the generated Quadlet unit is picked up
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Start the generated engine service
+      ansible.builtin.systemd:
+        name: "{{ inventory_hostname }}.service"
+        state: started
+        enabled: true
