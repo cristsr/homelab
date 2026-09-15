@@ -2,7 +2,6 @@ locals {
   namespaces = toset([
     "argocd",
     "apps",
-    "data-platform",
     "devtools",
     "openebs",
     "networking",

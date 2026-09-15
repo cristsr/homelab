@@ -21,3 +21,8 @@ output "kubeconfig_raw" {
   value       = talos_cluster_kubeconfig.this.kubeconfig_raw
   sensitive   = true
 }
+
+output "data_service_ips" {
+  description = "IP estatica IPv4 de cada contenedor LXC de datos"
+  value       = { for name, svc in local.data_services : name => svc.ip }
+}

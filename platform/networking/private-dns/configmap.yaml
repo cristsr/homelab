@@ -1,6 +1,8 @@
-# Registros A estaticos solo para las rutas privadas del cluster - todas
-# entran por `main` (192.168.80.240), incluidas las de Agent Gateway, que
-# se reenvian puertas adentro (ver docs/DECISIONS.md ADR-011 y ADR-012).
+# Registros A estaticos solo para las rutas privadas del cluster - las de
+# HTTP entran por `main` (192.168.80.240), incluidas las de Agent Gateway,
+# que se reenvian puertas adentro (ver docs/DECISIONS.md ADR-011 y ADR-012).
+# Los servicios de datos resuelven directo a los LXC de Proxmox
+# (ver docs/DECISIONS.md ADR-016).
 # portfolio/api no entran acá - son publicas, resuelven via el DNS real de
 # Cloudflare. `fallthrough` + `forward` evitan que esto se convierta en un
 # agujero negro si algo lo usa como DNS primario por error.
@@ -23,6 +25,10 @@ data:
             192.168.80.240 agentgateway.internal.cristianpuenguenan.online
             192.168.80.240 mcp.internal.cristianpuenguenan.online
             192.168.80.240 openmemory-api.internal.cristianpuenguenan.online
+            192.168.80.31 postgres.internal.cristianpuenguenan.online
+            192.168.80.32 mongodb.internal.cristianpuenguenan.online
+            192.168.80.33 qdrant.internal.cristianpuenguenan.online
+            192.168.80.34 redis.internal.cristianpuenguenan.online
             fallthrough
         }
         forward . 1.1.1.1 1.0.0.1
