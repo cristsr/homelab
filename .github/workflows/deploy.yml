@@ -174,31 +174,20 @@ jobs:
       # vez de mantener una copia aparte en GitHub Secrets que se puede
       # desincronizar. Mismo Service Account token de solo lectura que ya
       # usa el ClusterSecretStore del cluster.
-      - name: Load data-service credentials from 1Password
-        id: op-data-services
-        uses: 1password/load-secrets-action@v4
-        with:
-          export-env: false
-        env:
-          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          POSTGRESQL_APP_USERNAME: op://Homelab/data-services/postgresql_app_username
-          POSTGRESQL_APP_PASSWORD: op://Homelab/data-services/postgresql_app_password
-          MONGODB_APP_PASSWORD: op://Homelab/data-services/mongodb_app_password
-          REDIS_PASSWORD: op://Homelab/data-services/redis_password
-          QDRANT_API_KEY: op://Homelab/data-services/qdrant_api_key
-          SONARQUBE_DB_USERNAME: op://Homelab/data-services/sonarqube_db_username
-          SONARQUBE_DB_PASSWORD: op://Homelab/data-services/sonarqube_db_password
+      # Same class of secret as the SopsSecret CRDs the cluster reads (see
+      # ADR-018) - no external API, no rate limit, just the age key. Only
+      # ansible/data-services.env is decrypted here; the SopsSecret ones
+      # are decrypted in-cluster by sops-secrets-operator, never by CI.
+      - name: Install sops
+        run: |
+          curl -sL -o /usr/local/bin/sops \
+            https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64
+          chmod +x /usr/local/bin/sops
 
       - name: Provision data-service engines via Podman Quadlet
         working-directory: ansible
         env:
-          POSTGRESQL_APP_USERNAME: ${{ steps.op-data-services.outputs.POSTGRESQL_APP_USERNAME }}
-          POSTGRESQL_APP_PASSWORD: ${{ steps.op-data-services.outputs.POSTGRESQL_APP_PASSWORD }}
-          MONGODB_APP_PASSWORD: ${{ steps.op-data-services.outputs.MONGODB_APP_PASSWORD }}
-          REDIS_PASSWORD: ${{ steps.op-data-services.outputs.REDIS_PASSWORD }}
-          QDRANT_API_KEY: ${{ steps.op-data-services.outputs.QDRANT_API_KEY }}
-          SONARQUBE_DB_USERNAME: ${{ steps.op-data-services.outputs.SONARQUBE_DB_USERNAME }}
-          SONARQUBE_DB_PASSWORD: ${{ steps.op-data-services.outputs.SONARQUBE_DB_PASSWORD }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
-          ansible-playbook data-services.yaml --limit data_lxcs \
-            -e ansible_ssh_private_key_file="$HOME/.ssh/ci_ed25519"
+          sops exec-env data-services.env \
+            'ansible-playbook data-services.yaml --limit data_lxcs -e ansible_ssh_private_key_file="$HOME/.ssh/ci_ed25519"'
