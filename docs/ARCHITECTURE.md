@@ -72,7 +72,7 @@ homelab/
 │   └── homelab.env.example     # Plantilla de credenciales de infra y de las LXC de datos, gitignored el real
 │
 ├── scripts/
-│   └── migrate-openbao-to-1password.sh  # Migra secrets del OpenBao in-cluster a 1Password (manual, no corre en CI)
+│   └── apply-real-secrets.sh    # Carga secrets/homelab.env en los SopsSecret/env cifrados del repo (manual, no corre en CI)
 │
 ├── bootstrap/                   # Values/scripts que consume terraform/cluster/bootstrap.tf
 │   ├── cilium/values.yaml       # Valores de Cilium (incluye ajustes especificos de Talos)
@@ -170,7 +170,7 @@ Controla el ciclo de vida de todas las aplicaciones del cluster. La `root-app` a
 |-----------|-------|
 | `server.ingress.enabled` | `false` (gestionado por HTTPRoute contra el Gateway de Cilium) |
 | `server.insecure` | `true` (TLS terminado en el Gateway `main` con Let's Encrypt — el backend siempre habla HTTP plano, ver §3.1 TLS) |
-| Timeout de reconciliacion | `600s` (fallback de seguridad — el sync real lo dispara un webhook de GitHub en segundos, ver `docs/TODO.md`) |
+| Timeout de reconciliacion | `180s` (unico mecanismo de sync desde ADR-019 — el webhook de GitHub se retiro, ver `docs/DECISIONS.md`) |
 | RBAC por defecto | `role:readonly` |
 | Dominio | `argocd.internal.cristianpuenguenan.online` |
 | Tolerations | `node-role.kubernetes.io/control-plane:NoSchedule` (cluster de un solo nodo, ver §2.1) |
@@ -470,33 +470,26 @@ Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la 
 
 ### Archivo local de secretos
 
-Las credenciales de las LXC de datos viven en `secrets/homelab.env`, plano y **nunca commiteado** (`.gitignore`), consumido por `ansible/data-services.yaml`. Los secretos de la aplicacion viven en 1Password (vault "Homelab"), nunca en el repo ni en CI. En CI, el preflight de credenciales usa GitHub Actions secrets/vars para lo que Terraform consume (ver `docs/CI_CD_HYPERVISOR_SETUP.md`).
+Las credenciales de las LXC de datos vivian antes en `secrets/homelab.env` (plano, gitignored); desde ADR-018 viven cifradas en `ansible/data-services.env` (SOPS + age), consumido por CI via `sops exec-env` antes de correr `ansible/data-services.yaml`. En CI, el preflight de credenciales usa GitHub Actions secrets/vars para lo que Terraform consume (ver `docs/CI_CD_HYPERVISOR_SETUP.md`).
 
-| Variable (`secrets/homelab.env`) | Descripcion |
-|----------|-------------|
-| `ARGOCD_GITHUB_PAT` | PAT de GitHub para ArgoCD |
-| `ARGOCD_WEBHOOK_SECRET` | Secret del webhook de GitHub que dispara el sync de ArgoCD |
-| `CLOUDFLARE_API_TOKEN` | Token API Cloudflare (DNS-01) |
-| `CLOUDFLARED_TOKEN` | Token del tunel Cloudflare |
+### Gestion de Secretos en el Cluster (SOPS + age, ver ADR-018 y ADR-019)
 
-### Gestion de Secretos en el Cluster
+1. **SOPS + age** es la unica fuente de verdad de los secretos de la aplicacion (dentro y fuera del cluster) — cada valor se cifra con la clave publica de `age` y se commitea cifrado al repo. No hay backend externo, no hay rate limit.
+2. **Terraform** (`terraform/cluster/secrets.tf`) crea los secrets iniciales de ArgoCD (`github-repo-creds`, `in-cluster-secret`).
+3. **`sops-secrets-operator`** (namespace `sops`) corre en el cluster con la clave privada de `age` montada, y traduce cada `SopsSecret` (CRD, cifrado) a un `Secret` de Kubernetes real. ArgoCD aplica el `SopsSecret` tal cual, cifrado — nunca necesita saber de SOPS.
+4. La **clave privada de `age`** es la unica pieza sensible fuera del repo: vive en el `Secret` que monta el operador, y su unico backup es un documento manual en 1Password (`sops-age-homelab-key`, vault "Homelab") — lectura unica para recuperacion de desastre, no una integracion activa. Desde ADR-019, 1Password no tiene ninguna otra integracion en el cluster ni en CI.
 
-1. **1Password** (vault "Homelab") es la unica fuente de verdad de los secretos de la aplicacion — se cargan a mano o via `scripts/migrate-openbao-to-1password.sh`.
-2. **Terraform** (`terraform/cluster/secrets.tf`) crea los secrets iniciales de ArgoCD (`github-repo-creds`, `in-cluster-secret`) — no depende de 1Password.
-3. El **Service Account token** de 1Password se carga a mano como Secret de Kubernetes (`onepassword-service-account-token`, namespace `secret-management`) — nunca por Terraform ni CI.
-4. **External Secrets Operator** sincroniza desde 1Password hacia Kubernetes Secrets, vía el `ClusterSecretStore` `onepassword`.
-
-#### Estructura de items en 1Password (vault "Homelab")
+#### Inventario de `SopsSecret` (`*.sops.yaml` en el repo)
 
 ```
-argocd                -> username, github_pat, url, webhook_secret
-infra/cloudflare       -> api_token
-infra/cloudflared      -> token
-databases/*            -> credenciales de Redis/Qdrant/PostgreSQL/MongoDB
-monitoring/grafana      -> username, password
-sonarqube/*             -> db-credentials, monitoring (passcode)
-devtools/openmemory     -> OPENAI_API_KEY
-apps/flow               -> database-url, mongodb-url, redis-url
+platform/argocd/repo-credentials.sops.yaml          -> PAT de GitHub para ArgoCD
+platform/networking/cert-manager/cloudflare-api-token.sops.yaml -> token API Cloudflare (DNS-01)
+platform/networking/cloudflared/token.sops.yaml     -> token del tunel Cloudflare
+platform/observability/secrets/grafana-admin.sops.yaml -> admin de Grafana
+platform/devtools/openmemory/secrets.sops.yaml       -> OPENAI_API_KEY, QDRANT_API_KEY, ghcr-pull-secret
+workloads/flow/secrets.sops.yaml                     -> database-url, mongodb-url, redis-url
+workloads/sonarqube/secrets.sops.yaml                -> credenciales de DB, passcode de monitoring
+ansible/data-services.env (dotenv, no CRD)           -> credenciales de Postgres/Mongo/Redis/Qdrant, solo CI
 ```
 
 ---
@@ -615,12 +608,12 @@ Seguir progreso:
 kubectl -n argocd get applications -w
 ```
 
-### Fase 4 — Poblar 1Password (manual, no corre en CI)
+### Fase 4 — Cargar los secretos reales (manual, no corre en CI)
 
 ```bash
-kubectl create secret generic onepassword-service-account-token \
-  -n secret-management --from-literal=token=<TOKEN_DEL_SERVICE_ACCOUNT>
-./scripts/migrate-openbao-to-1password.sh
+cp secrets/homelab.env.example secrets/homelab.env && $EDITOR secrets/homelab.env
+export SOPS_AGE_KEY_FILE=~/.sops-keys/homelab.key.txt
+./scripts/apply-real-secrets.sh secrets/homelab.env
 ```
 
 ---

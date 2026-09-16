@@ -136,12 +136,11 @@ jobs:
 
       # Ultimo paso del bootstrap: registra la Application raiz de ArgoCD,
       # que ya tiene su namespace/secrets creados por terraform/cluster. Los
-      # secrets reales viven en 1Password (vault "Homelab", ver
-      # platform/secret-management/) - las Applications que dependen de ellos
-      # quedan en Progressing/Degraded hasta que exista el Secret con el
-      # token del Service Account (onepassword-service-account-token, ns
-      # secret-management) y el vault tenga los items - es esperado, no un
-      # fallo del pipeline.
+      # secrets reales viven cifrados en el repo (SOPS + age, ver ADR-018/019
+      # en docs/DECISIONS.md) - las Applications que dependen de ellos quedan
+      # en Progressing/Degraded hasta que se corra
+      # `./scripts/apply-real-secrets.sh` a mano (docs/INSTALL.md §7) - es
+      # esperado, no un fallo del pipeline.
       - name: Register ArgoCD root Application
         env:
           KUBECONFIG: ${{ github.workspace }}/terraform/infra/generated/kubeconfig

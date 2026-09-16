@@ -705,3 +705,29 @@ El operador decidió eliminar la dependencia de un API externo con rate limit pa
 - **La clave privada de age es ahora la clave maestra de todo el sistema**: si se pierde sin el backup en 1Password, ningún secret cifrado en el repo es recuperable. A diferencia de 1Password (donde la cuenta gestiona la recuperación), acá la responsabilidad de no perder esa clave es enteramente del operador.
 - Se pierde el UI de 1Password para rotar secrets a mano — rotar un valor ahora es `sops decrypt`, editar, `sops encrypt -i`, commit. Más fricción, pero sin límite de requests.
 - 1Password queda como backend "híbrido": sigue siendo la fuente de verdad para `argocd-webhook-secret` y las credenciales de `data-services.yaml`, además del backup de la clave de age — no se elimina del todo, se acota a los casos de bajo volumen donde no representa riesgo.
+
+> **Actualización (2026-09-16, mismo día):** las credenciales de `ansible/data-services.yaml` también migraron a SOPS (`ansible/data-services.env`, consumido vía `sops exec-env` en CI) — ver PR #26. El único consumidor que quedó en 1Password fue `argocd-webhook-secret`, retirado por completo en ADR-019 más abajo el mismo día, tras confirmar en logs del controller de External Secrets que el `ClusterSecretStore` seguía devolviendo `rate limit exceeded` mucho después de la ventana de reset esperada — la cuenta de 1Password resultó no ser confiable ni siquiera para el único consumidor de bajo volumen que quedaba.
+
+---
+
+## ADR-019: Se retira el webhook de GitHub (y con él, el último uso de 1Password) — vuelta a polling
+
+**Estado**: Aceptado
+**Fecha**: 2026-09-16
+
+### Contexto
+
+`argocd-webhook-secret` (`platform/argocd/webhook-externalsecret.yaml`) era el único consumidor que quedaba del `ClusterSecretStore` `onepassword` tras ADR-018. Revisando el estado general del clúster después de desplegar `data-services.yaml` se encontró que el `ClusterSecretStore` llevaba horas en `SecretSyncedError` con `rate limit exceeded` en los logs del controller de External Secrets — la cuenta de 1Password seguía sin resetear la cuota mucho después de la ventana esperada (~11-12h desde el agotamiento). Con el store roto, `argocd-secret` nunca recibía `webhook.github.secret`, así que cualquier entrega del webhook de GitHub (`https://argocd.cristianpuenguenan.online/api/webhook`, activo desde el incidente de ADR-011/`docs/TODO.md` #3) fallaba la verificación HMAC. El polling de `timeout.reconciliation: 600s` seguía funcionando como red de seguridad, así que el clúster nunca dejó de sincronizar — pero mantener una integración externa rota, de bajo valor, y ya sin ningún otro consumidor no se justificaba.
+
+### Decisión
+
+- Se elimina `platform/argocd/webhook-externalsecret.yaml`, `platform/argocd/httproute-webhook.yaml` y el `ClusterSecretStore` `onepassword` (`platform/secret-management/external-secrets/cluster-secret-store.yaml`) — con esto, 1Password deja de tener **cualquier** integración activa en el clúster o en CI. Solo queda como backup manual y offline de la clave privada de `age` (ver ADR-018), que no es una integración, es un documento.
+- Se elimina el webhook registrado en GitHub (`gh api -X DELETE repos/cristsr/homelab/hooks/<id>`) y el Secret huérfano `onepassword-service-account-token` (namespace `secret-management`, nunca gestionado por Terraform/GitOps, cargado a mano en su momento).
+- `timeout.reconciliation` vuelve a `180s` (el valor original de antes del webhook, `docs/TODO.md` #3) — ya no es un fallback de seguridad detrás de un webhook que dispara en segundos, es el único mecanismo de sync, así que el intervalo vuelve a ser el que determina la latencia real entre un push y el sync.
+- Explícitamente **temporal**: si más adelante se quiere sync casi instantáneo de nuevo, hay que reimplementar el webhook con un secret que no dependa de un backend externo con rate limit (por ejemplo, un `SopsSecret` normal con `creationPolicy` que no pise los campos que ArgoCD administra en `argocd-secret`, o generar el secret del webhook con Terraform en vez de sincronizarlo).
+
+### Consecuencias
+
+- 1Password queda completamente fuera del camino crítico del clúster y de CI — ADR-017 y ADR-018 quedan cerrados del todo, ya no hay backend "híbrido".
+- Sync más lento tras un push: hasta 180s en vez de segundos. Aceptable para un homelab de un solo operador; se documenta como el trade-off consciente de esta decisión.
+- Si `timeout.reconciliation` se vuelve a poner en `0s` por error, el clúster deja de sincronizar por completo y en silencio (mismo incidente que ADR-011/`docs/TODO.md` #3) — no hay ningún webhook que lo compense esta vez. Vigilar este valor en cualquier cambio futuro a `bootstrap/argocd/values.yaml`.
