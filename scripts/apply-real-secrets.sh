@@ -97,13 +97,13 @@ set_field platform/observability/secrets/grafana-admin.sops.yaml \
 set_field platform/observability/secrets/grafana-admin.sops.yaml \
   '["spec"]["secretTemplates"][0]["stringData"]["GF_SECURITY_ADMIN_PASSWORD"]' "$(get GRAFANA_ADMIN_PASSWORD)"
 
-# --- platform/argocd/repo-credentials.sops.yaml (opcional, actualmente sin uso real) ---
-set_field platform/argocd/repo-credentials.sops.yaml \
-  '["spec"]["secretTemplates"][0]["stringData"]["username"]' "$(get ARGOCD_REPO_USERNAME)"
-set_field platform/argocd/repo-credentials.sops.yaml \
-  '["spec"]["secretTemplates"][0]["stringData"]["password"]' "$(get ARGOCD_REPO_PAT)"
-set_field platform/argocd/repo-credentials.sops.yaml \
-  '["spec"]["secretTemplates"][0]["stringData"]["url"]' "$(get ARGOCD_REPO_URL)"
+# platform/argocd/repo-credentials.sops.yaml se elimino (ver docs/DECISIONS.md
+# ADR-020-bis/commit d85afd3): duplicaba github-repo-creds
+# (terraform/cluster/secrets.tf, ya con el PAT real) con un `repository`-typed
+# secret que, si su `url` llega a coincidir exacto con el repo real mientras
+# username/password quedan en un placeholder viejo, ArgoCD lo prefiere sobre
+# el que si funciona y rompe TODO el sync del cluster. No recrear este
+# archivo - si hace falta un segundo repo-creds, usar Terraform, no SOPS.
 
 # --- workloads/flow/secrets.sops.yaml (opcional, `flow` hoy es un stub sin uso real) ---
 set_field workloads/flow/secrets.sops.yaml \
