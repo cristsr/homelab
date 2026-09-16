@@ -10,7 +10,7 @@ spec:
   ingress:
     # openmemory.internal... se enruta directo por el Gateway `main` de
     # Cilium - proxy embebido en el cilium-agent (hostNetwork), llega como
-    # trafico host-originado (mismo caso que openbao, ver esa policy).
+    # trafico host-originado.
     - fromEntities:
         - host
       toPorts:

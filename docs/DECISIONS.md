@@ -632,3 +632,48 @@ Proxmox VE ya es el hipervisor del proyecto; un LXC es la forma natural de corre
 - El cluster libera ~35Gi del zpool de OpenEBS y la RAM/CPU de operadores e instancias; el disco de los LXC vive en `local-lvm` del host de Proxmox, fuera del cluster.
 - Las NetworkPolicies de Kubernetes dejaban de aplicar: el perímetro de las bases pasa a ser la LAN del homelab (los LXC viven en `vmbr0`) — la misma confianza que ya asumen los Gateway de Cilium en esa red.
 - **La instalación de los motores dentro de los LXC queda pendiente** (deuda registral): hasta ese aprovisionamiento, SonarQube y OpenMemory no tienen base de datos operativa — ventana aceptada por el operador, los datos arrancan desde cero de todos modos.
+
+---
+
+## ADR-017: Reemplazo de OpenBao por 1Password como backend de secretos
+
+**Estado**: Aceptado
+**Fecha**: 2026-09-16
+
+### Contexto
+
+Se terminó de desplegar OpenBao en su propia LXC externa (`secrets_lxc`, 192.168.80.35) como sucesor del OpenBao in-cluster (ver ADR-016). En el proceso salieron a la luz varios problemas reales, nunca antes ejercitados porque el playbook nunca se había corrido de punta a punta:
+
+- `ansible/openbao.yaml` pedía `-recovery-shares=1 -recovery-threshold=1` en el init, flags que solo aplican con un `seal` de auto-unseal configurado (no es el caso, seal Shamir plano) — se ignoraban en silencio y el init caía al default de 5 shares / umbral 3, rompiendo el diseño de una sola clave.
+- El `Environment=BAO_LOCAL_CONFIG={...}` del Quadlet tenía JSON crudo sin escapar: systemd interpreta las comillas dobles como parte de su propia sintaxis de quoting, así que el contenedor recibía el JSON sin comillas.
+- El entrypoint de la imagen inyecta `-dev-listen-address=0.0.0.0:8200` cada vez que el comando es literalmente `server`, sin importar si `-dev` está activo — eso duplicaba el bind del listener y reventaba con "address already in use".
+- `ExecStartPost` desellaba inmediatamente al arrancar el contenedor, sin esperar a que el server estuviera realmente escuchando ("connection refused"), y además era fatal en el primer arranque (antes de que existiera `bao operator init`), lo que tumbaba toda la unit antes de llegar a inicializar.
+- El storage bind-mounteado quedaba `root:root` pero el proceso dropea privilegios a un usuario no-root (`openbao`, uid 100/gid 1000) — permission denied.
+- `bao write auth/kubernetes/config` intentaba autodetectar el CA cert del filesystem estándar de un pod in-cluster, que no existe fuera del clúster.
+- Las LXC son `unprivileged` sin `features { nesting, fuse }` — Podman no puede montar overlayfs vía fuse-overlayfs sin eso, afectando también a las LXC de datos.
+
+Todos estos bugs se corrigieron y OpenBao terminó funcionando de punta a punta (init con una sola clave, auto-unseal vía Podman secret en cada arranque, auth de Kubernetes configurado). Pero el operador, después de ver cuánta ceremonia hace falta para un vault funcional en un homelab de un solo operador (seal/unseal, Shamir, backend de auth, policies, roles) — decidió que no vale la pena mantenerlo: prefiere delegar todo eso a un servicio gestionado.
+
+### Opciones consideradas
+
+| Opción | Razón de descarte |
+|--------|-------------------|
+| Mantener OpenBao con auto-unseal vía AWS KMS (`seal "awskms"`) | Resuelve solo el unseal (deja de ser una clave cruda en un Podman secret) por ~$1/mes, pero no elimina el resto de la ceremonia (init, auth backend, policies, roles) — mejora parcial, no la simplificación que busca el operador. |
+| Cloudflare como KMS/secret store | No existe: Cloudflare no tiene un servicio de KMS comparable a AWS KMS, y su "Secrets Store" es exclusivo para bindings de Workers/Pages, sin API externa que ESO pueda consumir. |
+| 1Password Connect (self-hosted) | Requiere correr un servidor adicional (API + sync) — más infraestructura a mantener, no menos. Descartado a favor de Service Accounts. |
+
+### Decisión
+
+- **1Password** como backend de secretos, vault dedicado **"Homelab"**, vía un **Service Account** con acceso de solo lectura a ese único vault (no Connect server — sin infraestructura adicional que correr).
+- `ClusterSecretStore` usa el provider `onepasswordSDK` (`platform/secret-management/external-secrets/cluster-secret-store.yaml`), autenticado con el token del Service Account guardado en el Secret de Kubernetes `onepassword-service-account-token` (namespace `secret-management`).
+- Los 10 `ExternalSecret` del repo pasan a `secretStoreRef.name: onepassword` — el `remoteRef.key`/`property` no cambia: 1Password matchea el título del item con `key` y la label del campo con `property`, y se mantuvieron los mismos strings que ya usaba el árbol KV de Vault (`argocd`, `devtools/openmemory`, `infra/cloudflare`, etc.) para minimizar el diff.
+- `scripts/migrate-openbao-to-1password.sh` reemplaza a `migrate-openbao-secrets.sh` y `load-secrets-to-openbao.sh`: camina el árbol KV del OpenBao in-cluster (que sigue vivo, ver ADR-016) y crea/actualiza un item por path en el vault "Homelab" vía `op item create`/`op item edit`. Manual, nunca en CI — mismo criterio que ADR-015.
+- Se destruye la LXC 125 (`openbao`, 192.168.80.35): se elimina el recurso de `terraform/infra/lxc.tf`, `ansible/openbao.yaml`, `ansible/templates/openbao.container.j2`, el grupo `secrets_lxc` del inventario, y las referencias a `OPENBAO_STATIC_SEAL_KEY` en Terraform/CI/preflight (quedaba del mecanismo de sellado estático del OpenBao in-cluster viejo, ya retirado).
+- Se limpiaron 3 `ExternalSecret` huérfanos (`mongodb-app-secret`, `postgresql-app-secret`, `redis-secret`, namespace `infra`) que quedaron del refactor de ADR-016 sin manifiesto en git — el `ClusterSecretStore` roto (ver más abajo) nunca los podó.
+
+### Consecuencias
+
+- Desaparece toda la ceremonia de Vault-family: no hay init, no hay seal/unseal, no hay backend de auth de Kubernetes que configurar, no hay policies ni roles.
+- Se depende de la disponibilidad de la API de 1Password (SaaS) para que ExternalSecrets sincronice — antes esa dependencia era 100% self-hosted (la LXC). Con `deletionPolicy: Retain` en todos los ExternalSecrets, una caída de 1Password no borra los Secrets de Kubernetes ya sincronizados, solo congela las actualizaciones.
+- El Service Account de 1Password tiene rate limits más estrictos que un Connect server (que cachea localmente) — no debería importar al refresh interval de 1h/1m que ya usan estos ExternalSecrets, pero es un límite a tener presente si se agregan muchos más secrets.
+- Se pierde el control total self-hosted sobre el backend de secretos a cambio de simplicidad operativa — trade-off consciente para un homelab de un solo operador.

@@ -33,15 +33,12 @@ jobs:
       # Falla en segundos si falta o es invalida una credencial, antes de
       # gastar tiempo conectando Tailscale y aprovisionando la VM. Solo
       # valida lo que Terraform realmente consume mas abajo en este mismo
-      # job - la carga de OpenBao (cloudflare/cloudflared/webhook) es manual
-      # y no corre en CI (ver secrets/homelab.env.example y
-      # docs/CI_CD_HYPERVISOR_SETUP.md).
+      # job.
       - name: Preflight - validate secrets
         working-directory: ansible
         env:
           ARGOCD_GITHUB_PAT: ${{ secrets.ARGOCD_GITHUB_PAT }}
           ARGOCD_REPO_URL: ${{ vars.ARGOCD_REPO_URL }}
-          OPENBAO_STATIC_SEAL_KEY: ${{ secrets.OPENBAO_STATIC_SEAL_KEY }}
         run: ansible-playbook preflight.yaml
 
       # Necesario porque Proxmox y la VM Talos viven en la LAN del homelab
@@ -113,7 +110,6 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           TF_VAR_kubeconfig_path: ${{ github.workspace }}/terraform/infra/generated/kubeconfig
           TF_VAR_argocd_github_pat: ${{ secrets.ARGOCD_GITHUB_PAT }}
-          TF_VAR_openbao_static_seal_key: ${{ secrets.OPENBAO_STATIC_SEAL_KEY }}
         run: |
           terraform init -backend-config=backend.hcl
           terraform apply -auto-approve -input=false
@@ -139,13 +135,44 @@ jobs:
           done
 
       # Ultimo paso del bootstrap: registra la Application raiz de ArgoCD,
-      # que ya tiene su namespace/secrets creados por terraform/cluster. La
-      # carga de secretos en OpenBao NO corre en CI a proposito - es un paso
-      # manual (./scripts/load-secrets-to-openbao.sh, ver README y
-      # docs/OPERATIONS.md). Las Applications que dependen de esos secretos
-      # quedan en Progressing/Degraded hasta que se corra ese script - es
-      # esperado, no un fallo del pipeline.
+      # que ya tiene su namespace/secrets creados por terraform/cluster. Los
+      # secrets reales viven en 1Password (vault "Homelab", ver
+      # platform/secret-management/) - las Applications que dependen de ellos
+      # quedan en Progressing/Degraded hasta que exista el Secret con el
+      # token del Service Account (onepassword-service-account-token, ns
+      # secret-management) y el vault tenga los items - es esperado, no un
+      # fallo del pipeline.
       - name: Register ArgoCD root Application
         env:
           KUBECONFIG: ${{ github.workspace }}/terraform/infra/generated/kubeconfig
         run: kubectl apply -f gitops/root-app.yaml
+
+      # Motores de datos (postgresql/mongodb/qdrant/redis) en sus LXCs.
+      - name: Write CI SSH key for the data LXCs
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.PROXMOX_SSH_PRIVATE_KEY }}" > ~/.ssh/ci_ed25519
+          chmod 600 ~/.ssh/ci_ed25519
+          ssh-keygen -y -f ~/.ssh/ci_ed25519 > ~/.ssh/ci_ed25519.pub
+
+      - name: Bootstrap SSH access to the data LXCs
+        working-directory: ansible
+        run: |
+          ansible-playbook bootstrap-lxc-ssh.yaml --limit data_lxcs \
+            -e proxmox_ssh_user=root \
+            -e proxmox_ssh_private_key_file="$HOME/.ssh/ci_ed25519" \
+            -e ansible_ssh_bootstrap_pubkey="$(cat "$HOME/.ssh/ci_ed25519.pub")"
+
+      - name: Provision data-service engines via Podman Quadlet
+        working-directory: ansible
+        env:
+          POSTGRESQL_APP_USERNAME: ${{ secrets.POSTGRESQL_APP_USERNAME }}
+          POSTGRESQL_APP_PASSWORD: ${{ secrets.POSTGRESQL_APP_PASSWORD }}
+          MONGODB_APP_PASSWORD: ${{ secrets.MONGODB_APP_PASSWORD }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+          SONARQUBE_DB_USERNAME: ${{ secrets.SONARQUBE_DB_USERNAME }}
+          SONARQUBE_DB_PASSWORD: ${{ secrets.SONARQUBE_DB_PASSWORD }}
+        run: |
+          ansible-playbook data-services.yaml --limit data_lxcs \
+            -e ansible_ssh_private_key_file="$HOME/.ssh/ci_ed25519"

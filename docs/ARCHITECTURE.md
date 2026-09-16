@@ -35,7 +35,7 @@ Homelab de un solo nodo construido sobre Talos Linux (VM en Proxmox VE) con GitO
 | Bases de datos | PostgreSQL 17, MongoDB 8.0, Qdrant v1.x, Redis 8 en LXC de Proxmox (ADR-016) |
 | Tunel Internet | Cloudflare Tunnel (cloudflared) |
 | Monitoreo | kube-prometheus-stack + Grafana Operator |
-| Secrets | OpenBao 2.5.3 + External Secrets Operator |
+| Secrets | 1Password + External Secrets Operator |
 | Runtime security | Tetragon |
 
 ### Estructura del repositorio
@@ -53,24 +53,26 @@ homelab/
 │   └── cluster/                  # Bootstrap de Kubernetes (una vez el cluster ya arranco)
 │       ├── bootstrap.tf          # helm_release: Cilium, ArgoCD
 │       ├── namespaces.tf         # Namespaces base
-│       ├── secrets.tf            # Secrets iniciales (repo-creds, in-cluster, unseal key)
+│       ├── secrets.tf            # Secrets iniciales (repo-creds, in-cluster)
 │       ├── storage.tf            # Job que crea el zpool de OpenEBS ZFS LocalPV
-│       └── variables.tf          # kubeconfig_path, credenciales de ArgoCD/OpenBao
+│       └── variables.tf          # kubeconfig_path, credenciales de ArgoCD
 │
-├── ansible/                    # Preflight de secrets y poblado de OpenBao (Talos no tiene SSH)
+├── ansible/                    # Preflight + aprovisionamiento de las LXC de datos (Talos no tiene SSH)
 │   ├── tasks/
 │   │   ├── preflight-secrets.yaml        # Valida que las credenciales no esten vacias
 │   │   ├── preflight-remote-checks.yaml  # Chequeos de conectividad remota
-│   │   └── openbao-kv-write.yaml         # Port-forward + write generico a OpenBao KV
+│   │   └── install-podman.yaml           # Instalacion compartida de Podman + auto-update
+│   ├── data-services.yaml      # Levanta postgresql/mongodb/qdrant/redis via Podman Quadlet
+│   ├── bootstrap-lxc-ssh.yaml   # Siembra la pubkey de SSH en las LXC via pct exec
 │   ├── ansible.cfg             # Configuracion de Ansible
-│   ├── inventory.yaml          # localhost - Talos no expone SSH/shell al nodo
+│   ├── inventory.yaml          # localhost + las LXC de datos (Talos no expone SSH/shell al nodo)
 │   └── preflight.yaml          # Corre antes de `terraform apply` en CI (falla rapido)
 │
 ├── secrets/
-│   └── homelab.env.example     # Plantilla de credenciales (infra + apps), gitignored el real
+│   └── homelab.env.example     # Plantilla de credenciales de infra y de las LXC de datos, gitignored el real
 │
 ├── scripts/
-│   └── load-secrets-to-openbao.sh  # Poblar OpenBao (manual, no corre en CI)
+│   └── migrate-openbao-to-1password.sh  # Migra secrets del OpenBao in-cluster a 1Password (manual, no corre en CI)
 │
 ├── bootstrap/                   # Values/scripts que consume terraform/cluster/bootstrap.tf
 │   ├── cilium/values.yaml       # Valores de Cilium (incluye ajustes especificos de Talos)
@@ -86,7 +88,7 @@ homelab/
 │       │   ├── storage/        # OpenEBS ZFS LocalPV
 │       │   ├── devtools/       # OpenMemory
 │       │   ├── observability/  # Prometheus, Grafana, Headlamp
-│       │   ├── secret-management/ # OpenBao, External Secrets
+│       │   ├── secret-management/ # ClusterSecretStore de 1Password, External Secrets
 │       │   └── security/       # Tetragon
 │       └── workloads/          # ArgoCD Applications de apps de usuario
 │           ├── flow.yaml
@@ -185,7 +187,7 @@ Creados por `terraform/cluster/namespaces.tf` (`kubernetes_namespace_v1.namespac
 | `openebs` | OpenEBS ZFS LocalPV |
 | `networking` | Cilium Gateway, Agent Gateway (MCP), cloudflared, cert-manager, private-dns |
 | `observability` | Prometheus, Grafana, Alertmanager, Headlamp |
-| `secret-management` | OpenBao, External Secrets, Reloader |
+| `secret-management` | ClusterSecretStore de 1Password, External Secrets, Reloader |
 | `tetragon` | Tetragon |
 | `sonarqube` | SonarQube, MCP server |
 
@@ -220,7 +222,6 @@ Herramientas de administracion/observabilidad — solo alcanzables por LAN/Tails
 | `grafana.internal.cristianpuenguenan.online` | prometheus-grafana:80 | observability |
 | `headlamp.internal.cristianpuenguenan.online` | headlamp:80 | observability |
 | `hubble.internal.cristianpuenguenan.online` | hubble-ui:80 | kube-system |
-| `openbao.internal.cristianpuenguenan.online` | openbao:8200 | secret-management |
 | `openmemory.internal.cristianpuenguenan.online` | openmemory-ui:3000 | devtools |
 | `sonarqube.internal.cristianpuenguenan.online` | sonarqube-sonarqube:9000 | sonarqube |
 
@@ -283,7 +284,7 @@ Ver [ADR-013](DECISIONS.md#adr-013-reemplazo-de-longhorn-por-openebs-local-pv-lv
 
 Establece un tunel cifrado saliente hacia Cloudflare sin necesidad de abrir puertos en el router.
 
-Secret: `cloudflared-token` (via ExternalSecret desde OpenBao en `secret/infra/cloudflared`).
+Secret: `cloudflared-token` (via ExternalSecret desde el item `infra/cloudflared` en 1Password).
 
 ### 3.5 Headlamp (UI Kubernetes)
 
@@ -296,36 +297,29 @@ Dashboard web para inspeccionar el estado del cluster.
 | Service | ClusterIP:80 |
 | Acceso | `headlamp.internal.cristianpuenguenan.online` via Cilium Gateway API |
 
-### 3.6 OpenBao (Secrets Backend)
+### 3.6 1Password (Secrets Backend)
 
-**Imagen**: `ghcr.io/openbao/openbao:2.5.3` — **Namespace**: `secret-management`
-
-KV v2 secrets engine como backend central de todos los secrets del cluster.
+Backend de secretos gestionado — vault dedicado **"Homelab"**, sin infraestructura propia que correr en el cluster ni en ninguna LXC (ver ADR-017).
 
 | Parametro | Valor |
 |-----------|-------|
-| Modo | Production (standalone) |
-| Autenticacion | Kubernetes auth |
-| KV mount | `secret` (v2) |
-| Storage | PVC (`openebs-zfs`, default del cluster) |
-| UI | habilitada en `:8200` |
+| Vault | `Homelab` |
+| Autenticacion | Service Account token (solo lectura, acotado a ese vault) |
+| Token | Secret de Kubernetes `onepassword-service-account-token`, namespace `secret-management` |
+| Modelo de items | Un item por `remoteRef.key` de los ExternalSecret, un campo por `remoteRef.property` |
 
-**Init jobs** (`platform/secret-management/openbao/init.yaml`):
-- Inicializa OpenBao, habilita Kubernetes auth, crea policies y roles.
-
-> Tras cada restart del pod, OpenBao queda sellado. Requiere unseal manual o configuracion de auto-unseal.
+No hay proceso propio que inicializar, sellar/desellar, ni policies/roles que mantener — eso es justamente lo que reemplazó a OpenBao (ver ADR-017 para el detalle de por qué).
 
 ### 3.7 External Secrets Operator
 
 **Chart**: `external-secrets/external-secrets` — **Namespace**: `secret-management`
 
-Sincroniza secrets desde OpenBao hacia Kubernetes.
+Sincroniza secrets desde 1Password hacia Kubernetes.
 
 | Recurso | Detalle |
 |---------|---------|
-| ClusterSecretStore | `openbao` — apunta a `http://openbao.secret-management.svc.cluster.local:8200` |
-| KV version | v2 |
-| Auth | Kubernetes (ServiceAccount) |
+| ClusterSecretStore | `onepassword` — provider `onepasswordSDK`, vault `Homelab` |
+| Auth | Service Account token (`onepassword-service-account-token`) |
 
 ### 3.8 Reloader
 
@@ -397,7 +391,7 @@ Un unico PostgreSQL multi-base (`homelab` + `sonarqube`) reemplaza las dos insta
 |------------|----------|
 | SonarQube | `jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube` (`SONAR_JDBC_URL`, credenciales via ExternalSecret) |
 | OpenMemory | `qdrant.internal.cristianpuenguenan.online:6333` (`QDRANT_HOST`/`QDRANT_PORT`) |
-| Flow API | URLs de PostgreSQL/MongoDB/Redis en OpenBao (`secret/apps/flow`), como valores planos |
+| Flow API | URLs de PostgreSQL/MongoDB/Redis en 1Password (item `apps/flow`), como valores planos |
 
 Los backups y tareas operativas sobre las bases se documentan en `docs/OPERATIONS.md` §3.
 
@@ -424,7 +418,7 @@ Los backups y tareas operativas sobre las bases se documentan en `docs/OPERATION
 
 ### Acceso segmentado: publico (Cloudflare) vs privado (LAN + Tailscale)
 
-Ver ADR-011 en [DECISIONS.md](DECISIONS.md). Solo 2 de las 12 rutas son publicas de verdad (`portfolio`, `api` `/webhooks`) — el resto (ArgoCD, Grafana, Headlamp, Hubble, OpenBao, SonarQube UI, admin UI de Agent Gateway, OpenMemory UI/API, SonarQube MCP) son herramientas de administracion, accesibles solo desde la LAN de casa o el tailnet del usuario. OpenEBS (reemplazo de Longhorn, ver ADR-013) no expone UI web — no hay ruta equivalente que administrar.
+Ver ADR-011 en [DECISIONS.md](DECISIONS.md). Solo 2 de las 12 rutas son publicas de verdad (`portfolio`, `api` `/webhooks`) — el resto (ArgoCD, Grafana, Headlamp, Hubble, SonarQube UI, admin UI de Agent Gateway, OpenMemory UI/API, SonarQube MCP) son herramientas de administracion, accesibles solo desde la LAN de casa o el tailnet del usuario. OpenEBS (reemplazo de Longhorn, ver ADR-013) no expone UI web — no hay ruta equivalente que administrar.
 
 Cada Gateway tiene una IP LAN fija, asignada via Cilium L2 Announcements (`CiliumLoadBalancerIPPool` + `CiliumL2AnnouncementPolicy` en `platform/networking/cilium-gateway/`, `spec.addresses` en cada `Gateway`):
 
@@ -476,7 +470,7 @@ Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la 
 
 ### Archivo local de secretos
 
-Todas las credenciales (infra + apps) viven en `secrets/homelab.env`, plano y **nunca commiteado** (`.gitignore`). No hay cifrado en reposo en git — la carga a OpenBao es siempre manual, nunca corre en CI (ver [ADR-009](DECISIONS.md#adr-009-cicd-con-github-actions-hosted--tailscale--cloudflare-r2)). En CI, el preflight de credenciales usa GitHub Actions secrets/vars en su lugar (ver `docs/CI_CD_HYPERVISOR_SETUP.md`).
+Las credenciales de las LXC de datos viven en `secrets/homelab.env`, plano y **nunca commiteado** (`.gitignore`), consumido por `ansible/data-services.yaml`. Los secretos de la aplicacion viven en 1Password (vault "Homelab"), nunca en el repo ni en CI. En CI, el preflight de credenciales usa GitHub Actions secrets/vars para lo que Terraform consume (ver `docs/CI_CD_HYPERVISOR_SETUP.md`).
 
 | Variable (`secrets/homelab.env`) | Descripcion |
 |----------|-------------|
@@ -484,26 +478,25 @@ Todas las credenciales (infra + apps) viven en `secrets/homelab.env`, plano y **
 | `ARGOCD_WEBHOOK_SECRET` | Secret del webhook de GitHub que dispara el sync de ArgoCD |
 | `CLOUDFLARE_API_TOKEN` | Token API Cloudflare (DNS-01) |
 | `CLOUDFLARED_TOKEN` | Token del tunel Cloudflare |
-| `OPENBAO_STATIC_SEAL_KEY` | Clave AES-256 para Static Seal de OpenBao |
 
 ### Gestion de Secretos en el Cluster
 
-1. **Terraform** (`terraform/cluster/secrets.tf`) crea el secret `openbao-static-unseal-key` en `secret-management`.
-2. **GitOps** despliega OpenBao, que usa la static seal key.
-3. **`./scripts/load-secrets-to-openbao.sh`** (manual) escribe los secrets de infraestructura y de apps en OpenBao KV, leyendo `secrets/homelab.env`.
-4. **External Secrets Operator** sincroniza desde OpenBao hacia Kubernetes Secrets.
+1. **1Password** (vault "Homelab") es la unica fuente de verdad de los secretos de la aplicacion — se cargan a mano o via `scripts/migrate-openbao-to-1password.sh`.
+2. **Terraform** (`terraform/cluster/secrets.tf`) crea los secrets iniciales de ArgoCD (`github-repo-creds`, `in-cluster-secret`) — no depende de 1Password.
+3. El **Service Account token** de 1Password se carga a mano como Secret de Kubernetes (`onepassword-service-account-token`, namespace `secret-management`) — nunca por Terraform ni CI.
+4. **External Secrets Operator** sincroniza desde 1Password hacia Kubernetes Secrets, vía el `ClusterSecretStore` `onepassword`.
 
-#### Estructura de secretos en OpenBao
+#### Estructura de items en 1Password (vault "Homelab")
 
 ```
-secret/argocd               -> github_pat, username, url, webhook_secret
-secret/infra/cloudflare     -> api_token
-secret/infra/cloudflared    -> token
-secret/databases/*          -> credenciales de Redis/Qdrant/PostgreSQL/MongoDB
-secret/monitoring/grafana   -> username, password
-secret/sonarqube/*          -> db-credentials, monitoring (passcode)
-secret/devtools/openmemory  -> OPENAI_API_KEY
-secret/apps/flow            -> database-url, mongodb-url, redis-url
+argocd                -> username, github_pat, url, webhook_secret
+infra/cloudflare       -> api_token
+infra/cloudflared      -> token
+databases/*            -> credenciales de Redis/Qdrant/PostgreSQL/MongoDB
+monitoring/grafana      -> username, password
+sonarqube/*             -> db-credentials, monitoring (passcode)
+devtools/openmemory     -> OPENAI_API_KEY
+apps/flow               -> database-url, mongodb-url, redis-url
 ```
 
 ---
@@ -519,8 +512,8 @@ root-app (gitops/root-app.yaml)
         ├── platform/
         │     ├── Wave 1: openebs, cert-manager, reloader
         │     ├── Wave 2: openebs-config, agentgateway-crds, gateway-api-crds, cert-manager-config,
-        │     │           external-secrets(-config), openbao(-init)
-        │     ├── Wave 3: agentgateway, cilium-service-mesh, cilium-hubble-pki, openbao-config
+        │     │           external-secrets(-config)
+        │     ├── Wave 3: agentgateway, cilium-service-mesh, cilium-hubble-pki
         │     ├── Wave 4: argocd-config, observability/secrets, agentgateway-config, tetragon,
         │     │           cilium-gateway, private-dns
         │     ├── Wave 5: prometheus, cloudflared, headlamp(-config), hubble-config
@@ -536,16 +529,16 @@ root-app (gitops/root-app.yaml)
 ### Dependencias implicitas
 
 ```
-OpenEBS ───────────────────────► PVCs del cluster (OpenBao, Prometheus, Grafana, SonarQube, Alertmanager)
+OpenEBS ───────────────────────► PVCs del cluster (Prometheus, Grafana, SonarQube, Alertmanager)
 
 cert-manager (letsencrypt-prod-cloudflare-dns01) ──► wildcard-internal-online-tls ──► listener HTTPS de main
                                                 └──► wildcard-home-tls (emitido, no referenciado — ver §3.1 TLS)
 
-OpenBao ──► openbao-init ──► ExternalSecrets sync ──► todos los secrets
+1Password (vault Homelab) ──► ExternalSecrets sync ──► todos los secrets
 
 LXC postgresql (externo, §5) ──► SonarQube (base sonarqube), Flow API (base homelab)
 LXC qdrant (externo, §5) ──────► OpenMemory
-LXC mongodb / redis (externos) ─► Flow API (URLs desde OpenBao, secret/apps/flow)
+LXC mongodb / redis (externos) ─► Flow API (URLs desde 1Password, item apps/flow)
 
 private-dns ──► los hostnames *.internal de los LXC resuelven para los consumers del cluster
 ```
@@ -560,7 +553,6 @@ Las bases de datos ya no consumen PVCs del cluster — viven en los LXC de Proxm
 
 | Componente | Tamanio | StorageClass |
 |-----------|---------|-------------|
-| OpenBao | 1Gi | openebs-zfs |
 | Prometheus | 20Gi | openebs-zfs |
 | Grafana | 5Gi | openebs-zfs |
 | Alertmanager | 1Gi | openebs-zfs |
@@ -623,13 +615,12 @@ Seguir progreso:
 kubectl -n argocd get applications -w
 ```
 
-### Fase 4 — Poblar OpenBao (manual, no corre en CI)
-
-Una vez que OpenBao este inicializado:
+### Fase 4 — Poblar 1Password (manual, no corre en CI)
 
 ```bash
-cp secrets/homelab.env.example secrets/homelab.env   # completar valores
-./scripts/load-secrets-to-openbao.sh
+kubectl create secret generic onepassword-service-account-token \
+  -n secret-management --from-literal=token=<TOKEN_DEL_SERVICE_ACCOUNT>
+./scripts/migrate-openbao-to-1password.sh
 ```
 
 ---
@@ -657,14 +648,10 @@ EOF
 
 **ClusterSecretStore False:**
 ```bash
-kubectl get clustersecretstore openbao -o wide
-kubectl describe clustersecretstore openbao
+kubectl get clustersecretstore onepassword -o wide
+kubectl describe clustersecretstore onepassword
 ```
-
-**OpenBao sellado tras restart:**
-```bash
-kubectl exec -n secret-management openbao-0 -- bao operator unseal <UNSEAL_KEY>
-```
+Causas típicas: falta el Secret `onepassword-service-account-token` en `secret-management`, el token expiró, o perdió acceso al vault "Homelab".
 
 **Volumen OpenEBS no provisiona (Pending):**
 ```bash

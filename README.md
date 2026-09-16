@@ -11,14 +11,14 @@ Este repositorio contiene la configuracion completa para levantar un cluster Kub
 - **GitOps**: ArgoCD gestiona todo el ciclo de vida de las aplicaciones desde Git.
 - **Networking**: Cilium como CNI con reemplazo completo de kube-proxy via eBPF.
 - **Ingress**: Cilium Gateway API para el trafico generico, Agent Gateway retenido solo para servidores MCP (ver ADR-010).
-- **Secretos**: OpenBao como backend de secretos, sincronizado con Kubernetes via External Secrets Operator.
+- **Secretos**: 1Password como backend de secretos, sincronizado con Kubernetes via External Secrets Operator.
 - **Almacenamiento**: OpenEBS ZFS LocalPV como storage local (ver ADR-013 y ADR-014).
 - **Monitoreo**: Prometheus, Grafana y Headlamp.
 - **Bases de datos**: PostgreSQL, MongoDB, Redis y Qdrant en LXC de Proxmox, fuera del cluster (ver ADR-016).
 - **Herramientas**: SonarQube, OpenMemory.
 - **Acceso externo**: Cloudflare Tunnel para exponer servicios sin abrir puertos.
 
-La VM se crea con **Terraform** (provider `bpg/proxmox` + `siderolabs/talos`) en dos etapas: `terraform/infra` (VM, Talos, discos) y `terraform/cluster` (namespaces, Cilium, ArgoCD, secrets iniciales). **Ansible** se usa solo para validaciones de preflight y para poblar OpenBao — Talos no tiene SSH ni shell, asi que ya no aprovisiona el sistema operativo del nodo.
+La VM se crea con **Terraform** (provider `bpg/proxmox` + `siderolabs/talos`) en dos etapas: `terraform/infra` (VM, Talos, discos) y `terraform/cluster` (namespaces, Cilium, ArgoCD, secrets iniciales). **Ansible** se usa solo para validaciones de preflight y para aprovisionar los motores de datos en sus LXC — Talos no tiene SSH ni shell, asi que ya no aprovisiona el sistema operativo del nodo.
 
 ---
 
@@ -33,7 +33,7 @@ La VM se crea con **Terraform** (provider `bpg/proxmox` + `siderolabs/talos`) en
 | Ingress (generico) | Cilium Gateway API | 1.20.1 |
 | Ingress (MCP) | Agent Gateway | 1.1.0 |
 | Storage | OpenEBS ZFS LocalPV | 2.11.1 |
-| Secrets | OpenBao | 2.5.3 |
+| Secrets | 1Password | - |
 | Secret Sync | External Secrets Operator | - |
 | Monitoreo | kube-prometheus-stack / Grafana Operator | - |
 | Ingress TLS | cert-manager + Let's Encrypt + Cloudflare DNS-01 | - |
@@ -56,10 +56,10 @@ homelab/
 │   └── cluster/                 # Bootstrap de Kubernetes sobre el cluster ya arrancado
 │       ├── bootstrap.tf         # helm_release: Cilium, ArgoCD
 │       ├── namespaces.tf        # Namespaces base
-│       ├── secrets.tf           # Secrets iniciales (repo-creds, in-cluster, unseal key)
+│       ├── secrets.tf           # Secrets iniciales (repo-creds, in-cluster)
 │       └── storage.tf           # Job que crea el zpool de OpenEBS ZFS LocalPV
 │
-├── ansible/                     # Preflight de credenciales (ya no aprovisiona SO ni puebla OpenBao)
+├── ansible/                     # Preflight de credenciales + aprovisionamiento de las LXC de datos
 │   ├── preflight.yaml           # Valida credenciales antes de correr Terraform (falla rapido en CI)
 │   ├── ansible.cfg              # Configuracion de Ansible
 │   └── tasks/                   # Tareas individuales
@@ -68,7 +68,7 @@ homelab/
 │   └── homelab.env.example      # Plantilla de todas las credenciales (infra + apps)
 │
 ├── scripts/
-│   └── load-secrets-to-openbao.sh  # Carga secrets/homelab.env en OpenBao KV - manual, no corre en CI
+│   └── migrate-openbao-to-1password.sh  # Migra secrets del OpenBao in-cluster a 1Password - manual, no corre en CI
 │
 ├── bootstrap/                   # Values/scripts que consume terraform/cluster/bootstrap.tf
 │   ├── cilium/values.yaml       # Configuracion de Cilium (incluye ajustes especificos de Talos)
@@ -148,8 +148,8 @@ terraform apply
 cd ../../
 kubectl apply -f gitops/root-app.yaml
 
-# 7. Poblar OpenBao (infraestructura + secrets de apps) - siempre manual, no corre en CI
-./scripts/load-secrets-to-openbao.sh
+# 7. Cargar los secrets en 1Password (vault "Homelab") y el Service Account
+#    token del clúster - ver docs/INSTALL.md, seccion "Poblar 1Password".
 ```
 
 Para una guia detallada, consulta [docs/INSTALL.md](./docs/INSTALL.md).
@@ -158,7 +158,7 @@ Para una guia detallada, consulta [docs/INSTALL.md](./docs/INSTALL.md).
 
 ## CI/CD
 
-Terraform y Ansible **no** corren en el homeserver: cada push a `master` dispara [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml) en un runner hosted de GitHub Actions, que se conecta al hipervisor por Tailscale y aplica el cambio (`ansible-playbook preflight.yaml`, `terraform apply` en `infra` y `cluster`, y `kubectl apply -f gitops/root-app.yaml`), detras de un gate de aprobacion manual (Environment `prod`). La carga de secretos en OpenBao **no** corre en CI a proposito — es siempre manual (`./scripts/load-secrets-to-openbao.sh`, ver seccion Seguridad). Cada PR que toque `terraform/**` dispara [`terraform-plan.yml`](./.github/workflows/terraform-plan.yml), que comenta el plan antes de mergear. Detalle completo de la arquitectura en [ADR-009](./docs/DECISIONS.md#adr-009-cicd-con-github-actions-hosted--tailscale--cloudflare-r2).
+Terraform y Ansible **no** corren en el homeserver: cada push a `master` dispara [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml) en un runner hosted de GitHub Actions, que se conecta al hipervisor por Tailscale y aplica el cambio (`ansible-playbook preflight.yaml`, `terraform apply` en `infra` y `cluster`, aprovisionamiento de las LXC de datos, y `kubectl apply -f gitops/root-app.yaml`), detras de un gate de aprobacion manual (Environment `prod`). Los secretos de la app viven en 1Password y nunca pasan por CI. Cada PR que toque `terraform/**` dispara [`terraform-plan.yml`](./.github/workflows/terraform-plan.yml), que comenta el plan antes de mergear. Detalle completo de la arquitectura en [ADR-009](./docs/DECISIONS.md#adr-009-cicd-con-github-actions-hosted--tailscale--cloudflare-r2).
 
 ---
 
@@ -167,9 +167,9 @@ Terraform y Ansible **no** corren en el homeserver: cada push a `master` dispara
 | Servicio | URL | Notas |
 |----------|-----|-------|
 | ArgoCD | `https://argocd.cristianpuenguenan.online` | Admin / contrasena inicial del secret `argocd-initial-admin-secret` |
-| Grafana | `https://grafana.cristianpuenguenan.online` | Credenciales en OpenBao |
+| Grafana | `https://grafana.cristianpuenguenan.online` | Credenciales en 1Password |
 | Headlamp | `https://headlamp.cristianpuenguenan.online` | Requiere token de servicio |
-| SonarQube | `https://sonarqube.cristianpuenguenan.online` | Credenciales en OpenBao |
+| SonarQube | `https://sonarqube.cristianpuenguenan.online` | Credenciales en 1Password |
 | Agent Gateway | `https://agentgateway.cristianpuenguenan.online` | Admin / admin |
 | Hubble | `https://hubble.cristianpuenguenan.online` | Sin autenticacion |
 
@@ -177,8 +177,8 @@ Terraform y Ansible **no** corren en el homeserver: cada push a `master` dispara
 
 ## Seguridad
 
-- Todas las credenciales (infra + apps) viven en `secrets/homelab.env`, plano y **nunca versionado** (esta en `.gitignore`). Se cargan a OpenBao a mano con `./scripts/load-secrets-to-openbao.sh` — este paso nunca corre en CI, a proposito.
-- Los secretos del cluster se gestionan mediante **OpenBao** (KV v2) y se sincronizan con Kubernetes via **External Secrets Operator**.
+- Las credenciales de las LXC de datos viven en `secrets/homelab.env`, plano y **nunca versionado** (esta en `.gitignore`), exportado antes de correr Ansible a mano.
+- Los secretos del cluster se gestionan mediante **1Password** (vault "Homelab") y se sincronizan con Kubernetes via **External Secrets Operator**, autenticado con un Service Account token de solo lectura acotado a ese vault.
 - En CI, el preflight de credenciales usa GitHub Actions secrets/vars (ver [CI_CD_HYPERVISOR_SETUP.md](./docs/CI_CD_HYPERVISOR_SETUP.md)) — nunca un archivo del repo.
 - El acceso externo se realiza a traves de **Cloudflare Tunnel**, sin necesidad de abrir puertos en el router.
 - **Tetragon** monitorea a nivel de kernel escalamiento de privilegios, acceso a archivos sensibles y syscalls sospechosas.

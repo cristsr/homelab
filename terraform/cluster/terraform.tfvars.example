@@ -3,4 +3,3 @@
 
 # kubeconfig_path         = "../infra/generated/kubeconfig"
 # argocd_github_pat       = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-# openbao_static_seal_key = "<openssl rand -base64 32>"

@@ -45,10 +45,32 @@
         mode: "0600"
       no_log: true
 
+    - name: Reload systemd so the generated Quadlet unit is picked up
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Start the generated engine service
+      ansible.builtin.systemd:
+        name: "{{ inventory_hostname }}.service"
+        state: started
+        enabled: true
+
     - name: Provision the sonarqube database on the shared PostgreSQL instance
       when: inventory_hostname == 'postgresql'
       no_log: true
       block:
+        - name: Install psycopg2, required by the community.postgresql modules below
+          ansible.builtin.apt:
+            name: python3-psycopg2
+            state: present
+
+        - name: Wait for PostgreSQL to accept connections
+          ansible.builtin.wait_for:
+            port: 5432
+            host: localhost
+            delay: 2
+            timeout: 30
+
         - name: Create the sonarqube role
           community.postgresql.postgresql_user:
             name: "{{ sonarqube_db_username }}"
@@ -64,13 +86,3 @@
             login_user: "{{ postgresql_app_username }}"
             login_password: "{{ postgresql_app_password }}"
             login_host: localhost
-
-    - name: Reload systemd so the generated Quadlet unit is picked up
-      ansible.builtin.systemd:
-        daemon_reload: true
-
-    - name: Start the generated engine service
-      ansible.builtin.systemd:
-        name: "{{ inventory_hostname }}.service"
-        state: started
-        enabled: true

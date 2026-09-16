@@ -46,14 +46,3 @@ resource "kubernetes_secret_v1" "argocd_in_cluster" {
     })
   }
 }
-
-resource "kubernetes_secret_v1" "openbao_static_unseal_key" {
-  metadata {
-    name      = "openbao-static-unseal-key"
-    namespace = kubernetes_namespace_v1.namespaces["secret-management"].metadata[0].name
-  }
-
-  data = {
-    key = var.openbao_static_seal_key
-  }
-}
