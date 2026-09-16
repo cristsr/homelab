@@ -3,7 +3,7 @@ Description=PostgreSQL data engine
 
 [Container]
 Image=docker.io/library/postgres:17
-Volume=/srv/postgresql:/var/lib/postgresql/data:Z
+Volume=/srv/postgresql:/var/lib/postgresql/data:U,Z
 Network=host
 AutoUpdate=registry
 Environment=POSTGRES_USER={{ postgresql_app_username }}
