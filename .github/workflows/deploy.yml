@@ -163,16 +163,36 @@ jobs:
             -e proxmox_ssh_private_key_file="$HOME/.ssh/ci_ed25519" \
             -e ansible_ssh_bootstrap_pubkey="$(cat "$HOME/.ssh/ci_ed25519.pub")"
 
+      # 1Password (vault "Homelab", item "data-services") es la unica fuente
+      # de verdad de estas credenciales - CI las lee ahi en cada corrida en
+      # vez de mantener una copia aparte en GitHub Secrets que se puede
+      # desincronizar. Mismo Service Account token de solo lectura que ya
+      # usa el ClusterSecretStore del cluster.
+      - name: Load data-service credentials from 1Password
+        id: op-data-services
+        uses: 1password/load-secrets-action@v4
+        with:
+          export-env: false
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          POSTGRESQL_APP_USERNAME: op://Homelab/data-services/postgresql_app_username
+          POSTGRESQL_APP_PASSWORD: op://Homelab/data-services/postgresql_app_password
+          MONGODB_APP_PASSWORD: op://Homelab/data-services/mongodb_app_password
+          REDIS_PASSWORD: op://Homelab/data-services/redis_password
+          QDRANT_API_KEY: op://Homelab/data-services/qdrant_api_key
+          SONARQUBE_DB_USERNAME: op://Homelab/data-services/sonarqube_db_username
+          SONARQUBE_DB_PASSWORD: op://Homelab/data-services/sonarqube_db_password
+
       - name: Provision data-service engines via Podman Quadlet
         working-directory: ansible
         env:
-          POSTGRESQL_APP_USERNAME: ${{ secrets.POSTGRESQL_APP_USERNAME }}
-          POSTGRESQL_APP_PASSWORD: ${{ secrets.POSTGRESQL_APP_PASSWORD }}
-          MONGODB_APP_PASSWORD: ${{ secrets.MONGODB_APP_PASSWORD }}
-          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
-          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
-          SONARQUBE_DB_USERNAME: ${{ secrets.SONARQUBE_DB_USERNAME }}
-          SONARQUBE_DB_PASSWORD: ${{ secrets.SONARQUBE_DB_PASSWORD }}
+          POSTGRESQL_APP_USERNAME: ${{ steps.op-data-services.outputs.POSTGRESQL_APP_USERNAME }}
+          POSTGRESQL_APP_PASSWORD: ${{ steps.op-data-services.outputs.POSTGRESQL_APP_PASSWORD }}
+          MONGODB_APP_PASSWORD: ${{ steps.op-data-services.outputs.MONGODB_APP_PASSWORD }}
+          REDIS_PASSWORD: ${{ steps.op-data-services.outputs.REDIS_PASSWORD }}
+          QDRANT_API_KEY: ${{ steps.op-data-services.outputs.QDRANT_API_KEY }}
+          SONARQUBE_DB_USERNAME: ${{ steps.op-data-services.outputs.SONARQUBE_DB_USERNAME }}
+          SONARQUBE_DB_PASSWORD: ${{ steps.op-data-services.outputs.SONARQUBE_DB_PASSWORD }}
         run: |
           ansible-playbook data-services.yaml --limit data_lxcs \
             -e ansible_ssh_private_key_file="$HOME/.ssh/ci_ed25519"
