@@ -3,7 +3,7 @@ Description=Redis data engine
 
 [Container]
 Image=docker.io/library/redis:8
-Volume=/srv/redis:/data:Z
+Volume=/srv/redis:/data:U,Z
 Network=host
 AutoUpdate=registry
 Exec=redis-server --requirepass {{ redis_password }}
