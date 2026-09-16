@@ -81,6 +81,7 @@
           community.postgresql.postgresql_user:
             name: "{{ sonarqube_db_username }}"
             password: "{{ sonarqube_db_password }}"
+            db: postgres
             login_user: "{{ postgresql_app_username }}"
             login_password: "{{ postgresql_app_password }}"
             login_host: localhost
@@ -92,3 +93,4 @@
             login_user: "{{ postgresql_app_username }}"
             login_password: "{{ postgresql_app_password }}"
             login_host: localhost
+            maintenance_db: postgres
