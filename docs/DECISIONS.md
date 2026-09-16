@@ -677,3 +677,31 @@ Todos estos bugs se corrigieron y OpenBao terminó funcionando de punta a punta 
 - Se depende de la disponibilidad de la API de 1Password (SaaS) para que ExternalSecrets sincronice — antes esa dependencia era 100% self-hosted (la LXC). Con `deletionPolicy: Retain` en todos los ExternalSecrets, una caída de 1Password no borra los Secrets de Kubernetes ya sincronizados, solo congela las actualizaciones.
 - El Service Account de 1Password tiene rate limits más estrictos que un Connect server (que cachea localmente) — no debería importar al refresh interval de 1h/1m que ya usan estos ExternalSecrets, pero es un límite a tener presente si se agregan muchos más secrets.
 - Se pierde el control total self-hosted sobre el backend de secretos a cambio de simplicidad operativa — trade-off consciente para un homelab de un solo operador.
+
+---
+
+## ADR-018: Los secrets de la aplicación pasan de 1Password a SOPS + age, in-cluster
+
+**Estado**: Aceptado
+**Fecha**: 2026-09-16
+
+### Contexto
+
+El día que se migró a 1Password (ver ADR-017) se agotó por completo la cuota de la cuenta: `op service-account ratelimit` mostró `account read_write 1000/1000, resetea en 12 horas`. La causa inmediata fue estructural — 6 `ExternalSecret` habían quedado en `refreshInterval: 1m` (herencia de cuando apuntaban al OpenBao self-hosted, donde una lectura local no costaba nada) — pero expuso el problema de fondo: 1Password Individual/Family tiene un límite de cuenta compartido de solo 1,000 requests/24h (Business: 50,000; Teams: 5,000 — confirmado en la documentación oficial). Cualquier volumen de debugging, un pico de sync, o simplemente crecer el número de secrets vuelve a poner en riesgo ese límite.
+
+El operador decidió eliminar la dependencia de un API externo con rate limit para los secrets que corren dentro del clúster, a favor de cifrado local sin límite de requests.
+
+### Decisión
+
+- **SOPS + age** para los secrets consumidos dentro del clúster: cada valor se cifra con la clave pública de `age` y se commitea cifrado al repo — sin servicio externo, sin rate limit, el `git diff` de un secret rotado es legible (solo cambia el blob cifrado).
+- **sops-secrets-operator** (`isindir/sops-secrets-operator`, Helm chart) corre en el namespace `sops` y traduce cada `SopsSecret` (CRD, cifrado) a un `Secret` de Kubernetes real — mismo patrón que External Secrets Operator, pero sin llamar a ningún API externo en cada reconcile. ArgoCD aplica el `SopsSecret` tal cual, cifrado; nunca necesita saber de SOPS (a diferencia de la alternativa **KSOPS**, que exige un plugin corriendo dentro del `argocd-repo-server` — se descartó por necesitar tocar la imagen/sidecars de ArgoCD).
+- **9 de los 10** `ExternalSecret` migran a `SopsSecret` (`*.sops.yaml`, `spec.enforceOwnership: true` porque el `Secret` destino ya existía, owneado por External Secrets Operator). **`argocd-webhook-secret` se queda en 1Password**: usa `creationPolicy: Merge` sobre `argocd-secret`, que tiene otros campos que administra el propio ArgoCD (`server.secretkey`, `admin.password`) — SopsSecret toma ownership completo del `Secret`, sin merge de campos, así que migrarlo arriesgaba pisar esos campos y romper el login. Bajo volumen (refresh 1h), no vale el riesgo.
+- Las credenciales de `ansible/data-services.yaml` (consumidas por CI, no por el clúster) se quedan en 1Password vía `1password/load-secrets-action` (ver PR #23) — es una lectura puntual por corrida de CI, no un polling continuo, no contribuyó al agotamiento de cuota.
+- **Backup de la clave privada de age**: un documento en el vault "Homelab" de 1Password (`sops-age-homelab-key`) — lectura única y manual para recuperación de desastre, no un backend activo, así que no compite por cuota.
+
+### Consecuencias
+
+- El clúster ya no depende de la disponibilidad ni del rate limit de un API externo para sus secrets — solo de la clave `age` montada en el operador.
+- **La clave privada de age es ahora la clave maestra de todo el sistema**: si se pierde sin el backup en 1Password, ningún secret cifrado en el repo es recuperable. A diferencia de 1Password (donde la cuenta gestiona la recuperación), acá la responsabilidad de no perder esa clave es enteramente del operador.
+- Se pierde el UI de 1Password para rotar secrets a mano — rotar un valor ahora es `sops decrypt`, editar, `sops encrypt -i`, commit. Más fricción, pero sin límite de requests.
+- 1Password queda como backend "híbrido": sigue siendo la fuente de verdad para `argocd-webhook-secret` y las credenciales de `data-services.yaml`, además del backup de la clave de age — no se elimina del todo, se acota a los casos de bajo volumen donde no representa riesgo.
