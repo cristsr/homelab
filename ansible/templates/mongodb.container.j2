@@ -3,7 +3,7 @@ Description=MongoDB data engine
 
 [Container]
 Image=docker.io/library/mongo:8.0
-Volume=/srv/mongodb:/data/db:Z
+Volume=/srv/mongodb:/data/db:U,Z
 Network=host
 AutoUpdate=registry
 Environment=MONGO_INITDB_ROOT_USERNAME=admin
