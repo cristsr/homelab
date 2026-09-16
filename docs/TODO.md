@@ -48,10 +48,10 @@ Este documento lista las tareas planificadas para mejorar la automatizacion y el
 
 **Motivacion:** El polling original tenia un intervalo de 180s. Un webhook de GitHub entrega notificaciones en segundos tras cada push, eliminando la latencia innecesaria.
 
-**Estado real:** El webhook esta implementado y funcionando (`scripts/load-secrets-to-openbao.sh` escribe `webhook_secret` en OpenBao, `platform/argocd/webhook-externalsecret.yaml` lo sincroniza a `argocd-secret`). Sin embargo `timeout.reconciliation` **no** quedo en `0s`: se dejo en `600s` a proposito, como fallback de seguridad. El 2026-05-13 el webhook se rompio silenciosamente y el cluster estuvo sin sincronizar hasta el 2026-09-07 sin que nadie lo notara (con polling en `0s` no hay red de seguridad si el webhook falla). Ver el comentario en `bootstrap/argocd/values.yaml` y `docs/DECISIONS.md` para el detalle del incidente.
+**Estado real:** El webhook esta implementado y funcionando (`webhook_secret` cargado en el item `argocd` del vault 1Password, `platform/argocd/webhook-externalsecret.yaml` lo sincroniza a `argocd-secret`; originalmente se cargaba con `scripts/load-secrets-to-openbao.sh` contra OpenBao, retirado en ADR-017). Sin embargo `timeout.reconciliation` **no** quedo en `0s`: se dejo en `600s` a proposito, como fallback de seguridad. El 2026-05-13 el webhook se rompio silenciosamente y el cluster estuvo sin sincronizar hasta el 2026-09-07 sin que nadie lo notara (con polling en `0s` no hay red de seguridad si el webhook falla). Ver el comentario en `bootstrap/argocd/values.yaml` y `docs/DECISIONS.md` para el detalle del incidente.
 
 **Archivos afectados (implementados):**
-- `scripts/load-secrets-to-openbao.sh` — añade `webhook_secret` al path `argocd` (ver `secrets/homelab.env.example`, `ARGOCD_WEBHOOK_SECRET`)
+- Item `argocd`, campo `webhook_secret`, en el vault "Homelab" de 1Password (ver `ARGOCD_WEBHOOK_SECRET` en `secrets/homelab.env.example` para el nombre original)
 - `platform/argocd/webhook-externalsecret.yaml` — ExternalSecret con `creationPolicy: Merge` sobre `argocd-secret`
 - `bootstrap/argocd/values.yaml` — `timeout.reconciliation: 600s` (fallback intencional, no bug)
 

@@ -2,12 +2,9 @@
 # Corre antes que cualquier otro playbook (y antes de `terraform apply` en
 # CI): valida SOLO las credenciales que Terraform/ArgoCD consumen en este
 # pipeline - no todo lo que eventualmente vive en secrets/homelab.env. Los
-# secretos que solo usa la carga manual de OpenBao (cloudflare_api_token,
-# cloudflared_token, argocd_webhook_secret) los valida
-# scripts/load-secrets-to-openbao.sh por su cuenta cuando corresponda; no
-# tiene sentido que CI (que ya no toca OpenBao) exija esos 3 secrets solo
-# para validarlos sin usarlos. Si algo falta o es invalido, falla aqui en
-# segundos en vez de a mitad del bootstrap del cluster.
+# secretos reales de la app viven en 1Password (vault "Homelab") via
+# ClusterSecretStore, nunca en CI. Si algo falta o es invalido, falla aqui
+# en segundos en vez de a mitad del bootstrap del cluster.
 #
 # Las credenciales ya no viven en un vars file del repo (ver
 # secrets/homelab.env.example) - localmente, exporta ese archivo antes de
@@ -27,7 +24,6 @@
     # "" en vez de caer al default.
     argocd_repo_url: "{{ lookup('env', 'ARGOCD_REPO_URL') | default('https://github.com/cristsr/homelab', true) }}"
     argocd_github_pat: "{{ lookup('env', 'ARGOCD_GITHUB_PAT') }}"
-    openbao_static_seal_key: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_KEY') }}"
 
   tasks:
     - import_tasks: tasks/preflight-secrets.yaml
