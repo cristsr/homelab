@@ -14,7 +14,7 @@ spec:
     targetRevision: HEAD
     path: workloads/sonarqube
     directory:
-      include: "{httproute.yaml}"
+      include: "{httproute.yaml,sonarqube-db-secret.yaml,sonarqube-monitoring-secret.yaml}"
   destination:
     server: https://kubernetes.default.svc
     namespace: sonarqube
