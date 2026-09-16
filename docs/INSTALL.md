@@ -14,7 +14,7 @@
 4. [Aprovisionar la VM Talos (`terraform/infra`)](#4-aprovisionar-la-vm-talos-terraforminfra)
 5. [Bootstrap de Kubernetes (`terraform/cluster`)](#5-bootstrap-de-kubernetes-terraformcluster)
 6. [Activar GitOps](#6-activar-gitops)
-7. [Poblar OpenBao](#7-poblar-openbao)
+7. [Poblar 1Password](#7-poblar-1password)
 8. [Verificar y Acceder](#8-verificar-y-acceder)
 9. [DNS](#9-dns)
 10. [Troubleshooting](#10-troubleshooting)
@@ -103,9 +103,9 @@ cp secrets/homelab.env.example secrets/homelab.env
 $EDITOR secrets/homelab.env
 ```
 
-Completa al menos los campos de la seccion `# --- Infra (obligatorios) ---`: `ARGOCD_GITHUB_PAT`, `ARGOCD_WEBHOOK_SECRET`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN`, `OPENBAO_STATIC_SEAL_KEY` (genera esta ultima con `openssl rand -base64 32` y **guardala en un gestor de contrasenas** — se usa para el unseal de OpenBao). Los campos de Databases/Monitoring/SonarQube/DevTools/Apps son opcionales, se completan mas adelante en la seccion 7.
+Completa al menos los campos de la seccion `# --- Infra (obligatorios) ---` (`ARGOCD_GITHUB_PAT`, `ARGOCD_WEBHOOK_SECRET`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN`) y `# --- Databases (obligatorios) ---`. Los demas ya no se completan aca — viven directo en 1Password (vault "Homelab"), ver seccion 7.
 
-> Este mismo archivo lo consume `./scripts/load-secrets-to-openbao.sh` (seccion 7) y el preflight de abajo. La IP fija del Gateway/DNS interno ya no se configura por variable — se edita directo en `platform/networking/cilium-gateway/gateway.yaml` y `platform/networking/private-dns/` si hace falta cambiarla.
+> Este archivo ya solo lo consumen `ansible/preflight.yaml` (campos de Infra) y `ansible/data-services.yaml` (campos de Databases, al levantar los motores en sus LXC). La IP fija del Gateway/DNS interno ya no se configura por variable — se edita directo en `platform/networking/cilium-gateway/gateway.yaml` y `platform/networking/private-dns/` si hace falta cambiarla.
 
 ### 3.1 Correr el preflight
 
@@ -164,7 +164,7 @@ cp terraform.tfvars.example terraform.tfvars
 cp backend.hcl.example backend.hcl
 ```
 
-Edita `terraform.tfvars`: `kubeconfig_path` (apunta a `../infra/generated/kubeconfig`), `argocd_github_pat`, `openbao_static_seal_key`.
+Edita `terraform.tfvars`: `kubeconfig_path` (apunta a `../infra/generated/kubeconfig`), `argocd_github_pat`.
 
 ### 5.2 Aplicar
 
@@ -177,7 +177,7 @@ Esto crea, en orden (via `depends_on`):
 - **Namespaces base** (`terraform/cluster/namespaces.tf`).
 - **Cilium** (`helm_release`, con el hook de idempotencia `bootstrap/adopt-cilium-gateway-secrets.sh`).
 - **ArgoCD** (`helm_release`).
-- **Secrets iniciales**: `github-repo-creds`, `in-cluster-secret`, `openbao-static-unseal-key` (`terraform/cluster/secrets.tf`).
+- **Secrets iniciales**: `github-repo-creds`, `in-cluster-secret` (`terraform/cluster/secrets.tf`).
 - **Job de OpenEBS ZFS**: crea el zpool `zfspv-pool` sobre el disco dedicado (`terraform/cluster/storage.tf`).
 
 Verificar:
@@ -212,34 +212,38 @@ kubectl -n argocd get applications -w
 
 ---
 
-## 7. Poblar OpenBao
+## 7. Poblar 1Password
 
-> **Cuando hacerlo**: Despues de que GitOps active el cluster y el job `openbao-init` termine. **Este paso es siempre manual** — no corre en CI a proposito (ver [ADR-009](DECISIONS.md#adr-009-cicd-con-github-actions-hosted--tailscale--cloudflare-r2)), asi que hasta que lo corras las Applications que dependen de estos secretos (ArgoCD webhook, cloudflared, las bases de datos, SonarQube, OpenMemory, Flow) van a quedar en `Progressing`/`Degraded`. Es esperado, no un fallo.
+> **Cuando hacerlo**: Despues de que GitOps active el cluster. **Este paso es siempre manual** — no corre en CI a proposito (mismo criterio que ADR-015, ver ADR-017 en [DECISIONS.md](DECISIONS.md)), asi que hasta que lo hagas las Applications que dependen de estos secretos (ArgoCD webhook, cloudflared, las bases de datos, SonarQube, OpenMemory, Flow) van a quedar en `Progressing`/`Degraded`. Es esperado, no un fallo.
 
-Completa en `secrets/homelab.env` los campos que todavia falten (Databases/Monitoring/SonarQube/DevTools/Apps — vacio es valido, significa "no uso esa app todavia") y corre:
+Los secretos reales viven en un vault de 1Password llamado **"Homelab"**, leidos por el clúster via `ClusterSecretStore` (provider `onepasswordSDK`).
 
-```bash
-./scripts/load-secrets-to-openbao.sh
-```
+### 7.1 Crear el vault y el Service Account
 
-El script espera a que OpenBao y el job `openbao-init` esten listos, abre un port-forward temporal, y escribe todos los secrets en OpenBao KV (infra: `secret/argocd`, `secret/infra/cloudflare`, `secret/infra/cloudflared`; apps: `secret/databases/*`, `secret/monitoring/grafana`, `secret/sonarqube/*`, `secret/devtools/openmemory`, `secret/apps/flow`). Si `cloudflared` ya esta corriendo, tambien espera a que el `ExternalSecret` sincronice el token nuevo y reinicia el Deployment.
+1. En 1Password, crea un vault dedicado llamado `Homelab`.
+2. En **Developer → Service Accounts**, crea uno con acceso de **solo lectura** a ese vault (ningún otro).
+3. Cargá el token como Secret de Kubernetes (nunca en el repo):
+   ```bash
+   kubectl create secret generic onepassword-service-account-token \
+     -n secret-management --from-literal=token=<TOKEN_DEL_SERVICE_ACCOUNT>
+   ```
 
-Podes volver a correrlo cuando quieras rotar o agregar un valor — es idempotente, solo sobreescribe los paths que tengan datos en `secrets/homelab.env`.
+### 7.2 Cargar los items en el vault
 
-### 7.1 Leer y guardar la recovery key de OpenBao
-
-La recovery key permite regenerar un root token en caso de emergencia.
-
-```bash
-kubectl get secret openbao-recovery-key -n secret-management \
-  -o jsonpath='{.data.key}' | base64 -d && echo
-```
-
-**Guardala de forma segura** (gestor de contrasenas o vault fisico) y luego eliminala del cluster:
+Si venís migrando desde una instancia de OpenBao que ya tenía los secretos reales cargados (in-cluster u otra), usá el script de migración - instala el CLI `op` primero (`op signin` o `OP_SERVICE_ACCOUNT_TOKEN` exportado):
 
 ```bash
-kubectl delete secret openbao-recovery-key -n secret-management
+export BAO_SRC_ADDR=http://127.0.0.1:8200   # via kubectl port-forward svc/openbao 8200:8200 -n secret-management
+export BAO_SRC_TOKEN=<token con permiso de lectura sobre secret/>
+export OP_VAULT=Homelab
+./scripts/migrate-openbao-to-1password.sh
 ```
+
+El script camina el árbol `secret/` del OpenBao origen y crea/actualiza un item por path en el vault (título = path, cada propiedad = un campo del item) — los mismos títulos/campos que ya referencian los `ExternalSecret` del repo (`argocd`, `devtools/openmemory`, `infra/cloudflare`, etc.).
+
+Si arrancás de cero (sin un OpenBao previo), cargá los items a mano en la UI de 1Password: un item por `remoteRef.key` que uses en los manifiestos (grep `remoteRef` en `platform/` y `workloads/` para la lista completa), con un campo por cada `remoteRef.property`.
+
+Podés volver a correr el script cuando quieras resincronizar un valor — es idempotente, `op item edit` si el item ya existe.
 
 ---
 
@@ -257,11 +261,11 @@ kubectl get pods -A
 | URL | Servicio | Credenciales |
 |-----|----------|--------------|
 | `https://argocd.cristianpuenguenan.online` | Argo CD | admin / (contrasena inicial del paso 5.2) |
-| `https://grafana.cristianpuenguenan.online` | Grafana | admin / (configurada en OpenBao) |
+| `https://grafana.cristianpuenguenan.online` | Grafana | admin / (configurada en 1Password) |
 | `https://agentgateway.cristianpuenguenan.online` | Agent Gateway | admin / admin |
 | `https://headlamp.cristianpuenguenan.online` | Headlamp | Token de servicio |
 | `https://hubble.cristianpuenguenan.online` | Hubble | Sin auth |
-| `https://sonarqube.cristianpuenguenan.online` | SonarQube | admin / (configurada en OpenBao) |
+| `https://sonarqube.cristianpuenguenan.online` | SonarQube | admin / (configurada en 1Password) |
 | `https://openmemory.cristianpuenguenan.online` | OpenMemory | Sin auth |
 
 Token para Headlamp:
@@ -331,16 +335,12 @@ EOF
 ### ClusterSecretStore en False
 
 ```bash
-kubectl get clustersecretstore openbao -o wide
-kubectl describe clustersecretstore openbao
+kubectl get clustersecretstore onepassword -o wide
+kubectl describe clustersecretstore onepassword
 kubectl -n secret-management logs deployment/external-secrets --tail=50
 ```
 
-### OpenBao sellado tras reinicio
-
-```bash
-kubectl -n secret-management exec openbao-0 -- bao operator unseal <UNSEAL_KEY>
-```
+Causas típicas: el Secret `onepassword-service-account-token` no existe en `secret-management`, el token expiró/fue revocado, o el Service Account perdió acceso al vault "Homelab".
 
 ### Volumen OpenEBS no provisiona
 
@@ -416,8 +416,10 @@ terraform init -backend-config=backend.hcl && terraform apply
 cd ../..
 kubectl apply -f gitops/root-app.yaml
 
-# 5. Poblar OpenBao (manual siempre - completa el resto de secrets/homelab.env antes)
-./scripts/load-secrets-to-openbao.sh
+# 5. Poblar 1Password (manual siempre - ver seccion 7 arriba)
+kubectl create secret generic onepassword-service-account-token \
+  -n secret-management --from-literal=token=<TOKEN_DEL_SERVICE_ACCOUNT>
+./scripts/migrate-openbao-to-1password.sh
 
 # 6. Verificar
 kubectl -n argocd get applications

@@ -133,7 +133,6 @@ kubectl get events -A --sort-by='.lastTimestamp' | tail -20
 | Servicio | Comando util |
 |----------|-------------|
 | ArgoCD | `kubectl -n argocd port-forward svc/argocd-server 8080:80` |
-| OpenBao | `kubectl -n secret-management port-forward svc/openbao 8200:8200` |
 | Grafana | `kubectl -n observability port-forward svc/grafana 3000:3000` |
 
 ### Reiniciar un deployment
@@ -165,21 +164,9 @@ kubectl describe externalsecret <nombre> -n <namespace>
 kubectl -n secret-management logs deployment/external-secrets --tail=50
 ```
 
-### Escribir un nuevo secret en OpenBao
+### Escribir un nuevo secret en 1Password
 
-```bash
-# Port-forward a OpenBao
-kubectl -n secret-management port-forward svc/openbao 8200:8200 &
-
-# Login (necesitas root token o usar kubernetes auth)
-export VAULT_ADDR=http://127.0.0.1:8200
-bao login
-
-# Escribir secret
-bao kv put secret/mi-app/config \
-  username="usuario" \
-  password="contrasena"
-```
+Cargalo a mano en el vault "Homelab" (UI o `op item create --vault Homelab --title "mi-app/config" username=usuario password=contrasena`) — el título del item es lo que despues va en `remoteRef.key` del ExternalSecret, y cada campo en `remoteRef.property`.
 
 ### Crear un nuevo ExternalSecret
 
@@ -192,7 +179,7 @@ metadata:
 spec:
   refreshInterval: 1h
   secretStoreRef:
-    name: openbao
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: mi-app-secret
@@ -257,7 +244,7 @@ El estado critico esta en:
 secrets/homelab.env
 ```
 
-> Guarda una copia de `secrets/homelab.env` en un gestor de contrasenas seguro — es la unica copia fuera de OpenBao. Si se pierde sin backup, hay que regenerar/rotar cada token.
+> Guarda una copia de `secrets/homelab.env` en un gestor de contrasenas seguro — es la unica copia fuera de 1Password de las credenciales de las LXC de datos. Si se pierde sin backup, hay que regenerar/rotar cada token.
 
 ---
 
@@ -389,24 +376,11 @@ vgs vg-openebs
 lvs vg-openebs
 ```
 
-### OpenBao
-
-```bash
-# Estado
-kubectl -n secret-management exec openbao-0 -- bao status
-
-# Unseal manual
-kubectl -n secret-management exec -it openbao-0 -- bao operator unseal <UNSEAL_KEY>
-
-# Listar secrets
-kubectl -n secret-management exec openbao-0 -- bao kv list secret/
-```
-
 ### External Secrets Operator
 
 ```bash
 # Estado del ClusterSecretStore
-kubectl get clustersecretstore openbao -o yaml
+kubectl get clustersecretstore onepassword -o yaml
 
 # Estado de ExternalSecrets
 kubectl get externalsecret -A
@@ -428,21 +402,24 @@ kubectl -n secret-management logs deployment/external-secrets --tail=100
 4. Restaurar `secrets/homelab.env` (debe tener backup seguro).
 5. Restaurar backups de bases de datos si es necesario.
 
-### OpenBao sellado y sin acceso
+### 1Password sin acceso
 
-Si no tienes la `openbao_static_seal_key`, el contenido del vault es irrecuperable.
-
-Con la key:
+Si el Secret `onepassword-service-account-token` (namespace `secret-management`) se pierde o el token fue revocado, generá uno nuevo desde 1Password (Developer → Service Accounts) y volvé a cargarlo:
 
 ```bash
-kubectl -n secret-management exec -it openbao-0 -- bao operator unseal <KEY>
+kubectl create secret generic onepassword-service-account-token \
+  -n secret-management --from-literal=token=<TOKEN_NUEVO> \
+  --dry-run=client -o yaml | kubectl apply -f -
 ```
+
+El vault "Homelab" y sus items no dependen del clúster en absoluto — viven en 1Password, sobreviven a cualquier pérdida del nodo.
 
 ### Recrear el cluster desde cero
 
 ```bash
 kubectl apply -f gitops/root-app.yaml
-./scripts/load-secrets-to-openbao.sh
+kubectl create secret generic onepassword-service-account-token \
+  -n secret-management --from-literal=token=<TOKEN_DEL_SERVICE_ACCOUNT>
 ```
 
 `teardown.yaml` drena el nodo **antes** de detener `k0scontroller` y correr `k0s reset`
@@ -495,8 +472,6 @@ kubectl -n kube-system get pods
 kubectl -n argocd get applications
 ```
 
-> Recuerda que OpenBao puede quedar sellado tras un reinicio. Ejecuta unseal si es necesario.
-
 ### Limpieza de imagenes Docker/containerd
 
 k0s usa containerd internamente. Para limpiar imagenes no usadas:
@@ -524,7 +499,7 @@ sudo find /var/log/pods -type f -mtime +7 -delete
 - [ ] Revisar uso de disco en el nodo (`df -h`).
 - [ ] Verificar backups de bases de datos esten actualizados.
 - [ ] Revisar logs de External Secrets Operator.
-- [ ] Confirmar que OpenBao este operativo (no sellado).
+- [ ] Confirmar que el token del Service Account de 1Password no esta por expirar.
 - [ ] Verificar metricas en Grafana.
 - [ ] Revisar actualizaciones de seguridad del sistema operativo.
 - [ ] Revisar actualizaciones de k0s, Cilium y charts criticos.
@@ -573,7 +548,7 @@ Ojo: el wildcard **público** `*.cristianpuenguenan.online` también matchea est
 **Alternativa manual, sin Split DNS:** agregar los hostnames al `hosts` file local (`/etc/hosts` o `C:\Windows\System32\drivers\etc\hosts`) apuntando a las IPs fijas de los Gateways (requiere estar en Tailscale, §11.1):
 
 ```
-192.168.122.240 argocd.internal.cristianpuenguenan.online grafana.internal.cristianpuenguenan.online headlamp.internal.cristianpuenguenan.online hubble.internal.cristianpuenguenan.online openbao.internal.cristianpuenguenan.online openmemory.internal.cristianpuenguenan.online sonarqube.internal.cristianpuenguenan.online agentgateway.internal.cristianpuenguenan.online mcp.internal.cristianpuenguenan.online openmemory-api.internal.cristianpuenguenan.online
+192.168.122.240 argocd.internal.cristianpuenguenan.online grafana.internal.cristianpuenguenan.online headlamp.internal.cristianpuenguenan.online hubble.internal.cristianpuenguenan.online openmemory.internal.cristianpuenguenan.online sonarqube.internal.cristianpuenguenan.online agentgateway.internal.cristianpuenguenan.online mcp.internal.cristianpuenguenan.online openmemory-api.internal.cristianpuenguenan.online
 ```
 
 Para agregar una ruta privada nueva: sumarla al `Corefile` en `platform/networking/private-dns/configmap.yaml` y hacer `git push` — Reloader reinicia el pod solo, no hace falta ningún paso manual adicional.
@@ -601,4 +576,4 @@ Ver [ADR-012](DECISIONS.md) (actualización). Las rutas privadas usaron una CA p
 - Documentacion k0s: https://docs.k0sproject.io
 - Documentacion Cilium: https://docs.cilium.io
 - Documentacion ArgoCD: https://argo-cd.readthedocs.io
-- Documentacion OpenBao: https://openbao.org/docs/
+- Documentacion 1Password (Service Accounts/CLI): https://developer.1password.com/docs/service-accounts/

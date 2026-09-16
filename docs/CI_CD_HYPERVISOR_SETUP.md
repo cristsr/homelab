@@ -5,10 +5,12 @@
 > remotamente. Reemplaza el runbook anterior (Fedora + libvirt + SELinux),
 > que ya no aplica: Proxmox no usa libvirt, y Talos no tiene SSH ni SELinux.
 >
-> A diferencia del runbook viejo, acá **no hace falta ninguna llave SSH**:
-> Terraform habla con la API REST de Proxmox (token) y con la API de Talos
-> (mTLS), y Ansible corre en `localhost` (el runner) usando el kubeconfig que
-> Terraform ya dejó en disco.
+> A diferencia del runbook viejo, Terraform **no necesita ninguna llave SSH**:
+> habla con la API REST de Proxmox (token) y con la API de Talos (mTLS). Lo
+> que sí necesita SSH es Ansible al aprovisionar los motores de datos sobre
+> las LXCs (`ansible/bootstrap-lxc-ssh.yaml` + `ansible/data-services.yaml`,
+> ver sección 5) — a diferencia de Talos (sin SSH ni shell), las LXCs de
+> Proxmox sí tienen ambos.
 
 ## 1. Tailscale en el hipervisor + ruta de subred (acotada, no el /24 completo)
 
@@ -70,9 +72,8 @@ completo es el valor de `TF_VAR_proxmox_api_token` / el secret
 - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` - backend remoto (sin cambios).
 - `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` - OAuth client de Tailscale (sin cambios).
 - `ARGOCD_GITHUB_PAT` - PAT de GitHub que usa ArgoCD para sincronizar este repo (consumido por Terraform, validado por el preflight).
-- `OPENBAO_STATIC_SEAL_KEY` - clave de sellado estatico de OpenBao (consumido por Terraform, validado por el preflight).
 
-CI **no** necesita `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN` ni `ARGOCD_WEBHOOK_SECRET` como secrets de GitHub - esos solo los usa la carga manual de OpenBao (`secrets/homelab.env` local + `./scripts/load-secrets-to-openbao.sh`), que nunca corre en CI. No los crees a menos que quieras correr ese script vos mismo con otras credenciales.
+CI **no** necesita `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN`, `ARGOCD_WEBHOOK_SECRET` ni ningún token de 1Password como secrets de GitHub - los secretos reales de la aplicación viven en el vault "Homelab" de 1Password y los lee ExternalSecrets directo del clúster vía el Service Account token (`onepassword-service-account-token`, namespace `secret-management`), nunca desde CI.
 
 **Variables** (Settings → Environments → `prod` → Variables):
 - `PROXMOX_ENDPOINT` - ej. `https://192.168.80.20:8006/`.
@@ -83,11 +84,31 @@ CI **no** necesita `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN` ni `ARGOCD_WEBHOO
 
 ## 4. Qué ya NO hace falta
 
-- Llave SSH dedicada al hipervisor (`homeserver_ci_ed25519`) - Terraform ya no se conecta por SSH.
-- Módulos SELinux / sudoers custom - Proxmox es Debian sin SELinux, y no hay nada que ejecutar por SSH.
+- Módulos SELinux / sudoers custom - Proxmox es Debian sin SELinux.
 - `ansible/host-network.yaml` (port-forward de firewalld) - con `vmbr0` bridged, la VM tiene IP LAN directa.
 
-## 5. Primer `terraform apply` contra el state viejo
+## 5. Llave SSH de CI para las LXCs de datos (`data_lxcs`)
+
+`ansible/bootstrap-lxc-ssh.yaml` y `ansible/data-services.yaml` sí necesitan
+SSH: el primero entra al Proxmox host y usa `pct exec` para sembrar la
+pubkey de CI en cada LXC; el segundo se conecta directo a cada LXC
+(`192.168.80.31-34`) para instalar Podman y levantar el motor vía Quadlet.
+
+Pasos:
+
+1. Generar un par de llaves dedicado a CI (nunca reusar la personal del
+   operador) - ya existe `~/.ssh/cristian/homeserver_ci_ed25519` con ese
+   propósito, comentario `gh-actions-ci`.
+2. Agregar la pública a `/root/.ssh/authorized_keys` del Proxmox host - la
+   LAN del hipervisor, no hace falta Tailscale para este paso manual.
+3. Cargar la privada como secret `PROXMOX_SSH_PRIVATE_KEY` en
+   **Settings → Environments → `prod` → Secrets**.
+4. Cargar también las credenciales que pide `ansible/data-services.yaml`
+   (mismos nombres que en `secrets/homelab.env`): `POSTGRESQL_APP_USERNAME`,
+   `POSTGRESQL_APP_PASSWORD`, `MONGODB_APP_PASSWORD`, `REDIS_PASSWORD`,
+   `QDRANT_API_KEY`, `SONARQUBE_DB_USERNAME`, `SONARQUBE_DB_PASSWORD`.
+
+## 6. Primer `terraform apply` contra el state viejo
 
 El `terraform.tfstate` remoto (R2) puede seguir teniendo referencias a los
 recursos `libvirt_*`/`tls_private_key` de la arquitectura anterior (Fedora +

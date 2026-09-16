@@ -33,10 +33,3 @@ all:
           pct_vmid: 124
       vars:
         ansible_user: root
-    secrets_lxc:
-      hosts:
-        openbao:
-          ansible_host: 192.168.80.35
-          pct_vmid: 125
-      vars:
-        ansible_user: root

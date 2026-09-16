@@ -33,13 +33,6 @@ locals {
       cores      = 1
       disk_gb    = 5
     }
-    openbao = {
-      vmid       = 125
-      ip         = "192.168.80.35"
-      memory_mib = 512
-      cores      = 1
-      disk_gb    = 5
-    }
   }
 }
 
@@ -57,6 +50,15 @@ resource "proxmox_virtual_environment_container" "data_service" {
   node_name    = var.proxmox_node_name
   vm_id        = each.value.vmid
   unprivileged = true
+
+  # Cada motor corre como contenedor Podman dentro de la LXC (ver
+  # ansible/data-services.yaml). Sin nesting+fuse, una LXC unprivileged no
+  # puede montar el overlayfs de Podman via fuse-overlayfs ("fuse: device
+  # not found") y el servicio queda en restart-loop.
+  features {
+    nesting = true
+    fuse    = true
+  }
 
   cpu {
     cores = each.value.cores

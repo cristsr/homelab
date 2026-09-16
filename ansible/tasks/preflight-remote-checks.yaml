@@ -5,10 +5,8 @@
 # PAT revocado se detecta en segundos en vez de a mitad del bootstrap del
 # cluster.
 #
-# Los tokens de Cloudflare/cloudflared ya no se validan aca - CI no los
-# consume (solo Terraform: argocd_github_pat, openbao_static_seal_key).
-# scripts/load-secrets-to-openbao.sh valida esos por su cuenta cuando
-# corresponda, que es el unico lugar que realmente los usa.
+# Los tokens de Cloudflare/cloudflared/1Password ya no se validan aca - CI
+# no los consume (solo Terraform: argocd_github_pat).
 
 - name: Verificar que el PAT de GitHub tiene acceso al repo de ArgoCD
   ansible.builtin.uri:

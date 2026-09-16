@@ -14,9 +14,3 @@ variable "argocd_github_pat" {
   type        = string
   sensitive   = true
 }
-
-variable "openbao_static_seal_key" {
-  description = "Clave de sellado estatico de OpenBao"
-  type        = string
-  sensitive   = true
-}
