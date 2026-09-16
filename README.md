@@ -68,7 +68,7 @@ homelab/
 │   └── homelab.env.example      # Plantilla de todas las credenciales (infra + apps)
 │
 ├── scripts/
-│   └── migrate-openbao-to-1password.sh  # Migra secrets del OpenBao in-cluster a 1Password - manual, no corre en CI
+│   └── apply-real-secrets.sh    # Carga secrets/homelab.env en los SopsSecret/env cifrados del repo - manual, no corre en CI
 │
 ├── bootstrap/                   # Values/scripts que consume terraform/cluster/bootstrap.tf
 │   ├── cilium/values.yaml       # Configuracion de Cilium (incluye ajustes especificos de Talos)

@@ -2,9 +2,10 @@
 # Corre antes que cualquier otro playbook (y antes de `terraform apply` en
 # CI): valida SOLO las credenciales que Terraform/ArgoCD consumen en este
 # pipeline - no todo lo que eventualmente vive en secrets/homelab.env. Los
-# secretos reales de la app viven en 1Password (vault "Homelab") via
-# ClusterSecretStore, nunca en CI. Si algo falta o es invalido, falla aqui
-# en segundos en vez de a mitad del bootstrap del cluster.
+# secretos reales de la app viven cifrados en el repo (SOPS + age, ver
+# ADR-018/019 en docs/DECISIONS.md), nunca en 1Password ni en CI mas alla
+# de las credenciales de data-services.env. Si algo falta o es invalido,
+# falla aqui en segundos en vez de a mitad del bootstrap del cluster.
 #
 # Las credenciales ya no viven en un vars file del repo (ver
 # secrets/homelab.env.example) - localmente, exporta ese archivo antes de

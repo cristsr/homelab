@@ -14,7 +14,7 @@
 4. [Aprovisionar la VM Talos (`terraform/infra`)](#4-aprovisionar-la-vm-talos-terraforminfra)
 5. [Bootstrap de Kubernetes (`terraform/cluster`)](#5-bootstrap-de-kubernetes-terraformcluster)
 6. [Activar GitOps](#6-activar-gitops)
-7. [Poblar 1Password](#7-poblar-1password)
+7. [Cargar los secretos reales (SOPS + age)](#7-cargar-los-secretos-reales-sops--age)
 8. [Verificar y Acceder](#8-verificar-y-acceder)
 9. [DNS](#9-dns)
 10. [Troubleshooting](#10-troubleshooting)
@@ -103,7 +103,7 @@ cp secrets/homelab.env.example secrets/homelab.env
 $EDITOR secrets/homelab.env
 ```
 
-Completa al menos los campos de la seccion `# --- Infra (obligatorios) ---` (`ARGOCD_GITHUB_PAT`, `ARGOCD_WEBHOOK_SECRET`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN`) y `# --- Databases (obligatorios) ---`. Los demas ya no se completan aca — viven directo en 1Password (vault "Homelab"), ver seccion 7.
+Completa al menos los campos de la seccion `# --- Infra (obligatorios) ---` (`ARGOCD_GITHUB_PAT`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TUNNEL_TOKEN`, `GHCR_PAT`) y `# --- Databases ---`. El resto de los campos (Monitoring, SonarQube, DevTools) tambien viven en este mismo archivo, pero se aplican al repo (cifrados) en la seccion 7, no se usan directo de aca.
 
 > Este archivo ya solo lo consumen `ansible/preflight.yaml` (campos de Infra) y `ansible/data-services.yaml` (campos de Databases, al levantar los motores en sus LXC). La IP fija del Gateway/DNS interno ya no se configura por variable — se edita directo en `platform/networking/cilium-gateway/gateway.yaml` y `platform/networking/private-dns/` si hace falta cambiarla.
 
@@ -212,38 +212,27 @@ kubectl -n argocd get applications -w
 
 ---
 
-## 7. Poblar 1Password
+## 7. Cargar los secretos reales (SOPS + age)
 
-> **Cuando hacerlo**: Despues de que GitOps active el cluster. **Este paso es siempre manual** — no corre en CI a proposito (mismo criterio que ADR-015, ver ADR-017 en [DECISIONS.md](DECISIONS.md)), asi que hasta que lo hagas las Applications que dependen de estos secretos (ArgoCD webhook, cloudflared, las bases de datos, SonarQube, OpenMemory, Flow) van a quedar en `Progressing`/`Degraded`. Es esperado, no un fallo.
+> **Cuando hacerlo**: Despues de que GitOps active el cluster. **Este paso es siempre manual** — no corre en CI a proposito (mismo criterio que ADR-015). Hasta que lo hagas, las Applications que dependen de estos secretos (cloudflared, las bases de datos, SonarQube, OpenMemory) van a quedar con placeholders `admin` inservibles (`Progressing`/`Degraded`/`CrashLoopBackOff`/`ImagePullBackOff` segun el caso). Es esperado, no un fallo del pipeline.
 
-Los secretos reales viven en un vault de 1Password llamado **"Homelab"**, leidos por el clúster via `ClusterSecretStore` (provider `onepasswordSDK`).
+Los secretos reales viven cifrados en el repo (`*.sops.yaml` + `ansible/data-services.env`, ver ADR-018/019 en [DECISIONS.md](DECISIONS.md)) — no hay backend externo, solo la clave privada de `age` montada en `sops-secrets-operator` (namespace `sops`).
 
-### 7.1 Crear el vault y el Service Account
+### 7.1 Completar los valores
 
-1. En 1Password, crea un vault dedicado llamado `Homelab`.
-2. En **Developer → Service Accounts**, crea uno con acceso de **solo lectura** a ese vault (ningún otro).
-3. Cargá el token como Secret de Kubernetes (nunca en el repo):
-   ```bash
-   kubectl create secret generic onepassword-service-account-token \
-     -n secret-management --from-literal=token=<TOKEN_DEL_SERVICE_ACCOUNT>
-   ```
+1. Copiá `secrets/homelab.env.example` a `secrets/homelab.env` (gitignored, nunca se commitea).
+2. Completá cada valor (tokens de Cloudflare, PAT de GHCR, passwords de las bases de datos, etc. — cada campo del archivo documenta para qué se usa).
 
-### 7.2 Cargar los items en el vault
-
-Si venís migrando desde una instancia de OpenBao que ya tenía los secretos reales cargados (in-cluster u otra), usá el script de migración - instala el CLI `op` primero (`op signin` o `OP_SERVICE_ACCOUNT_TOKEN` exportado):
+### 7.2 Aplicar los valores a los archivos cifrados
 
 ```bash
-export BAO_SRC_ADDR=http://127.0.0.1:8200   # via kubectl port-forward svc/openbao 8200:8200 -n secret-management
-export BAO_SRC_TOKEN=<token con permiso de lectura sobre secret/>
-export OP_VAULT=Homelab
-./scripts/migrate-openbao-to-1password.sh
+export SOPS_AGE_KEY_FILE=~/.sops-keys/homelab.key.txt   # o donde tengas la clave privada de age
+./scripts/apply-real-secrets.sh secrets/homelab.env
 ```
 
-El script camina el árbol `secret/` del OpenBao origen y crea/actualiza un item por path en el vault (título = path, cada propiedad = un campo del item) — los mismos títulos/campos que ya referencian los `ExternalSecret` del repo (`argocd`, `devtools/openmemory`, `infra/cloudflare`, etc.).
+El script usa `sops set` para parchear cada campo cifrado en su `*.sops.yaml` (sin tocar el resto del archivo) y re-encripta `ansible/data-services.env` completo. Cualquier campo vacío en `secrets/homelab.env` se omite — el valor cifrado existente queda intacto. Revisá `git diff --stat`, y commiteá/empujá los archivos que cambiaron para que ArgoCD (los `SopsSecret`) y CI (`data-services.env`, vía `sops exec-env`) recojan los valores nuevos.
 
-Si arrancás de cero (sin un OpenBao previo), cargá los items a mano en la UI de 1Password: un item por `remoteRef.key` que uses en los manifiestos (grep `remoteRef` en `platform/` y `workloads/` para la lista completa), con un campo por cada `remoteRef.property`.
-
-Podés volver a correr el script cuando quieras resincronizar un valor — es idempotente, `op item edit` si el item ya existe.
+Podés volver a correr el script cuando quieras rotar un valor — es idempotente.
 
 ---
 
@@ -261,11 +250,11 @@ kubectl get pods -A
 | URL | Servicio | Credenciales |
 |-----|----------|--------------|
 | `https://argocd.cristianpuenguenan.online` | Argo CD | admin / (contrasena inicial del paso 5.2) |
-| `https://grafana.cristianpuenguenan.online` | Grafana | admin / (configurada en 1Password) |
+| `https://grafana.cristianpuenguenan.online` | Grafana | admin / (configurada en secrets/homelab.env, ver §7) |
 | `https://agentgateway.cristianpuenguenan.online` | Agent Gateway | admin / admin |
 | `https://headlamp.cristianpuenguenan.online` | Headlamp | Token de servicio |
 | `https://hubble.cristianpuenguenan.online` | Hubble | Sin auth |
-| `https://sonarqube.cristianpuenguenan.online` | SonarQube | admin / (configurada en 1Password) |
+| `https://sonarqube.cristianpuenguenan.online` | SonarQube | admin / (configurada en secrets/homelab.env, ver §7) |
 | `https://openmemory.cristianpuenguenan.online` | OpenMemory | Sin auth |
 
 Token para Headlamp:
@@ -332,15 +321,15 @@ data:
 EOF
 ```
 
-### ClusterSecretStore en False
+### SopsSecret no sincroniza
 
 ```bash
-kubectl get clustersecretstore onepassword -o wide
-kubectl describe clustersecretstore onepassword
-kubectl -n secret-management logs deployment/external-secrets --tail=50
+kubectl get sopssecrets -A
+kubectl describe sopssecret <nombre> -n <namespace>
+kubectl -n sops logs deployment/sops-secrets-operator --tail=50
 ```
 
-Causas típicas: el Secret `onepassword-service-account-token` no existe en `secret-management`, el token expiró/fue revocado, o el Service Account perdió acceso al vault "Homelab".
+Causas típicas: la clave privada de `age` montada en el operador no coincide con la que cifró el archivo (`age1...` en `.sops.yaml` vs la clave real), o el `Secret` destino ya existía owneado por otro controlador sin `spec.enforceOwnership: true` en el `SopsSecret` (error `Child secret is not owned by controller`).
 
 ### Volumen OpenEBS no provisiona
 
@@ -416,10 +405,10 @@ terraform init -backend-config=backend.hcl && terraform apply
 cd ../..
 kubectl apply -f gitops/root-app.yaml
 
-# 5. Poblar 1Password (manual siempre - ver seccion 7 arriba)
-kubectl create secret generic onepassword-service-account-token \
-  -n secret-management --from-literal=token=<TOKEN_DEL_SERVICE_ACCOUNT>
-./scripts/migrate-openbao-to-1password.sh
+# 5. Cargar los secretos reales (manual siempre - ver seccion 7 arriba)
+cp secrets/homelab.env.example secrets/homelab.env && $EDITOR secrets/homelab.env
+export SOPS_AGE_KEY_FILE=~/.sops-keys/homelab.key.txt
+./scripts/apply-real-secrets.sh secrets/homelab.env
 
 # 6. Verificar
 kubectl -n argocd get applications
