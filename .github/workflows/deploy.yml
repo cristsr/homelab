@@ -155,13 +155,19 @@ jobs:
           chmod 600 ~/.ssh/ci_ed25519
           ssh-keygen -y -f ~/.ssh/ci_ed25519 > ~/.ssh/ci_ed25519.pub
 
+      # ansible_ssh_bootstrap_pubkey se pasa por ANSIBLE_SSH_BOOTSTRAP_PUBKEY
+      # (env var), nunca por -e: el pubkey tiene espacios ("ssh-ed25519 AAAA...
+      # comentario"), y Ansible trata un -e key=value con espacios como
+      # multiples asignaciones separadas - solo la primera palabra
+      # ("ssh-ed25519") llegaba a la tarea, dejando authorized_keys con una
+      # linea incompleta que sshd simplemente ignora.
       - name: Bootstrap SSH access to the data LXCs
         working-directory: ansible
         run: |
+          export ANSIBLE_SSH_BOOTSTRAP_PUBKEY="$(cat "$HOME/.ssh/ci_ed25519.pub")"
           ansible-playbook bootstrap-lxc-ssh.yaml --limit data_lxcs \
             -e proxmox_ssh_user=root \
-            -e proxmox_ssh_private_key_file="$HOME/.ssh/ci_ed25519" \
-            -e ansible_ssh_bootstrap_pubkey="$(cat "$HOME/.ssh/ci_ed25519.pub")"
+            -e proxmox_ssh_private_key_file="$HOME/.ssh/ci_ed25519"
 
       # 1Password (vault "Homelab", item "data-services") es la unica fuente
       # de verdad de estas credenciales - CI las lee ahi en cada corrida en
