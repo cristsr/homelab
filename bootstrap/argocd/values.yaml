@@ -15,6 +15,23 @@ server:
   extraArgs:
     - --insecure
 
+repoServer:
+  # Sin esto quedaba en QoS BestEffort (sin requests/limits) - el primer
+  # candidato a que el nodo lo mate bajo presion de memoria, sin el
+  # OOMKilled prolijo de un pod con limits (Reason: Unknown, exit 255 en
+  # su lugar). Como el cache de git vive en un emptyDir atado al Pod (no
+  # al contenedor), un restart de contenedor por un kill asi NO lo limpia
+  # - el index corrupto sobrevive restarts hasta que se borra el Pod entero.
+  # Ver docs/DECISIONS.md (incidente del repo-server con "index file
+  # smaller than expected", 2026-09-15).
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
 configs:
   params:
     server.insecure: "true"
