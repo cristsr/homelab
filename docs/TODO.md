@@ -44,16 +44,13 @@ Este documento lista las tareas planificadas para mejorar la automatizacion y el
 
 ---
 
-## 3. Migrar ArgoCD de polling a webhook de GitHub — RESUELTO (con matiz)
+## 3. Migrar ArgoCD de polling a webhook de GitHub — REVERTIDO (ADR-019)
 
 **Motivacion:** El polling original tenia un intervalo de 180s. Un webhook de GitHub entrega notificaciones en segundos tras cada push, eliminando la latencia innecesaria.
 
-**Estado real:** El webhook esta implementado y funcionando (`webhook_secret` cargado en el item `argocd` del vault 1Password, `platform/argocd/webhook-externalsecret.yaml` lo sincroniza a `argocd-secret`; originalmente se cargaba con `scripts/load-secrets-to-openbao.sh` contra OpenBao, retirado en ADR-017). Sin embargo `timeout.reconciliation` **no** quedo en `0s`: se dejo en `600s` a proposito, como fallback de seguridad. El 2026-05-13 el webhook se rompio silenciosamente y el cluster estuvo sin sincronizar hasta el 2026-09-07 sin que nadie lo notara (con polling en `0s` no hay red de seguridad si el webhook falla). Ver el comentario en `bootstrap/argocd/values.yaml` y `docs/DECISIONS.md` para el detalle del incidente.
+**Estado real:** Se implemento (`webhook_secret` en 1Password, `platform/argocd/webhook-externalsecret.yaml` lo sincronizaba a `argocd-secret`) y funciono por un tiempo, pero dependia del `ClusterSecretStore` de 1Password, que quedo permanentemente en `rate limit exceeded` (ver ADR-018/019). Se revirtio por completo el 2026-09-16: se elimino el webhook (repo de GitHub y manifiestos), el `ClusterSecretStore` `onepassword`, y `timeout.reconciliation` volvio a `180s` como unico mecanismo de sync. Ver ADR-019 en `docs/DECISIONS.md` para el detalle y el plan si se quiere reimplementar mas adelante con un secret que no dependa de un backend externo con rate limit.
 
-**Archivos afectados (implementados):**
-- Item `argocd`, campo `webhook_secret`, en el vault "Homelab" de 1Password (ver `ARGOCD_WEBHOOK_SECRET` en `secrets/homelab.env.example` para el nombre original)
-- `platform/argocd/webhook-externalsecret.yaml` — ExternalSecret con `creationPolicy: Merge` sobre `argocd-secret`
-- `bootstrap/argocd/values.yaml` — `timeout.reconciliation: 600s` (fallback intencional, no bug)
+**Incidente relacionado:** El 2026-05-13 el webhook (version original) se rompio silenciosamente y el cluster estuvo sin sincronizar hasta el 2026-09-07 sin que nadie lo notara, porque en ese momento `timeout.reconciliation` estaba en `0s` (sin red de seguridad). Ver el comentario en `bootstrap/argocd/values.yaml` y `docs/DECISIONS.md` para el detalle — sigue siendo la razon por la que `timeout.reconciliation` nunca debe volver a `0s`.
 
 ---
 

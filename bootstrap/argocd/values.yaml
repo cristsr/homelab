@@ -36,13 +36,14 @@ configs:
   params:
     server.insecure: "true"
   cm:
-    # Webhook (platform/argocd/httproute-webhook.yaml + webhook-externalsecret.yaml)
-    # dispara el sync al instante en cada push - esto es solo el fallback
-    # de seguridad si alguna entrega de webhook se pierde. En 0s (sin
-    # fallback) un webhook roto deja de sincronizar TODO silenciosamente,
+    # Sin webhook de GitHub (ver ADR-019 en docs/DECISIONS.md - se retiro
+    # junto con el ClusterSecretStore de 1Password): el polling es el
+    # unico mecanismo de sync, no un fallback. 180s es el intervalo
+    # original de antes del webhook (docs/TODO.md #3). En 0s (sin
+    # polling) un webhook roto deja de sincronizar TODO silenciosamente,
     # como paso el 2026-05-13 al 2026-09-07 sin que nadie lo notara (ver
-    # docs/DECISIONS.md).
-    timeout.reconciliation: 600s
+    # docs/DECISIONS.md) - nunca lo dejes en 0s de nuevo.
+    timeout.reconciliation: 180s
     application.resourceTrackingMethod: annotation
   rbac:
     policy.default: role:readonly
