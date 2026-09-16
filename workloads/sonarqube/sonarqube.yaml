@@ -19,8 +19,13 @@ jdbcOverwrite:
   enable: false
 
 env:
+  # IP directa de la LXC, no el hostname *.internal - ese solo lo sirve
+  # `private-dns` a clientes Tailscale (Split DNS), CoreDNS del cluster no
+  # lo conoce y lo resuelve por DNS publico (Cloudflare, wildcard
+  # *.cristianpuenguenan.online) - conecta a una IP de Cloudflare que no
+  # escucha en :5432, "Connect timed out" eterno. Ver docs/DECISIONS.md.
   - name: SONAR_JDBC_URL
-    value: "jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube"
+    value: "jdbc:postgresql://192.168.80.31:5432/sonarqube"
   - name: SONAR_JDBC_USERNAME
     valueFrom:
       secretKeyRef:

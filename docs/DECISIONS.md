@@ -731,3 +731,25 @@ El operador decidió eliminar la dependencia de un API externo con rate limit pa
 - 1Password queda completamente fuera del camino crítico del clúster y de CI — ADR-017 y ADR-018 quedan cerrados del todo, ya no hay backend "híbrido".
 - Sync más lento tras un push: hasta 180s en vez de segundos. Aceptable para un homelab de un solo operador; se documenta como el trade-off consciente de esta decisión.
 - Si `timeout.reconciliation` se vuelve a poner en `0s` por error, el clúster deja de sincronizar por completo y en silencio (mismo incidente que ADR-011/`docs/TODO.md` #3) — no hay ningún webhook que lo compense esta vez. Vigilar este valor en cualquier cambio futuro a `bootstrap/argocd/values.yaml`.
+
+---
+
+## ADR-020: Los workloads in-cluster no pueden usar hostnames `*.internal.cristianpuenguenan.online` para conectar a las LXC de datos
+
+**Estado**: Aceptado
+**Fecha**: 2026-09-16
+
+### Contexto
+
+Al cargar credenciales reales y revisar por qué `sonarqube-sonarqube-0` seguía fallando (`HikariPool: Connect timed out` contra `postgres.internal.cristianpuenguenan.online:5432`), se encontró que ese hostname resuelve, **desde dentro del clúster**, a IPs públicas de Cloudflare (nada escucha ahí en el puerto 5432) — no a la IP real de la LXC (`192.168.80.31`). Causa: `private-dns` (`platform/networking/private-dns/`) es un CoreDNS que corre como Deployment propio, pensado como resolver de **Tailscale Split DNS** para clientes externos (laptop del operador, etc. — ver ADR-011/012); los pods del clúster usan el CoreDNS de `kube-system` (el de Cilium), que nunca conoce esa zona y termina reenviando la consulta al DNS público, donde el wildcard `*.cristianpuenguenan.online` (proxiado por Cloudflare) responde con IPs que no tienen nada relacionado corriendo. `openmemory` tenía el mismo bug con `QDRANT_HOST=qdrant.internal.cristianpuenguenan.online`.
+
+### Decisión
+
+- `workloads/sonarqube/sonarqube.yaml` (`SONAR_JDBC_URL`) y `platform/devtools/openmemory/deployment.yaml` (`QDRANT_HOST`) pasan a usar la IP directa de la LXC (`192.168.80.31`/`192.168.80.33`) en vez del hostname `*.internal`.
+- Los hostnames `*.internal.cristianpuenguenan.online` para las LXC de datos (`postgres`, `mongodb`, `qdrant`, `redis`) siguen existiendo en `private-dns` y siguen siendo válidos - solo para acceso manual vía Tailscale (`psql`/`mongosh`/etc. desde tu equipo), nunca para que un pod del clúster los use como target de conexión.
+- No se tocó CoreDNS de `kube-system` para servir esta zona también a los pods (alternativa descartada): más invasivo, afecta la resolución DNS de todo el clúster, y las IPs de las LXC ya son estáticas (Terraform), así que hardcodearlas no introduce un problema real de mantenimiento.
+
+### Consecuencias
+
+- Si la IP de alguna LXC de datos cambia alguna vez, hay que actualizarla en dos lugares: `ansible/inventory.yaml` y el manifiesto del consumidor in-cluster (`sonarqube.yaml`, `deployment.yaml` de openmemory) - `private-dns` ya no es la única fuente de verdad para esas IPs.
+- Cualquier workload nuevo que necesite conectar a una LXC de datos desde dentro del clúster debe usar la IP directa desde el día uno, no el hostname `*.internal` (ese patrón es solo para HTTPRoutes de administración, servidas por el Gateway, no para conexiones salientes de un pod).
