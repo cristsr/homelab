@@ -8,7 +8,7 @@ spec:
     secretTemplates:
         - name: cloudflare-api-token
           stringData:
-            api-token: ENC[AES256_GCM,data:0It5F7I=,iv:B+ibgebuqIvmk9yh5c0nDa1k1S8AJy93pVB05ZNwnv4=,tag:Sb57dtgIjwGA7BYcpDF1fQ==,type:str]
+            api-token: ENC[AES256_GCM,data:755hjgGVa2uE/M0/KptDjEADsXXbyKJ71JdCfPzC35HJObJoUkaQj8O3w0L5z1iyaTs2FPg=,iv:pqS0vOF2ESwdB962Ic/GenvaPOdQRISb1BdaeJTRFAg=,tag:snSMADtRS+QF2+iT1Bnxvg==,type:str]
 sops:
     age:
         - enc: |
@@ -21,6 +21,6 @@ sops:
             -----END AGE ENCRYPTED FILE-----
           recipient: age1j206e2wxxjux4ruxwgknp2cthc9uz3ag3hdcly2j8gdjunzm4s7s67h82m
     encrypted_regex: ^(stringData|data)$
-    lastmodified: "2026-09-16T19:26:43Z"
-    mac: ENC[AES256_GCM,data:uGU+HgIOIugTLsl/jCBrm8OWJoMe0PCmNto1h52LOzWYReuqOYah5ryTfA406qN+wl0KfcYtsyInzwRLM6BcH8qUewhxDqiSkdXGpNr8jXCrKK/VefN1npPZeU1GBcP2XMQV1oJSqDra4lw3/gYVC/ALSqi0/pGxFezX7Ia4swE=,iv:IP3th5iDIh4ZiMdhOGjo5EHlkVkZiwHTOc6zrexiGkM=,tag:OY5xupwdJ8GwA0ZGbMj7vg==,type:str]
+    lastmodified: "2026-09-16T23:31:51Z"
+    mac: ENC[AES256_GCM,data:8KNofa0MijPReCygbUiCAVgz8o2/JhxlDxXJc/Y+R4tiX+bYLwv7wDNXzSPh1sXrtGXnfiJnuebxvInMR6TlNCMrQq+6I7rEBmSIozlrADgMRtghsZddZLbOoU8/x1U6vxvWpHc5+naJTXu0EVvte8BFFnhA8MRF2oFMCBxpokA=,iv:aKoa9pvZGyv8kKPi6+1/CoKIrnYCWtM21F37ql3t0/Y=,tag:tRt9eGNGw60octeRuRLaJg==,type:str]
     version: 3.13.3

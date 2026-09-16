@@ -8,7 +8,7 @@ spec:
     secretTemplates:
         - name: cloudflared-token
           stringData:
-            token: ENC[AES256_GCM,data:OJn2AqU=,iv:hYFeatAVfopQ5XlPzzhMIwxWS/bRAe5ukXkoCdg7l5U=,tag:DLn4HC3QS3hSvDQHCEdyfg==,type:str]
+            token: ENC[AES256_GCM,data:fu3cxdpUyn3ZjMX5uF0vCGq8D/v1MGHQ2hQPI5a2h1aGE1Y8PGafXc+Wpv46xtd4n6TGIN6pPnOYf02U8ZOkoxHSgrCkAxW8dGB0V05ZsIpU2KKkH3dcxtxQWWkWvAx+a8K+p5ir2x5Qwvkp0RDoCTKZlpb2gioeyq58bFir4bHv5F7N+LIwzwHbtXvBiWXcpyr/MLF8vl/5bGn1P+m6Awqx7eMg6LQhCn/8AU6BPL6g1PXCiQngdw==,iv:L5r7IpPQbBnZI8Yz3hnZvjp2RULR/YQ2wDlA7c3By3s=,tag:kMuyOZO/LwDpsQD856RsQQ==,type:str]
 sops:
     age:
         - enc: |
@@ -21,6 +21,6 @@ sops:
             -----END AGE ENCRYPTED FILE-----
           recipient: age1j206e2wxxjux4ruxwgknp2cthc9uz3ag3hdcly2j8gdjunzm4s7s67h82m
     encrypted_regex: ^(stringData|data)$
-    lastmodified: "2026-09-16T19:26:43Z"
-    mac: ENC[AES256_GCM,data:BG6VIjZO6wdx4T6lSk5upi7MhYyd6FkSM49SV+sYzFzIEeFyIFqw72IL5itL6441qwjykf/28RtuFjKzV7f1Iv63c0Ehg3pgRxm3rSFS2dHtugGm/oS2eW/1zgu6GoxxoGlvZT0EQyELAphoOhKY9o4+Mto3FQRFGcpsws4SVcg=,iv:oN2J2yZxLf6GSE+zzDnU3HBSX/iN7VNl9/ImmwO4xjM=,tag:qxQaxnThahvd4F6GyLI9Iw==,type:str]
+    lastmodified: "2026-09-16T23:31:51Z"
+    mac: ENC[AES256_GCM,data:+oAg/ZwMjJ1IWp+SAGPbhF+07n0jn8sWtTIEVJKP6cH/w9zirjcC5fp2mcvCS+naflijC8EK56zundnxw8b7nVVxA1/l6yf9rB//vel0AGt9MsjiA8egmGr1Cid9tIG7lL3UDe+K6NzApPilzttWWxyRuUo7aT8wvmIlyAxVZhk=,iv:Ru9Kl+Bo1St6iybUbPuCvY3V01B12vw1zIYC7QktLPU=,tag:4B4C80skv/8TUznFDztJzg==,type:str]
     version: 3.13.3
