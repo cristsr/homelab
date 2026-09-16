@@ -1,0 +1,26 @@
+apiVersion: isindir.github.com/v1alpha3
+kind: SopsSecret
+metadata:
+    name: cloudflared-token
+    namespace: networking
+spec:
+    enforceOwnership: true
+    secretTemplates:
+        - name: cloudflared-token
+          stringData:
+            token: ENC[AES256_GCM,data:OJn2AqU=,iv:hYFeatAVfopQ5XlPzzhMIwxWS/bRAe5ukXkoCdg7l5U=,tag:DLn4HC3QS3hSvDQHCEdyfg==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0SWx1L1B4QUZDd0xYdzhC
+            VVRYZkpzN01BTFpQdmpWeWdyR2ViTXVrVWh3Clp0NExZRitybkVjbmhGMlFiM1lv
+            Ulc3S3FYVXhrdEtmQm14K0NzcWR4Vk0KLS0tIHNHZTFEMERabGl6d212NzJJcHFk
+            M2l4RGV0cXBKamkrcHkyR09HNWZ3K3cKnpmJ1wPepO+2H1a2CyqWLdeAuEe2BMXX
+            JkPGeP4bAcxPOoRvCBeaGegJHuT/7vI1+A2uUpIHrmALDiknH8rVdw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1j206e2wxxjux4ruxwgknp2cthc9uz3ag3hdcly2j8gdjunzm4s7s67h82m
+    encrypted_regex: ^(stringData|data)$
+    lastmodified: "2026-09-16T19:26:43Z"
+    mac: ENC[AES256_GCM,data:BG6VIjZO6wdx4T6lSk5upi7MhYyd6FkSM49SV+sYzFzIEeFyIFqw72IL5itL6441qwjykf/28RtuFjKzV7f1Iv63c0Ehg3pgRxm3rSFS2dHtugGm/oS2eW/1zgu6GoxxoGlvZT0EQyELAphoOhKY9o4+Mto3FQRFGcpsws4SVcg=,iv:oN2J2yZxLf6GSE+zzDnU3HBSX/iN7VNl9/ImmwO4xjM=,tag:qxQaxnThahvd4F6GyLI9Iw==,type:str]
+    version: 3.13.3
