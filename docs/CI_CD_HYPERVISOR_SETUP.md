@@ -15,12 +15,17 @@
 ## 1. Tailscale en el hipervisor + ruta de subred (acotada, no el /24 completo)
 
 El runner de GitHub Actions es hosted (no tiene acceso directo a la LAN del
-homelab). Para que llegue a la API de Proxmox (`:8006`) y a la VM Talos, el
-nodo Tailscale del hipervisor tiene que advertir esos hosts - **no la subred
-`/24` completa**: anunciar todo `192.168.80.0/24` hace que cualquier
-maquina de la tailnet con "accept routes" (incluida la del operador) enrute
-TODO ese rango a traves del tunel, rompiendo el acceso directo por LAN a
-los demas dispositivos de la red local.
+homelab). Para que llegue a la API de Proxmox (`:8006`), a la VM Talos, y
+(desde que `ansible/data-services.yaml` corre en CI) a las LXC de datos
+por SSH directo, el nodo Tailscale del hipervisor tiene que advertir esos
+hosts - **no la subred `/24` completa**: anunciar todo `192.168.80.0/24`
+hace que cualquier maquina de la tailnet con "accept routes" (incluida la
+del operador) enrute TODO ese rango a traves del tunel, rompiendo el
+acceso directo por LAN a los demas dispositivos de la red local.
+
+> Si `ansible-playbook data-services.yaml` falla en CI con `Connection
+> timed out` contra `192.168.80.31-34`, es esto - el runner no tiene ruta
+> advertida/aprobada a esas IPs todavia.
 
 La VM Talos tiene una MAC fija (`var.vm_mac_address` en
 `terraform/infra/variables.tf`, default `02:00:00:00:00:30`) precisamente
@@ -37,19 +42,23 @@ Pasos:
    `var.vm_mac_address` (ej. `02:00:00:00:00:30`).
 2. En el hipervisor:
    ```bash
-   sudo tailscale set --advertise-routes=192.168.80.20/32,192.168.80.30/32 --accept-routes
+   tailscale set --advertise-routes=192.168.80.20/32,192.168.80.30/32,192.168.80.31/32,192.168.80.32/32,192.168.80.33/32,192.168.80.34/32 --accept-routes
    ```
-   (ajustar las IPs si `PROXMOX_ENDPOINT`/`VM_STATIC_IP` son distintas).
+   (ajustar las IPs si `PROXMOX_ENDPOINT`/`VM_STATIC_IP` son distintas; las
+   cuatro últimas son las LXC de datos, `terraform/infra/lxc.tf`).
 3. En el admin console de Tailscale (**Machines → homelab → Edit route
    settings**): deshabilitar la ruta vieja `192.168.80.0/24` si estaba
-   aprobada, y habilitar las dos rutas `/32` nuevas. Sin este paso manual
-   las rutas quedan advertidas pero no enrutadas.
+   aprobada, y habilitar las seis rutas `/32` nuevas. Sin este paso manual
+   las rutas quedan advertidas pero no enrutadas - `tailscale status
+   --json` seguirá mostrando solo las rutas viejas en `PrimaryRoutes`
+   hasta que se aprueben acá.
 
 Verificación desde cualquier maquina de la tailnet:
 
 ```bash
 tailscale ping 192.168.80.20   # IP LAN del hipervisor
 tailscale ping 192.168.80.30   # IP LAN de la VM Talos
+tailscale ping 192.168.80.31   # IP LAN de la LXC de PostgreSQL (idem 32/33/34)
 ```
 
 ## 2. API token de Proxmox para Terraform
