@@ -2,3 +2,10 @@ creation_rules:
   - path_regex: .*\.sops\.yaml$
     encrypted_regex: ^(stringData|data)$
     age: age1j206e2wxxjux4ruxwgknp2cthc9uz3ag3hdcly2j8gdjunzm4s7s67h82m
+  # dotenv file consumed directly via `sops exec-env` (CI credentials for
+  # ansible/data-services.yaml, not a K8s Secret) - no encrypted_regex,
+  # dotenv has no nested structure to selectively encrypt, every value is
+  # encrypted. Scoped to this exact file, not `.*\.env$`, so it never
+  # matches secrets/homelab.env(.example) (different, gitignored file).
+  - path_regex: ^ansible/data-services\.env$
+    age: age1j206e2wxxjux4ruxwgknp2cthc9uz3ag3hdcly2j8gdjunzm4s7s67h82m
