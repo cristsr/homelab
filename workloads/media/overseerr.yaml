@@ -15,9 +15,12 @@ spec:
     spec:
       containers:
         - name: overseerr
-          # Overseerr is Plex-only at onboarding and never supported Jellyfin;
-          # Jellyseerr is its fork built for Jellyfin, same UI and config shape.
-          image: fallenbagel/jellyseerr:2.6.0
+          # Jellyseerr (fallenbagel) is archived, superseded by Seerr, the
+          # maintained fork. Pinned to :latest deliberately, not a version tag:
+          # ghcr.io publishes no semver tags, only latest + commit shas, and the
+          # Jellyfin 12 auth fix (PR #3502, merged 2026-09-12) is only there.
+          # Re-pin to the matching sha- tag once confirmed working.
+          image: ghcr.io/seerr-team/seerr:latest
           ports:
             - containerPort: 5055
           volumeMounts:
