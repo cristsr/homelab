@@ -13,6 +13,10 @@ spec:
       labels:
         app: overseerr
     spec:
+      # Seerr runs as the node user (uid 1000), unlike the previous images on
+      # this claim; without fsGroup it can't write /app/config/logs.
+      securityContext:
+        fsGroup: 1000
       containers:
         - name: overseerr
           # Jellyseerr (fallenbagel) is archived, superseded by Seerr, the
