@@ -5,6 +5,11 @@ metadata:
   namespace: media
 spec:
   replicas: 1
+  # RollingUpdate would create the new pod before the old one releases its
+  # ReadWriteOnce volumes, leaving it stuck FailedMount. Recreate tears the
+  # old pod down first.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: overseerr
