@@ -11,5 +11,5 @@ spec:
   dnsNames:
     - "cristianpuenguenan.online"
     - "*.cristianpuenguenan.online"
-  duration: 2160h     # 90 días
-  renewBefore: 360h   # Renueva 15 días antes
+  duration: 2160h     # 90 days
+  renewBefore: 360h   # Renews 15 days before expiry

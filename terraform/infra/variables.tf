@@ -1,110 +1,110 @@
 variable "proxmox_endpoint" {
-  description = "URL de la API de Proxmox VE (https://host:8006/)"
+  description = "Proxmox VE API URL (https://host:8006/)"
   type        = string
 }
 
 variable "proxmox_api_token" {
-  description = "API token de Proxmox, formato 'user@realm!tokenid=uuid'"
+  description = "Proxmox API token, format 'user@realm!tokenid=uuid'"
   type        = string
   sensitive   = true
 }
 
 variable "proxmox_node_name" {
-  description = "Nombre del nodo Proxmox donde se crea la VM"
+  description = "Proxmox node name where the VM is created"
   type        = string
   default     = "homelab"
 }
 
 variable "talos_version" {
-  description = "Version de Talos Linux a usar (debe existir en el Image Factory)"
+  description = "Talos Linux version to use (must exist in the Image Factory)"
   type        = string
   default     = "v1.14.0"
 }
 
 variable "talos_schematic_id" {
-  description = "ID del schematic generado en https://factory.talos.dev (extensiones: qemu-guest-agent, tailscale, zfs)"
+  description = "Schematic ID generated at https://factory.talos.dev (extensions: qemu-guest-agent, tailscale, zfs)"
   type        = string
   default     = "4dc4594391d715ab33e9c2ae96950b98049cc9e7cb24443d0568983914de5b11"
 }
 
 variable "vm_id" {
-  description = "ID numerico de la VM en Proxmox"
+  description = "Numeric VM ID in Proxmox"
   type        = number
   default     = 100
 }
 
 variable "vm_name" {
-  description = "Nombre de la VM y hostname del nodo Talos"
+  description = "VM name and Talos node hostname"
   type        = string
   default     = "talos"
 }
 
 variable "memory_mib" {
-  description = "Memoria de la VM en MiB"
+  description = "VM memory in MiB"
   type        = number
   default     = 16384
 }
 
 variable "vcpu" {
-  description = "vCPUs de la VM"
+  description = "VM vCPUs"
   type        = number
   default     = 8
 }
 
 variable "disk_size_gb" {
-  description = "Tamano del disco de instalacion de Talos (GB)"
+  description = "Talos installation disk size (GB)"
   type        = number
   default     = 120
 }
 
 variable "zfs_disk_size_gb" {
-  description = "Tamano del disco dedicado (vdb) para el zpool de OpenEBS ZFS LocalPV (GB)"
+  description = "Dedicated disk size (vdb) for the OpenEBS ZFS LocalPV zpool (GB)"
   type        = number
   default     = 100
 }
 
 variable "proxmox_datastore_id" {
-  description = "Datastore de Proxmox donde viven los discos y el ISO descargado"
+  description = "Proxmox datastore where the disks and downloaded ISO live"
   type        = string
   default     = "local-lvm"
 }
 
 variable "network_bridge" {
-  description = "Bridge de Proxmox al que se conecta la NIC de la VM"
+  description = "Proxmox bridge the VM's NIC connects to"
   type        = string
   default     = "vmbr0"
 }
 
 variable "vm_static_ip" {
-  description = "IP estatica del nodo Talos en la LAN"
+  description = "Static IP of the Talos node on the LAN"
   type        = string
 }
 
 variable "vm_mac_address" {
-  description = "MAC fija de la NIC del nodo Talos - reservar var.vm_static_ip a esta MAC en el DHCP del router"
+  description = "Fixed MAC address of the Talos node's NIC - reserve var.vm_static_ip to this MAC in the router's DHCP"
   type        = string
   default     = "02:00:00:00:00:30"
 }
 
 variable "vm_ip_prefix" {
-  description = "Prefijo CIDR de la IP estatica"
+  description = "CIDR prefix of the static IP"
   type        = number
   default     = 24
 }
 
 variable "vm_gateway" {
-  description = "Gateway de la LAN"
+  description = "LAN gateway"
   type        = string
 }
 
 variable "vm_dns_servers" {
-  description = "Servidores DNS para el nodo Talos"
+  description = "DNS servers for the Talos node"
   type        = list(string)
   default     = ["1.1.1.1", "8.8.8.8"]
 }
 
 variable "cluster_name" {
-  description = "Nombre del cluster Talos/Kubernetes"
+  description = "Talos/Kubernetes cluster name"
   type        = string
   default     = "talos"
 }

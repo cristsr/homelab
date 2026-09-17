@@ -1,755 +1,755 @@
-# Decisiones de Arquitectura (ADR)
+# Architecture Decisions (ADR)
 
-Registro de las principales decisiones técnicas tomadas en el homelab. Cada entrada explica el contexto que motivó la decision, las alternativas evaluadas y las consecuencias.
+Log of the main technical decisions made in the homelab. Each entry explains the context that motivated the decision, the alternatives evaluated, and the consequences.
 
 ---
 
-## ADR-001: k0s como distribución Kubernetes
+## ADR-001: k0s as Kubernetes distribution
 
-**Estado**: Superseded por [ADR-014](#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv) — reemplazó MicroK8s  
-**Fecha**: 2026-04
+**Status**: Superseded by [ADR-014](#adr-014-migration-from-k0slibvirtfedora-to-talos-linuxproxmox-ve-and-from-openebs-lvm-to-openebs-zfs-localpv) — replaced MicroK8s
+**Date**: 2026-04
 
-### Contexto
+### Context
 
-El homelab arrancó con **MicroK8s**. Con el tiempo surgieron fricciones que lo hacían incompatible con un setup GitOps limpio:
+The homelab started with **MicroK8s**. Over time, frictions arose that made it incompatible with a clean GitOps setup:
 
-- MicroK8s instala y gestiona addons propios (DNS, ingress, storage) que crean abstracciones sobre los componentes reales, dificultando el control directo con ArgoCD.
-- Se distribuye via **snap**, lo que genera paths no estándar para binarios CNI (`/snap/microk8s/...`) que rompen la configuración de Cilium.
-- Deshabilitar `kube-proxy` para cederlo a Cilium eBPF no es un proceso limpio ni documentado en MicroK8s.
-- La actualización de versiones via snap puede ocurrir fuera del control del operador.
+- MicroK8s installs and manages its own addons (DNS, ingress, storage) that create abstractions over the real components, hindering direct control with ArgoCD.
+- It is distributed via **snap**, which generates non-standard paths for CNI binaries (`/snap/microk8s/...`) that break Cilium's configuration.
+- Disabling `kube-proxy` to hand it over to Cilium eBPF is not a clean or documented process in MicroK8s.
+- Version updates via snap can happen outside the operator's control.
 
-### Opciones consideradas
+### Options considered
 
-| Opción | Razón de descarte |
+| Option | Reason for rejection |
 |--------|------------------|
-| **MicroK8s** | Paths no estándar, addons opacos, snap, kube-proxy difícil de deshabilitar |
-| **k3s** | Instala Traefik y componentes extra por defecto, requiere flags para deshabilitar |
-| **RKE2** | Más orientado a producción enterprise, overhead innecesario para single-node |
+| **MicroK8s** | Non-standard paths, opaque addons, snap, kube-proxy hard to disable |
+| **k3s** | Installs Traefik and extra components by default, requires flags to disable |
+| **RKE2** | More oriented to enterprise production, unnecessary overhead for single-node |
 
-### Decisión
+### Decision
 
-**k0s**: binario único sin dependencias, configuración 100% declarativa via `/etc/k0s/k0s.yaml`, `kube-proxy` se deshabilita con `--disable-components=kube-proxy`, paths estándar de CNI, servicio systemd estable.
+**k0s**: single binary with no dependencies, 100% declarative configuration via `/etc/k0s/k0s.yaml`, `kube-proxy` is disabled with `--disable-components=kube-proxy`, standard CNI paths, stable systemd service.
 
-### Consecuencias
+### Consequences
 
-- Cilium puede gestionar toda la plomería de red sin conflictos de paths.
-- La configuración del nodo es reproducible via plantilla Jinja2 en Ansible.
-- Se pierde el ecosistema de addons de MicroK8s (positivo: se gana control total sobre cada componente).
+- Cilium can manage all the network plumbing without path conflicts.
+- Node configuration is reproducible via a Jinja2 template in Ansible.
+- The MicroK8s addon ecosystem is lost (positive: total control over each component is gained).
 
 ---
 
-## ADR-002: Agent Gateway como ingress
+## ADR-002: Agent Gateway as ingress
 
-**Estado**: Aceptado — reemplazó APISIX  
-**Fecha**: 2026-05
+**Status**: Accepted — replaced APISIX
+**Date**: 2026-05
 
-### Contexto
+### Context
 
-**Apache APISIX** fue el primer ingress del homelab. La fricción principal fue su modelo de configuración:
+**Apache APISIX** was the homelab's first ingress. The main friction was its configuration model:
 
-- Las rutas se gestionan mediante la **Admin API** (llamadas HTTP al panel de control), no con recursos YAML declarativos en Git.
-- Aunque APISIX tiene CRDs propios (`ApisixRoute`, `ApisixUpstream`), son una capa de abstracción sobre su Admin API y no siguen el estándar de Kubernetes Gateway API.
-- Esto hace que ArgoCD gestione los recursos ArgoCD pero no controle realmente la configuración de rutas, rompiendo el principio GitOps de "todo en Git".
-- El homelab tiene MCP servers que necesitan un gateway que entienda AI workloads y protocolos MCP nativamente.
+- Routes are managed through the **Admin API** (HTTP calls to the control panel), not with declarative YAML resources in Git.
+- Although APISIX has its own CRDs (`ApisixRoute`, `ApisixUpstream`), they are an abstraction layer over its Admin API and do not follow the standard Kubernetes Gateway API.
+- This means ArgoCD manages the ArgoCD resources but doesn't really control the route configuration, breaking the GitOps principle of "everything in Git".
+- The homelab has MCP servers that need a gateway that natively understands AI workloads and MCP protocols.
 
-### Opciones consideradas
+### Options considered
 
-| Opción | Razón de descarte |
+| Option | Reason for rejection |
 |--------|------------------|
-| **APISIX** | Config vía Admin API, no Gateway API nativa, fricción con GitOps |
-| **Nginx Ingress** | Ingress API legacy, no Gateway API, sin soporte MCP |
-| **Envoy Gateway** | Gateway API nativa pero sin soporte AI/MCP |
-| **Istio Gateway** | Demasiado overhead para single-node |
+| **APISIX** | Config via Admin API, no native Gateway API, friction with GitOps |
+| **Nginx Ingress** | Legacy Ingress API, no Gateway API, no MCP support |
+| **Envoy Gateway** | Native Gateway API but no AI/MCP support |
+| **Istio Gateway** | Too much overhead for single-node |
 
-### Decisión
+### Decision
 
-**Agent Gateway**: implementa **Gateway API de Kubernetes** (`Gateway`, `HTTPRoute` como recursos nativos), toda la configuración es YAML declarativo gestionado por ArgoCD, tiene soporte nativo para AI workloads y protocolo MCP.
+**Agent Gateway**: implements the **Kubernetes Gateway API** (`Gateway`, `HTTPRoute` as native resources), all configuration is declarative YAML managed by ArgoCD, it has native support for AI workloads and the MCP protocol.
 
-### Consecuencias
+### Consequences
 
-- Toda la configuración de rutas vive en Git y es sincronizada por ArgoCD.
-- Los MCP servers (SonarQube MCP, OpenMemory) se exponen con HTTPRoutes estándar con path rewriting.
-- Agent Gateway es un proyecto joven con menor comunidad que APISIX o Nginx; puede tener breaking changes.
+- All route configuration lives in Git and is synced by ArgoCD.
+- MCP servers (SonarQube MCP, OpenMemory) are exposed with standard HTTPRoutes with path rewriting.
+- Agent Gateway is a young project with a smaller community than APISIX or Nginx; it may have breaking changes.
 
 ---
 
-## ADR-003: Cilium como CNI
+## ADR-003: Cilium as CNI
 
-**Estado**: Aceptado  
-**Fecha**: 2026-04
+**Status**: Accepted
+**Date**: 2026-04
 
-### Contexto
+### Context
 
-Se necesita un CNI que cumpla tres requisitos simultáneamente:
+A CNI is needed that meets three requirements simultaneously:
 
-1. **Reemplazo de kube-proxy**: eliminar el overhead de iptables usando eBPF.
-2. **NetworkPolicies expresivas**: capacidad de restringir tráfico entre pods con reglas más granulares que las nativas de Kubernetes.
-3. **Observabilidad de red**: visibilidad de flujos L3/L4/L7 sin instrumentar aplicaciones.
+1. **kube-proxy replacement**: eliminate iptables overhead using eBPF.
+2. **Expressive NetworkPolicies**: ability to restrict traffic between pods with more granular rules than Kubernetes' native ones.
+3. **Network observability**: visibility into L3/L4/L7 flows without instrumenting applications.
 
-### Opciones consideradas
+### Options considered
 
-| Opción | Razón de descarte |
+| Option | Reason for rejection |
 |--------|------------------|
-| **Flannel** | Solo L2/L3, sin NetworkPolicy, sin observabilidad |
-| **Calico** | NetworkPolicy nativa, pero sin eBPF completo ni Hubble |
-| **Weave** | Proyecto en mantenimiento reducido |
+| **Flannel** | L2/L3 only, no NetworkPolicy, no observability |
+| **Calico** | Native NetworkPolicy, but no full eBPF or Hubble |
+| **Weave** | Project under reduced maintenance |
 
-### Decisión
+### Decision
 
-**Cilium** con `kubeProxyReplacement: true`:
+**Cilium** with `kubeProxyReplacement: true`:
 
-- Todo el plano de datos de red via **eBPF** (sin iptables).
-- **Hubble** para observabilidad de flujos de red en tiempo real con UI.
-- `CiliumNetworkPolicy` para reglas de red más expresivas (ej: filtrar por namespace label + puerto específico).
-- **Service mesh sin sidecar** disponible si se necesita mTLS en el futuro.
+- The entire network data plane via **eBPF** (no iptables).
+- **Hubble** for real-time network flow observability with a UI.
+- `CiliumNetworkPolicy` for more expressive network rules (e.g., filtering by namespace label + specific port).
+- **Sidecar-less service mesh** available if mTLS is needed in the future.
 
-### Consecuencias
+### Consequences
 
-- Requiere kernel Linux ≥ 4.19 (no es problema en Ubuntu 22.04 con kernel 5.x+).
-- La configuración inicial es más compleja (paths de CNI bins, `k8sServiceHost`, modos de routing).
-- Cilium gestiona kube-proxy, DNS y NetworkPolicy, reduciendo el número de componentes independientes.
+- Requires Linux kernel ≥ 4.19 (not a problem on Ubuntu 22.04 with kernel 5.x+).
+- Initial configuration is more complex (CNI bin paths, `k8sServiceHost`, routing modes).
+- Cilium manages kube-proxy, DNS, and NetworkPolicy, reducing the number of independent components.
 
 ---
 
-## ADR-004: Longhorn como storage
+## ADR-004: Longhorn as storage
 
-**Estado**: Superseded por [ADR-013](#adr-013-reemplazo-de-longhorn-por-openebs-local-pv-lvm)  
-**Fecha**: 2026-04
+**Status**: Superseded by [ADR-013](#adr-013-replacing-longhorn-with-openebs-local-pv-lvm)
+**Date**: 2026-04
 
-### Contexto
+### Context
 
-En single-node se necesita un StorageClass que permita PVCs persistentes para bases de datos (PostgreSQL, MongoDB, Redis, Qdrant, OpenBao). Los requisitos son: snapshots, backups opcionales, y dos políticas de retención distintas (`Delete` para datos efímeros, `Retain` para bases de datos).
+On single-node, a StorageClass is needed that allows persistent PVCs for databases (PostgreSQL, MongoDB, Redis, Qdrant, OpenBao). The requirements are: snapshots, optional backups, and two distinct retention policies (`Delete` for ephemeral data, `Retain` for databases).
 
-### Opciones consideradas
+### Options considered
 
-| Opción | Razón de descarte |
+| Option | Reason for rejection |
 |--------|------------------|
-| **local-path-provisioner** | Sin snapshots, sin backups, sin UI, política única |
-| **Rook-Ceph** | Excesivamente complejo para single-node, alto consumo de recursos |
-| **OpenEBS** | Más complejo de configurar, comunidad más pequeña |
+| **local-path-provisioner** | No snapshots, no backups, no UI, single policy |
+| **Rook-Ceph** | Excessively complex for single-node, high resource consumption |
+| **OpenEBS** | More complex to configure, smaller community |
 
-### Decisión
+### Decision
 
-**Longhorn** instalado via Helm:
+**Longhorn** installed via Helm:
 
-- Dos StorageClasses: `longhorn` (ReclaimPolicy: Delete) y `longhorn-retain` (ReclaimPolicy: Retain) para bases de datos.
-- UI web para inspeccionar volúmenes, snapshots y réplicas.
-- Réplicas configuradas en 1 (single-node no puede replicar a otro nodo).
-- Snapshots programables para backups de bases de datos.
+- Two StorageClasses: `longhorn` (ReclaimPolicy: Delete) and `longhorn-retain` (ReclaimPolicy: Retain) for databases.
+- Web UI to inspect volumes, snapshots, and replicas.
+- Replicas set to 1 (single-node cannot replicate to another node).
+- Schedulable snapshots for database backups.
 
-### Consecuencias
+### Consequences
 
-- Requiere `open-iscsi` instalado en el nodo (gestionado por Ansible como prerequisito).
-- Los procesos de Longhorn (manager, engine image, replica) consumen recursos del nodo (~200MB RAM).
-- En single-node, la redundancia es limitada: un fallo de disco = pérdida de datos. Mitigado con snapshots.
+- Requires `open-iscsi` installed on the node (managed by Ansible as a prerequisite).
+- Longhorn's processes (manager, engine image, replica) consume node resources (~200MB RAM).
+- On single-node, redundancy is limited: a disk failure = data loss. Mitigated with snapshots.
 
 ---
 
-## ADR-005: Cloudflare Tunnel para acceso externo
+## ADR-005: Cloudflare Tunnel for external access
 
-**Estado**: Aceptado  
-**Fecha**: 2026-04
+**Status**: Accepted
+**Date**: 2026-04
 
-### Contexto
+### Context
 
-Los servicios del homelab necesitan ser accesibles desde Internet (ArgoCD, Grafana, SonarQube, etc.) sin comprometer la seguridad de la red doméstica. La red doméstica está detrás de un router con NAT y sin IP pública fija, lo que hace que la apertura de puertos sea frágil (IP cambia) e implica exponer directamente el nodo al tráfico entrante de Internet.
+The homelab's services need to be accessible from the Internet (ArgoCD, Grafana, SonarQube, etc.) without compromising the security of the home network. The home network is behind a router with NAT and no fixed public IP, which makes opening ports fragile (IP changes) and implies exposing the node directly to inbound Internet traffic.
 
-### Opciones consideradas
+### Options considered
 
-| Opción | Razón de descarte |
+| Option | Reason for rejection |
 |--------|------------------|
-| **Port forwarding en router** | Requiere IP pública estática, expone el nodo directamente a Internet, DDNS es frágil |
-| **Tailscale / WireGuard VPN** | Requiere cliente VPN en el dispositivo de acceso, no sirve para acceso web público sin cliente |
-| **VPS como reverse proxy** | Coste mensual adicional, latencia extra, otro sistema que mantener |
+| **Port forwarding on the router** | Requires a static public IP, exposes the node directly to the Internet, DDNS is fragile |
+| **Tailscale / WireGuard VPN** | Requires a VPN client on the accessing device, doesn't work for public web access without a client |
+| **VPS as reverse proxy** | Additional monthly cost, extra latency, another system to maintain |
 
-### Decisión
+### Decision
 
-**Cloudflare Tunnel** (`cloudflared`): el agente establece una conexión **saliente** cifrada desde el cluster hacia Cloudflare. Todo el tráfico entrante fluye por esa conexión sin necesidad de abrir puertos en el router ni tener IP fija.
+**Cloudflare Tunnel** (`cloudflared`): the agent establishes an encrypted **outbound** connection from the cluster to Cloudflare. All inbound traffic flows through that connection without needing to open ports on the router or have a fixed IP.
 
-Beneficios adicionales:
-- El DNS del dominio (`*.cristianpuenguenan.online`) ya está gestionado en Cloudflare, unificando DNS + túnel + certificados TLS en una sola plataforma.
-- Cloudflare actúa como WAF y DDoS protection de forma transparente.
-- El token del túnel se gestiona como secret en OpenBao y se sincroniza via ExternalSecret, por lo que `cloudflared` arranca sin credenciales en texto plano.
+Additional benefits:
+- The domain's DNS (`*.cristianpuenguenan.online`) is already managed on Cloudflare, unifying DNS + tunnel + TLS certificates on a single platform.
+- Cloudflare transparently acts as WAF and DDoS protection.
+- The tunnel token is managed as a secret in OpenBao and synced via ExternalSecret, so `cloudflared` starts up without plain-text credentials.
 
-### Consecuencias
+### Consequences
 
-- No se abre ningún puerto en el router; el nodo no es directamente accesible desde Internet.
-- El acceso externo depende de la disponibilidad de Cloudflare (prácticamente 100% uptime).
-- Para acceso LAN sin pasar por Cloudflare, Agent Gateway sigue accesible directamente en `192.168.80.20:443`.
+- No port is opened on the router; the node is not directly accessible from the Internet.
+- External access depends on Cloudflare's availability (practically 100% uptime).
+- For LAN access without going through Cloudflare, Agent Gateway remains directly accessible at `192.168.80.20:443`.
 
 ---
 
-## ADR-006: OpenBao como backend de secretos
+## ADR-006: OpenBao as secrets backend
 
 
-**Estado**: Aceptado  
-**Fecha**: 2026-04
+**Status**: Accepted
+**Date**: 2026-04
 
-### Contexto
+### Context
 
-El cluster necesita un sistema centralizado para gestionar secretos (tokens de APIs, credenciales de bases de datos, claves TLS) que cumpla dos requisitos: los secretos **no deben vivir en texto plano en Git** y deben poder sincronizarse automáticamente con Kubernetes Secrets cuando un pod los necesita.
+The cluster needs a centralized system to manage secrets (API tokens, database credentials, TLS keys) that meets two requirements: secrets **must not live in plain text in Git** and must be able to sync automatically with Kubernetes Secrets when a pod needs them.
 
-La alternativa más simple —poner los secretos directamente como Kubernetes Secrets en el repositorio— es incompatible con GitOps porque requeriría cifrarlos en el repo (SOPS, sealed-secrets) o aceptar el riesgo de exposición.
+The simplest alternative — putting secrets directly as Kubernetes Secrets in the repository — is incompatible with GitOps because it would require encrypting them in the repo (SOPS, sealed-secrets) or accepting the risk of exposure.
 
-### Opciones consideradas
+### Options considered
 
-| Opción | Razón de descarte |
+| Option | Reason for rejection |
 |--------|------------------|
-| **Sealed Secrets** | Secretos cifrados en Git pero atados a la clave del cluster; si el cluster muere se pierden los secretos originales |
-| **SOPS + age/GPG** | Cifrado en Git válido, pero requiere descifrado manual o CI/CD para aplicar; no ofrece API dinámica para rotación |
-| **HashiCorp Vault** | Solución de referencia pero con BSL (Business Source License) desde 2023; OpenBao es su fork comunitario con licencia MPL-2.0 |
-| **Doppler / Infisical** | SaaS externos; introduce dependencia de un tercero para secretos críticos del cluster |
+| **Sealed Secrets** | Secrets encrypted in Git but tied to the cluster's key; if the cluster dies, the original secrets are lost |
+| **SOPS + age/GPG** | Valid encryption in Git, but requires manual decryption or CI/CD to apply; no dynamic API for rotation |
+| **HashiCorp Vault** | Reference solution but with BSL (Business Source License) since 2023; OpenBao is its community fork under the MPL-2.0 license |
+| **Doppler / Infisical** | External SaaS; introduces a third-party dependency for the cluster's critical secrets |
 
-### Decisión
+### Decision
 
-**OpenBao** (fork comunitario de HashiCorp Vault, licencia MPL-2.0) desplegado en el cluster vía Helm:
+**OpenBao** (community fork of HashiCorp Vault, MPL-2.0 license) deployed in the cluster via Helm:
 
-- KV v2 como engine principal: todos los secretos del cluster viven en `secret/` con versionado.
-- **Kubernetes auth**: los pods se autentican con su ServiceAccount, sin credenciales hardcodeadas.
-- **External Secrets Operator** sincroniza automáticamente desde OpenBao hacia Kubernetes Secrets; los pods solo ven Secrets nativos de Kubernetes.
-- La clave de unseal se gestiona con **Static Seal** (AES-256) cifrada con `ansible-vault` en el repositorio.
+- KV v2 as the main engine: all cluster secrets live in `secret/` with versioning.
+- **Kubernetes auth**: pods authenticate with their ServiceAccount, without hardcoded credentials.
+- **External Secrets Operator** syncs automatically from OpenBao to Kubernetes Secrets; pods only see native Kubernetes Secrets.
+- The unseal key is managed with **Static Seal** (AES-256) encrypted with `ansible-vault` in the repository.
 
-### Consecuencias
+### Consequences
 
-- Ningún secreto de producción vive en texto plano en Git.
-- Tras cada reinicio del pod `openbao-0`, el vault queda sellado y requiere unseal manual con la clave AES-256. Es el principal punto de fricción operativa.
-- External Secrets Operator añade un componente extra, pero desacopla completamente la gestión de secretos de su consumo.
-- Al ser un fork activo de Vault, la API es 100% compatible: la documentación de Vault es válida para OpenBao.
+- No production secret lives in plain text in Git.
+- After every restart of the `openbao-0` pod, the vault becomes sealed and requires manual unseal with the AES-256 key. This is the main operational friction point.
+- External Secrets Operator adds an extra component, but fully decouples secret management from its consumption.
+- Being an active fork of Vault, the API is 100% compatible: Vault's documentation is valid for OpenBao.
 
-> **Actualización (ADR-015)**: la clave de unseal y el resto de las credenciales ya no viven cifradas en el repositorio con `ansible-vault` — viven en `secrets/homelab.env`, plano y gitignored, cargadas a OpenBao con un script manual.
+> **Update (ADR-015)**: the unseal key and the rest of the credentials no longer live encrypted in the repository with `ansible-vault` — they live in `secrets/homelab.env`, plain and gitignored, loaded into OpenBao with a manual script.
 
 ---
 
-## ADR-007: Ansible para aprovisionamiento del nodo
+## ADR-007: Ansible for node provisioning
 
-**Estado**: Aceptado  
-**Fecha**: 2026-04
+**Status**: Accepted
+**Date**: 2026-04
 
-### Contexto
+### Context
 
-El nodo necesita ser aprovisionado **antes** de que Kubernetes exista: instalar k0s, kubectl, Helm, Helmfile, prerequisitos de Longhorn, y crear los secrets iniciales que el cluster necesita en el primer arranque. Este bootstrapping no puede hacerse con GitOps porque ArgoCD aún no existe.
+The node needs to be provisioned **before** Kubernetes exists: installing k0s, kubectl, Helm, Helmfile, Longhorn prerequisites, and creating the initial secrets the cluster needs on first boot. This bootstrapping cannot be done with GitOps because ArgoCD doesn't exist yet.
 
-Además, los secrets de arranque (GitHub PAT, tokens de Cloudflare, clave de OpenBao) no pueden vivir en texto plano en el repositorio.
+Additionally, the bootstrap secrets (GitHub PAT, Cloudflare tokens, OpenBao key) cannot live in plain text in the repository.
 
-### Opciones consideradas
+### Options considered
 
-| Opción | Razón de descarte |
+| Option | Reason for rejection |
 |--------|------------------|
-| **Scripts bash** | No son idempotentes, gestión de secrets complicada, difíciles de mantener |
-| **Terraform** | Orientado a provisionar infraestructura cloud, no configuración de un nodo físico/VM existente |
-| **Cloud-init** | Solo se ejecuta una vez en el primer arranque, no re-ejecutable |
+| **Bash scripts** | Not idempotent, complicated secret management, hard to maintain |
+| **Terraform** | Oriented toward provisioning cloud infrastructure, not configuring an existing physical/VM node |
+| **Cloud-init** | Only runs once on first boot, not re-runnable |
 
-### Decisión
+### Decision
 
-**Ansible** con estructura de playbooks separados:
+**Ansible** with a structure of separate playbooks:
 
-- `site.yaml`: playbook principal, idempotente, instala y configura todo el nodo desde cero.
-- `vault-populate.yaml`: escribe los secrets de infraestructura en OpenBao KV una vez que el cluster está activo.
-- `teardown.yaml`: destruye el cluster limpiamente para reinstalaciones.
-- `ansible-vault` cifra los secrets sensibles en `group_vars/all.yaml`, el archivo de contraseña del vault (`.vault-pass`) está en `.gitignore`.
+- `site.yaml`: main playbook, idempotent, installs and configures the entire node from scratch.
+- `vault-populate.yaml`: writes the infrastructure secrets into OpenBao KV once the cluster is active.
+- `teardown.yaml`: cleanly destroys the cluster for reinstalls.
+- `ansible-vault` encrypts sensitive secrets in `group_vars/all.yaml`; the vault password file (`.vault-pass`) is in `.gitignore`.
 
-### Consecuencias
+### Consequences
 
-- El estado completo del nodo es reproducible ejecutando un único comando (`ansible-playbook site.yaml`).
-- Los secrets sensibles están cifrados en el repositorio, seguros para versionar.
-- Requiere Python y Ansible instalados en el nodo antes de ejecutar (dependencia de bootstrapping manual mínima).
-- El playbook se ejecuta localmente en el nodo (`ansible_connection: local`), no requiere SSH desde un host externo.
+- The node's complete state is reproducible by running a single command (`ansible-playbook site.yaml`).
+- Sensitive secrets are encrypted in the repository, safe to version.
+- Requires Python and Ansible installed on the node before running (minimal manual bootstrapping dependency).
+- The playbook runs locally on the node (`ansible_connection: local`); it doesn't require SSH from an external host.
 
-> **Actualización (ADR-008)**: desde que el nodo corre dentro de una VM, Ansible pasó de `ansible_connection: local` a SSH contra la VM. El rol de Ansible no cambió — sigue siendo el único responsable de configurar el nodo una vez que existe; lo que cambió es *qué* nodo existe primero (ahora lo crea Terraform).
+> **Update (ADR-008)**: since the node now runs inside a VM, Ansible moved from `ansible_connection: local` to SSH against the VM. Ansible's role did not change — it remains solely responsible for configuring the node once it exists; what changed is *which* node exists first (now created by Terraform).
 
 ---
 
-## ADR-008: VM libvirt provisionada con Terraform
+## ADR-008: libvirt VM provisioned with Terraform
 
-**Estado**: Superseded por [ADR-014](#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv)
-**Fecha**: 2026-08-30
+**Status**: Superseded by [ADR-014](#adr-014-migration-from-k0slibvirtfedora-to-talos-linuxproxmox-ve-and-from-openebs-lvm-to-openebs-zfs-localpv)
+**Date**: 2026-08-30
 
-### Contexto
+### Context
 
-El nodo corría directamente sobre el hardware del laptop (bare-metal, único host). Esto ataba todo el ciclo de vida del cluster al sistema operativo del host: reinstalar el nodo significaba reinstalar la máquina completa, y no existía forma de tomar snapshots o revertir el estado del nodo en sí (solo del cluster, vía `teardown.yaml`). El propio README ya anticipaba esta posibilidad ("desplegada... en un único nodo físico/virtual").
+The node ran directly on the laptop's hardware (bare-metal, single host). This tied the entire cluster lifecycle to the host's operating system: reinstalling the node meant reinstalling the whole machine, and there was no way to take snapshots or roll back the node's own state (only the cluster's, via `teardown.yaml`). The README itself already anticipated this possibility ("deployed... on a single physical/virtual node").
 
-ADR-007 había evaluado y descartado Terraform para el aprovisionamiento, pero por una razón puntual: "Terraform está orientado a provisionar infraestructura cloud, no a configurar un nodo físico/VM **existente**". Esa razón dejó de aplicar en cuanto se decidió correr el nodo dentro de una VM: ahí sí hay infraestructura real que crear (disco, red, dominio libvirt), que es exactamente el dominio de Terraform.
+ADR-007 had evaluated and rejected Terraform for provisioning, but for a specific reason: "Terraform is oriented toward provisioning cloud infrastructure, not configuring an **existing** physical/VM node". That reason stopped applying as soon as it was decided to run the node inside a VM: there really is infrastructure to create there (disk, network, libvirt domain), which is exactly Terraform's domain.
 
-### Opciones consideradas
+### Options considered
 
-| Opción | Razón de descarte |
+| Option | Reason for rejection |
 |--------|-------------------|
-| **Seguir en bare-metal** | Sin snapshots ni rollback a nivel nodo; reinstalar = reinstalar el SO del host completo |
-| **Vagrant + libvirt** | Capa extra (Ruby/Vagrantfile) sobre libvirt sin aportar sobre Terraform; peor tracking de estado que un `.tfstate` |
-| **Scripts bash + virt-install** (prototipo explorado en `~/vmconfig` durante esta sesión) | No declarativo, sin estado, sin plan/diff antes de aplicar cambios |
+| **Stay on bare-metal** | No snapshots or rollback at the node level; reinstalling = reinstalling the entire host OS |
+| **Vagrant + libvirt** | Extra layer (Ruby/Vagrantfile) over libvirt without adding anything over Terraform; worse state tracking than a `.tfstate` |
+| **Bash scripts + virt-install** (prototype explored in `~/vmconfig` during this session) | Not declarative, no state, no plan/diff before applying changes |
 
-### Decisión
+### Decision
 
-**Terraform con el provider `dmacvicar/libvirt`** (directorio `terraform/`) crea la VM: pool dedicado, volumen base (descarga pristina de Fedora Cloud, nunca booteada directamente) + volumen overlay copy-on-write por VM, `libvirt_cloudinit_disk` con IP estática, y el dominio libvirt en sí.
+**Terraform with the `dmacvicar/libvirt` provider** (`terraform/` directory) creates the VM: dedicated pool, base volume (pristine download of Fedora Cloud, never booted directly) + copy-on-write overlay volume per VM, `libvirt_cloudinit_disk` with a static IP, and the libvirt domain itself.
 
-Ansible **no cambia de rol** (ADR-007 sigue vigente): sigue siendo el único responsable de instalar k0s y hacer el bootstrap inicial — solo cambia el transporte, de `ansible_connection: local` a SSH contra la VM.
+Ansible **does not change role** (ADR-007 remains in effect): it remains solely responsible for installing k0s and doing the initial bootstrap — only the transport changes, from `ansible_connection: local` to SSH against the VM.
 
-**Red**: el host solo tiene WiFi activa (sin cable ethernet disponible), y bridging de una VM sobre WiFi es frágil en la mayoría de drivers/APs. Se optó por NAT libvirt (`192.168.122.0/24`, red `default` existente) + port-forward de `192.168.80.20:80/443` hacia la VM configurado con firewalld (`ansible/host-network.yaml`, corre contra el host, no contra la VM). Cloudflare Tunnel (ADR-005) no se ve afectado porque es una conexión saliente desde dentro de la VM.
+**Network**: the host only has WiFi active (no ethernet cable available), and bridging a VM over WiFi is fragile on most drivers/APs. NAT libvirt was chosen (`192.168.122.0/24`, existing `default` network) + port-forward from `192.168.80.20:80/443` to the VM configured with firewalld (`ansible/host-network.yaml`, runs against the host, not the VM). Cloudflare Tunnel (ADR-005) is not affected because it's an outbound connection from inside the VM.
 
-### Consecuencias
+### Consequences
 
-- `terraform.tfstate` local pasa a ser un artefacto crítico sin backend remoto — punto único de falla conocido y aceptado por ahora (homelab de un solo operador); queda fuera de alcance de esta decisión.
-  > **Actualización (ADR-009)**: dejó de aplicar — el state ahora vive en un backend remoto (Cloudflare R2), requisito no opcional para correr Terraform desde un runner de CI efímero.
-- Nueva dependencia en el host: libvirt/KVM, además de Terraform.
-- Ahora sí es posible tomar snapshots de la VM como mecanismo de recuperación ante desastres a nivel nodo — algo que bare-metal nunca ofreció.
-- Acceso LAN directo depende de las reglas de forward-port de firewalld en el host (un componente más que puede fallar); acceso WAN vía Cloudflare Tunnel no tiene overhead adicional.
-- `libvirt_domain.k0s_node` tiene `autostart = true`: a diferencia de bare-metal (donde `k0scontroller` arrancaba solo con el host), ahora la VM debe arrancar sola tras un reboot del host para que el cluster vuelva a estar disponible.
+- `terraform.tfstate` local becomes a critical artifact with no remote backend — a known single point of failure accepted for now (single-operator homelab); out of scope for this decision.
+  > **Update (ADR-009)**: no longer applies — the state now lives in a remote backend (Cloudflare R2), a non-optional requirement for running Terraform from an ephemeral CI runner.
+- New dependency on the host: libvirt/KVM, in addition to Terraform.
+- It is now possible to take VM snapshots as a disaster recovery mechanism at the node level — something bare-metal never offered.
+- Direct LAN access depends on firewalld's port-forward rules on the host (one more component that can fail); WAN access via Cloudflare Tunnel has no additional overhead.
+- `libvirt_domain.k0s_node` has `autostart = true`: unlike bare-metal (where `k0scontroller` started on its own with the host), now the VM must start on its own after a host reboot for the cluster to become available again.
 
-### Hallazgos del despliegue real (no obvios de antemano)
+### Findings from the real deployment (not obvious in advance)
 
-- **BIOS legacy + `i440fx`, no UEFI**: en este host, OVMF/UEFI (con o sin secure-boot, con o sin SMM) deja la VM colgada en silencio — sin salida en consola serie ni en framebuffer, CPU al 99% en un spin-loop dentro del firmware. BIOS legacy arranca de forma confiable con la misma plantilla de Fedora Cloud. Nada en k0s/Cilium/Longhorn requiere UEFI, así que `terraform/main.tf` fija `os.type_machine = "pc"` sin bloque de firmware.
-- **`memory` del provider `dmacvicar/libvirt` es KiB por defecto**, no MiB — sin `memory_unit = "MiB"` explícito, cada VM se creaba con unos pocos MB de RAM en vez de GB (causa raíz real del cuelgue de arranque, más que el firmware). Ver el comentario en `terraform/main.tf` junto al bloque `libvirt_domain`.
-- El schema de este provider (se resolvió a v0.9.9 con el constraint `~> 0.8`) es una reescritura completa frente a versiones anteriores documentadas en la comunidad: mapea el XML de libvirt casi 1:1 con atributos anidados (`disks = [...]`, `os = {...}`), no los bloques `disk {}`/`network_interface {}` clásicos. Si se actualiza el provider, revisar `terraform providers schema -json` antes de tocar `main.tf`.
+- **Legacy BIOS + `i440fx`, not UEFI**: on this host, OVMF/UEFI (with or without secure-boot, with or without SMM) leaves the VM hung silently — no output on serial console or framebuffer, CPU at 99% in a spin-loop inside the firmware. Legacy BIOS boots reliably with the same Fedora Cloud template. Nothing in k0s/Cilium/Longhorn requires UEFI, so `terraform/main.tf` sets `os.type_machine = "pc"` with no firmware block.
+- **The `dmacvicar/libvirt` provider's `memory` is in KiB by default**, not MiB — without an explicit `memory_unit = "MiB"`, each VM was created with just a few MB of RAM instead of GB (the real root cause of the boot hang, more than the firmware). See the comment in `terraform/main.tf` next to the `libvirt_domain` block.
+- This provider's schema (resolved to v0.9.9 with the `~> 0.8` constraint) is a complete rewrite compared to earlier versions documented in the community: it maps libvirt's XML almost 1:1 with nested attributes (`disks = [...]`, `os = {...}`), not the classic `disk {}`/`network_interface {}` blocks. If the provider is updated, review `terraform providers schema -json` before touching `main.tf`.
 
 ---
 
-## ADR-009: CI/CD con GitHub Actions hosted + Tailscale + Cloudflare R2
+## ADR-009: CI/CD with GitHub Actions hosted + Tailscale + Cloudflare R2
 
-**Estado**: Aceptado
-**Fecha**: 2026-08-31
+**Status**: Accepted
+**Date**: 2026-08-31
 
-### Contexto
+### Context
 
-Terraform y Ansible se ejecutaban manualmente desde el propio hipervisor (`qemu:///system` local, grupo `hypervisor` del inventario con `ansible_connection: local`). El operador dejó de querer ejecutar estas herramientas en el homeserver y pidió un flujo CI/CD real con GitHub Actions.
+Terraform and Ansible were run manually from the hypervisor itself (local `qemu:///system`, `hypervisor` inventory group with `ansible_connection: local`). The operator no longer wanted to run these tools on the homeserver and asked for a real CI/CD flow with GitHub Actions.
 
-Un runner **hosted** de GitHub Actions vive en la nube pública de GitHub: no tiene ruta de red hacia una LAN doméstica sin NAT/IP pública. Además, `terraform apply` corriendo en un runner efímero no puede depender de un `terraform.tfstate` local — se perdería en cada job. Estos dos problemas (conectividad + estado) son los que resuelve esta decisión.
+A **hosted** GitHub Actions runner lives in GitHub's public cloud: it has no network route to a home LAN without NAT/public IP. In addition, `terraform apply` running on an ephemeral runner can't depend on a local `terraform.tfstate` — it would be lost on every job. These two problems (connectivity + state) are what this decision solves.
 
-Durante la investigación se descartó una nota previa en la memoria de proyecto (no reflejada en código) que afirmaba la existencia de un backend nativo `"github"` en Terraform — se confirmó contra la documentación oficial de HashiCorp que **no existe tal backend**; se corrige aquí.
+During investigation, a previous note in project memory (not reflected in code) claiming the existence of a native `"github"` backend in Terraform was discarded — it was confirmed against HashiCorp's official documentation that **no such backend exists**; corrected here.
 
-### Opciones consideradas
+### Options considered
 
-**Conectividad runner → hipervisor:**
+**Runner → hypervisor connectivity:**
 
-| Opción | Razón de descarte |
+| Option | Reason for rejection |
+|--------|------------------|
+| **Self-hosted runner on the homeserver** | Exactly what the operator wanted to stop doing — goes back to running everything on the host itself |
+| **SSH port exposed on the router** | Exposes the LAN to the Internet; GitHub Actions IP ranges change frequently, doesn't work for a stable allowlist |
+| **Cloudflare Tunnel dedicated to SSH (outside the cluster)** | Viable, but adds a second `cloudflared` at the host level just for this — more surface to maintain than Tailscale |
+
+**State backend:**
+
+| Option | Reason for rejection |
+|--------|------------------|
+| **Local state on the runner** | Lost on every job (ephemeral runner) — not a real option, not a preference |
+| **HCP Terraform (Terraform Cloud) free tier** | Official and simple backend, but introduces an additional account/platform outside the already-used stack (Cloudflare) |
+
+### Decision
+
+- **Hosted GitHub Actions runners**, with no self-hosted runner on the homeserver.
+- **Tailscale**: the physical hypervisor joins the tailnet (`tailscale up --ssh`); each CI job spins up an ephemeral node via `tailscale/github-action@v4` authenticated with an OAuth client, tagged `tag:ci`, with an ACL that only allows `tag:ci` → the hypervisor's tag over SSH (port 22). No port is opened on the router.
+- **`terraform/provider.tf`** moves from `qemu:///system` to `qemu+ssh://...` (variables `hypervisor_ssh_host`/`hypervisor_ssh_user`/`hypervisor_ssh_keyfile`, no default). This also unifies manual execution: the operator no longer runs Terraform on the host either, always remotely via SSH — same code path as CI.
+- **Ansible inventory** (`terraform/templates/inventory.yaml.tftpl`): the `hypervisor` group stops being `ansible_connection: local` and moves to real SSH; the `k0s` group (VM on libvirt's internal NAT network, only reachable from the hypervisor itself) uses `ProxyCommand` to jump through the hypervisor.
+- **Remote state in Cloudflare R2** (S3-compatible) via Terraform's native `s3` backend with a custom endpoint — reuses the Cloudflare account already used for DNS/Tunnel instead of adding a new platform. Native locking with `use_lockfile = true` (Terraform ≥ 1.10), no DynamoDB.
+- **Automatic pipeline scope** (`.github/workflows/deploy.yml`, push to `master`): `terraform apply` + `ansible-playbook site.yaml` + `ansible-playbook host-network.yaml` + `vault-populate.yaml` + `load-extra-secrets.yaml`, behind the `prod` Environment (manual approval required). Only `teardown.yaml` (destructive, interactive) stays out of the pipeline.
+- `.github/workflows/terraform-plan.yml` runs `terraform plan` and comments the result on every PR touching `terraform/**`, with no approval gate (doesn't mutate infrastructure).
+
+### Consequences
+
+- The homeserver no longer has terraform/ansible running on it: it only receives inbound SSH connections via Tailscale.
+- New external dependency: Tailscale (tailnet + OAuth client) and a Cloudflare R2 account/bucket.
+- Infrastructure secrets grow (`TS_OAUTH_CLIENT_ID`/`TS_OAUTH_SECRET`, `HOMESERVER_SSH_PRIVATE_KEY`, `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`, `ANSIBLE_VAULT_PASSWORD`) — all as GitHub Secrets, none in the repo.
+- The manual flow documented in `docs/INSTALL.md` continues to work the same, now also remote (same `qemu+ssh://` URI used by CI) instead of local to the hypervisor.
+
+**Update (2026-09-06):** `load-extra-secrets.yaml` stops being a "manual one-off" and starts running on every automatic deploy, alongside `vault-populate.yaml`. Reason: it was never run even once since the cluster has existed (being manual, it was forgotten), leaving several services (`redis`, `postgresql` app, `mongodb` app, `grafana`, `sonarqube-db`) without their secrets since day 1. `ansible/extra-secrets.yaml` moves from living outside Git (`.gitignore`, plain text) to versioned and encrypted with `ansible-vault` (same pattern as `group_vars/all.yaml`) — edited with `ansible-vault edit ansible/extra-secrets.yaml`. For a change to propagate without manual steps: the corresponding `ExternalSecret` must have a short `refreshInterval` (`1m`, not the default `1h`) and the Deployment/StatefulSet consuming it must be covered by Reloader (`autoReloadAll: true` already covers plain resources; Grafana needed the explicit annotation because it doesn't re-read its admin secret live).
+
+**Update (2026-09-07): ArgoCD's sync had been broken since May 13, without anyone noticing.** While investigating for another reason, it was found that `argocd-cm` has `timeout.reconciliation: 0s` (completely disables periodic polling — the original intent, per `docs/TODO.md`, was to leave it as a 600s *fallback*, not turn it off) and that the GitHub webhook configured on the repo (`https://argocd.cristianpuenguenan.online/api/webhook`, active since 2026-05-13) returns 404 on every delivery: the URL points to the public domain, but no `HTTPRoute` serves it there — ArgoCD only had a private route. With both things broken at once, ArgoCD never detected a new commit unless someone refreshed it by hand from the UI; Applications were found up to 15+ commits behind.
+
+Fix: **`platform/argocd/httproute-webhook.yaml`**, a new `HTTPRoute` against the `public` Gateway, hostname `argocd.cristianpuenguenan.online`, exposing *only* the `/api/webhook` path (the rest of ArgoCD remains without a public route) — the payload is signed (HMAC) against `webhook.github.secret`, already mixed into `argocd-secret` by `webhook-externalsecret.yaml` since this was implemented (`docs/TODO.md` #3), so exposing the path is safe without additional changes. And `timeout.reconciliation` moves from `0s` to `600s` (`bootstrap/argocd/values.yaml`) — the webhook still triggers the sync instantly in the normal case, but a delivery failure no longer leaves the cluster silently out of sync for months.
+
+**Update (2026-09-07): Agent Gateway had been crash-looping for over a day, a different and also pre-existing cause.** The `agentgateway` pod (namespace `networking`) never reached `Ready` — its logs showed an informer indefinitely waiting for the `tcproutes.gateway.networking.k8s.io` CRD, which doesn't exist in the cluster: `gitops/apps/platform/networking/gateway-api-crds.yaml` installed the `standard` channel (v1.6.1) of Gateway API, which doesn't include `TCPRoute`/`UDPRoute`/`TLSRoute` (those live in the `experimental` channel, a superset of `standard` — same base CRDs with no schema changes). Fix: change `path: config/crd/standard` → `path: config/crd/experimental`, same `targetRevision`. This is what left Agent Gateway's 3 routes (`mcp`, `openmemory-api`, `agentgateway`) at `503` during the entire ADR-012 domain migration — confirmed the error was identical on `.internal` and on the new domain, so it wasn't a regression from that migration.
+
+**Update (2026-09-09, see ADR-015):** `vault-populate.yaml` and `load-extra-secrets.yaml` leave the automatic pipeline — loading secrets into OpenBao becomes 100% manual (`scripts/load-secrets-to-openbao.sh`), never runs in CI. The `ANSIBLE_VAULT_PASSWORD` secret is no longer used (there's no more `ansible-vault` in the repo); the preflight now takes its 6 credentials from GitHub Actions secrets/vars injected as step env vars (`ARGOCD_GITHUB_PAT`, `OPENBAO_STATIC_SEAL_KEY` already existed as secrets for Terraform; `ARGOCD_WEBHOOK_SECRET`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN` are added as new secrets and `ARGOCD_REPO_URL` as a variable — see `docs/CI_CD_HYPERVISOR_SETUP.md`).
+
+## ADR-010: Cilium Gateway API for generic ingress, Agent Gateway only for MCP
+
+**Status**: Accepted — reduces Agent Gateway's scope (see [ADR-002](#adr-002-agent-gateway-as-ingress))
+**Date**: 2026-09-05
+
+### Context
+
+ADR-002 adopted Agent Gateway as the sole ingress for two reasons: (a) being native Gateway API (vs. APISIX's Admin API) and (b) native support for AI workloads and the MCP protocol. Reviewing actual usage in the repo: of the 13 existing `HTTPRoute`s, only 2 truly serve MCP servers (SonarQube MCP, OpenMemory) — the rest is generic HTTP traffic (ArgoCD, Grafana, Longhorn, OpenBao, Hubble, Headlamp, Flow API, Portfolio, SonarQube UI) that doesn't use any of Agent Gateway's differentiating features, just standard `Gateway`/`HTTPRoute`.
+
+Cilium (already deployed as the cluster's CNI) implements its own Gateway API controller on top of Envoy/eBPF, with Gateway API v1.6.1 conformance, but with no understanding of the MCP protocol at all: it doesn't do MCP server multiplexing, tool namespacing, or virtual MCP — Agent Gateway does that natively (confirmed against agentgateway.dev's official documentation). Keeping Agent Gateway as the sole gateway means sustaining a young project, with a smaller community, for traffic that doesn't leverage its differentiator.
+
+### Options considered
+
+| Option | Reason for rejection |
 |--------|-------------------|
-| **Self-hosted runner en el homeserver** | Es exactamente lo que el operador quería dejar de hacer — vuelve a ejecutar todo en el propio host |
-| **Puerto SSH expuesto en el router** | Expone la LAN a Internet; los rangos de IP de GitHub Actions cambian con frecuencia, no sirve para un allowlist estable |
-| **Cloudflare Tunnel dedicado a SSH (fuera del cluster)** | Viable, pero añade un segundo `cloudflared` a nivel de host solo para esto — más superficie a mantener que Tailscale |
+| **Keep only Agent Gateway** | Sustains a second proxy/CRD for traffic that Cilium can already serve just as well via standard Gateway API |
+| **Migrate everything to Cilium, retire Agent Gateway** | Loses the only real differentiating capability (multiplexing/virtual MCP) that is still planned to be used/explored in the future |
 
-**Backend de state:**
+### Decision
 
-| Opción | Razón de descarte |
-|--------|-------------------|
-| **State local en el runner** | Se pierde en cada job (runner efímero) — no es una opción real, no una preferencia |
-| **HCP Terraform (Terraform Cloud) free tier** | Backend oficial y simple, pero introduce una cuenta/plataforma adicional fuera del stack ya usado (Cloudflare) |
+**Hybrid**: two `Gateway`s coexisting in the `networking` namespace, each with its own purpose:
 
-### Decisión
+- **Cilium Gateway API** (`gatewayClassName: cilium`, `Gateway` `main`) serves generic HTTP traffic — 10 of the current 13 `HTTPRoute`s.
+- **Agent Gateway** (`gatewayClassName: agentgateway`, `Gateway` `agentgateway-mcp`) is retained only for routes that depend on MCP servers (SonarQube MCP, OpenMemory) and its own admin UI.
 
-- **Runners hosted de GitHub Actions**, sin self-hosted runner en el homeserver.
-- **Tailscale**: el hipervisor físico se une al tailnet (`tailscale up --ssh`); cada job de CI levanta un nodo efímero via `tailscale/github-action@v4` autenticado con un OAuth client, taggeado `tag:ci`, con ACL que solo permite `tag:ci` → el tag del hipervisor por SSH (puerto 22). No se abre ningún puerto en el router.
-- **`terraform/provider.tf`** pasa de `qemu:///system` a `qemu+ssh://...` (variables `hypervisor_ssh_host`/`hypervisor_ssh_user`/`hypervisor_ssh_keyfile`, sin default). Esto unifica también la ejecución manual: el operador tampoco corre Terraform en el propio host, siempre remoto por SSH — mismo code path que CI.
-- **Inventario de Ansible** (`terraform/templates/inventory.yaml.tftpl`): el grupo `hypervisor` deja de ser `ansible_connection: local` y pasa a SSH real; el grupo `k0s` (VM en la red NAT interna de libvirt, solo alcanzable desde el propio hipervisor) usa `ProxyCommand` para saltar a través del hipervisor.
-- **State remoto en Cloudflare R2** (S3-compatible) vía el backend nativo `s3` de Terraform con endpoint custom — reutiliza la cuenta Cloudflare ya usada para DNS/Tunnel en vez de sumar una plataforma nueva. Locking nativo con `use_lockfile = true` (Terraform ≥ 1.10), sin DynamoDB.
-- **Alcance del pipeline automático** (`.github/workflows/deploy.yml`, push a `master`): `terraform apply` + `ansible-playbook site.yaml` + `ansible-playbook host-network.yaml` + `vault-populate.yaml` + `load-extra-secrets.yaml`, detrás del Environment `prod` (aprobación manual requerida). Solo `teardown.yaml` (destructivo, interactivo) queda fuera del pipeline.
-- `.github/workflows/terraform-plan.yml` corre `terraform plan` y comenta el resultado en cada PR que toque `terraform/**`, sin gate de aprobación (no muta infraestructura).
+The Gateway API CRDs were already installed by a separate Application (`gateway-api-crds`, not part of either the Cilium or Agent Gateway chart), so both controllers share them without duplication.
 
-### Consecuencias
+### Consequences
 
-- El homeserver deja de tener terraform/ansible ejecutándose sobre él: solo recibe conexiones SSH entrantes por Tailscale.
-- Nueva dependencia externa: Tailscale (tailnet + OAuth client) y una cuenta/bucket de Cloudflare R2.
-- Los secrets de infraestructura crecen (`TS_OAUTH_CLIENT_ID`/`TS_OAUTH_SECRET`, `HOMESERVER_SSH_PRIVATE_KEY`, `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`, `ANSIBLE_VAULT_PASSWORD`) — todos como GitHub Secrets, ninguno en el repo.
-- El flujo manual documentado en `docs/INSTALL.md` sigue funcionando igual, ahora también remoto (misma URI `qemu+ssh://` que usa CI) en vez de local al hipervisor.
+- `bootstrap/cilium/values.yaml` sets `gatewayAPI.enabled` to `true` — Cilium automatically creates the `GatewayClass cilium` and, for each `Gateway`, a `Service` `cilium-gateway-<name>`.
+- The Cloudflare tunnel (remote config, outside Git) must be manually re-pointed to the migrated hostnames toward Cilium's new Service — there's no way to version that change.
+- The door stays open to keep experimenting with MCP protocol features (new servers, virtual MCP) without having to reintroduce Agent Gateway from scratch.
+- Internal TLS (an HTTPS listener on either Gateway) remains unresolved — neither one has an HTTPS listener or references the wildcard certificate; technical debt pre-existing to ADR-002, neither introduced nor resolved by this change.
 
-**Actualización (2026-09-06):** `load-extra-secrets.yaml` deja de ser "uno-off manual" y pasa a correr en cada deploy automático, junto a `vault-populate.yaml`. Motivo: nunca se ejecutó ni una sola vez desde que el cluster existe (por ser manual, se olvidó), dejando varios servicios (`redis`, `postgresql` app, `mongodb` app, `grafana`, `sonarqube-db`) sin sus secrets desde el día 1. `ansible/extra-secrets.yaml` pasa de vivir fuera de Git (`.gitignore`, texto plano) a versionado y cifrado con `ansible-vault` (mismo patrón que `group_vars/all.yaml`) — se edita con `ansible-vault edit ansible/extra-secrets.yaml`. Para que un cambio se propague sin pasos manuales: el `ExternalSecret` correspondiente debe tener un `refreshInterval` corto (`1m`, no el `1h` por defecto) y el Deployment/StatefulSet que lo consume debe quedar cubierto por Reloader (`autoReloadAll: true` ya cubre los recursos planos; Grafana necesitó la annotation explícita porque no relee su secret de admin en caliente).
+## ADR-011: Segment public access (Cloudflare) vs private access (LAN + Tailscale)
 
-**Actualización (2026-09-07): el sync de ArgoCD llevaba roto desde el 13 de mayo, sin que nadie lo notara.** Investigando por otro motivo, se encontró que `argocd-cm` tiene `timeout.reconciliation: 0s` (deshabilita el polling periódico por completo — la intención original, según las tareas de `docs/TODO.md`, era dejarlo como *fallback* de 600s, no apagarlo) y que el webhook de GitHub configurado en el repo (`https://argocd.cristianpuenguenan.online/api/webhook`, activo desde 2026-05-13) devuelve 404 en cada entrega: la URL apunta al dominio público, pero ningún `HTTPRoute` la sirve ahí — ArgoCD solo tenía ruta privada. Con las dos cosas rotas a la vez, ArgoCD nunca detectó un commit nuevo salvo que alguien lo refrescara a mano desde la UI; se encontraron Applications hasta 15+ commits atrasadas.
+**Status**: Accepted
+**Date**: 2026-09-06
 
-Fix: **`platform/argocd/httproute-webhook.yaml`**, una `HTTPRoute` nueva contra el Gateway `public`, hostname `argocd.cristianpuenguenan.online`, que expone *solo* el path `/api/webhook` (el resto de ArgoCD sigue sin ruta pública) — el payload va firmado (HMAC) contra `webhook.github.secret`, ya mezclado en `argocd-secret` por `webhook-externalsecret.yaml` desde que se implementó esto (`docs/TODO.md` #3), así que exponer el path es seguro sin cambios adicionales. Y `timeout.reconciliation` pasa de `0s` a `600s` (`bootstrap/argocd/values.yaml`) — el webhook sigue disparando el sync al instante en el caso normal, pero un fallo de entrega ya no deja el cluster sin sincronizar silenciosamente por meses.
+### Context
 
-**Actualización (2026-09-07): Agent Gateway crasheaba en loop hacía más de un día, causa distinta y también preexistente.** El pod de `agentgateway` (namespace `networking`) nunca llegaba a `Ready` — sus logs mostraban un informer esperando indefinidamente el CRD `tcproutes.gateway.networking.k8s.io`, que no existe en el cluster: `gitops/apps/platform/networking/gateway-api-crds.yaml` instalaba el canal `standard` (v1.6.1) de Gateway API, que no incluye `TCPRoute`/`UDPRoute`/`TLSRoute` (esos viven en el canal `experimental`, superset del `standard` — mismos CRDs base sin cambios de esquema). Fix: cambiar `path: config/crd/standard` → `path: config/crd/experimental`, mismo `targetRevision`. Esto es lo que dejaba las 3 rutas de Agent Gateway (`mcp`, `openmemory-api`, `agentgateway`) en `503` durante toda la migración de dominio de ADR-012 — confirmado que el error era identico en `.internal` y en el dominio nuevo, así que no era una regresión de esa migración.
+Of the cluster's 13 routes, most are administration/observability tools (ArgoCD, Grafana, Headlamp, Hubble, Longhorn, OpenBao, SonarQube UI, Agent Gateway admin UI, OpenMemory UI/API, SonarQube MCP) that should never have been reachable from the Internet — only `portfolio` (personal site) and `api.cristianpuenguenan.online` (`/webhooks`, consumed by external services) are truly public.
 
-**Actualización (2026-09-09, ver ADR-015):** `vault-populate.yaml` y `load-extra-secrets.yaml` salen del pipeline automático — la carga de secretos en OpenBao pasa a ser 100% manual (`scripts/load-secrets-to-openbao.sh`), nunca corre en CI. El secret `ANSIBLE_VAULT_PASSWORD` deja de usarse (ya no hay `ansible-vault` en el repo); el preflight ahora toma sus 6 credenciales desde GitHub Actions secrets/vars inyectados como env vars del step (`ARGOCD_GITHUB_PAT`, `OPENBAO_STATIC_SEAL_KEY` ya existían como secrets para Terraform; se suman `ARGOCD_WEBHOOK_SECRET`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN` como secrets nuevos y `ARGOCD_REPO_URL` como variable — ver `docs/CI_CD_HYPERVISOR_SETUP.md`).
+What is exposed to the Internet or not is decided in the Cloudflare dashboard (Zero Trust → Public Hostnames) — but see the 2026-09-06 update below: here it was assumed there was one entry per route, when in reality there's a single wildcard, and the real fix did require moving `HTTPRoute`s. In addition, a real private access path was missing: while investigating, `ansible/host-network.yaml` (LAN → VM port forward) was already broken — it forwarded to the VM's port 80/443, but nothing was listening there (both Gateways' Services are `LoadBalancer` with no assigned IP, with no MetalLB or other controller resolving them; only their random `NodePort`s existed).
 
-## ADR-010: Cilium Gateway API para ingress genérico, Agent Gateway solo para MCP
+### Decision
 
-**Estado**: Aceptado — reduce el alcance de Agent Gateway (ver [ADR-002](#adr-002-agent-gateway-como-ingress))  
-**Fecha**: 2026-09-05
+- **Cilium L2 Announcements + LB IPAM** (native since Cilium 1.20, no separate MetalLB install): two `CiliumLoadBalancerIPPool`s of one IP each (`192.168.122.240` and `192.168.122.250`, deliberately non-consecutive within libvirt's NAT subnet) + `CiliumL2AnnouncementPolicy` on the VM's `eth0`. Each `Gateway` fixes its IP with `spec.addresses` (standard Gateway API v1 field) — but the **Agent Gateway controller doesn't translate it** into a real request in the `Service` it generates (confirmed against the cluster: without the `io.cilium/lb-ipam-ips` annotation, unlike Cilium which does add it). With a shared pool and no filter, Cilium LB IPAM gave the first free IP to `agentgateway-mcp` without it requesting one, stepping on the IP that belonged to Cilium's Gateway. Solution: a 1-IP pool per `Service`, selected by `serviceSelector` (`io.kubernetes.service.name`/`.namespace`, Cilium's special metadata) instead of relying on `spec.addresses`.
+- **`ansible/host-network.yaml`** rewritten: instead of a forward to the VM's IP, two sets of rules — `80/443` → Cilium's IP, `8080/8443` → Agent Gateway's IP (real port 80/443 there). Covers the physical LAN (devices without Tailscale).
+- **Tailscale subnet router**: the hypervisor (already on the tailnet, so far only for CI SSH) starts advertising `192.168.122.0/24` (`tailscale up --advertise-routes=192.168.122.0/24`, approved once in the Tailscale admin) — any of the user's devices on their tailnet reaches the Gateways' IPs directly, without going through the host's forward, from anywhere (not just at home).
+- **Cloudflare dashboard**: see the 2026-09-06 update below — this original point (removing 11 routes from a list) assumed a model that doesn't exist.
 
-### Contexto
+### Consequences
 
-El ADR-002 adoptó Agent Gateway como único ingress por dos razones: (a) ser Gateway API nativo (vs. la Admin API de APISIX) y (b) soporte nativo para AI workloads y protocolo MCP. Revisando el uso real en el repo: de los 13 `HTTPRoute` existentes, solo 2 sirven servidores MCP de verdad (SonarQube MCP, OpenMemory) — el resto es tráfico HTTP genérico (ArgoCD, Grafana, Longhorn, OpenBao, Hubble, Headlamp, Flow API, Portfolio, SonarQube UI) que no usa ninguna feature diferencial de Agent Gateway, solo `Gateway`/`HTTPRoute` estándar.
+- Accepted risk: `192.168.122.240` and `192.168.122.250` fall within libvirt's *configured* DHCP range (`.2`–`.254`), even though today only the VM uses that network (`.10`). It would collide if more VMs are added to the same NAT network without first reducing libvirt's DHCP range.
+- Private access without Split DNS for now: accessed by direct IP (with the correct `Host` header) or by adding entries to the local `hosts` file. Tailscale Split DNS remains a future improvement, not resolved here.
+- LAN access "without Tailscale" (devices the user doesn't control or doesn't want to add to the tailnet) is limited to whoever has physical access to the home LAN — everyone else, including the user himself away from home, comes in via Tailscale.
 
-Cilium (ya desplegado como CNI del cluster) implementa su propio Gateway API controller sobre Envoy/eBPF, con conformance Gateway API v1.6.1, pero sin ningún entendimiento del protocolo MCP: no hace multiplexing de servidores MCP, tool namespacing ni virtual MCP — eso sí lo hace Agent Gateway de forma nativa (confirmado contra la documentación oficial de agentgateway.dev). Mantener Agent Gateway como único gateway significa sostener un proyecto joven, con comunidad menor, para tráfico que no aprovecha su diferencial.
+**Update (2026-09-06):** this ADR's starting point was incorrect — Cloudflare doesn't have a Public Hostname entry per route, it has a single wildcard (`*.cristianpuenguenan.online`) pointing to a single destination. Real unanticipated consequence: with that model, **any** `HTTPRoute` that exists against the Gateway the wildcard points to is automatically public — there's no list to edit to "remove" a route. The correct fix is not managing a list (the user explicitly didn't want that, rightly so), but structural: a **third `Gateway`, `public`** (`platform/networking/cilium-gateway/gateway-public.yaml`), with no fixed LAN IP (its only consumer is `cloudflared`, via `ClusterIP`), where *only* the `portfolio` and `flow-api` `HTTPRoute`s live (moved there, `parentRefs` updated). Cloudflare's wildcard is re-pointed once to `cilium-gateway-public.networking.svc.cluster.local:80`. What's public is now decided by where the `HTTPRoute` lives in code, not by a separate list — adding a new route to `main`/`agentgateway-mcp` never accidentally exposes it to the Internet.
 
-### Opciones consideradas
+**Update (2026-09-06): private DNS.** The `main`/`agentgateway-mcp` routes could only be reached by direct IP or manual `hosts` file. `platform/networking/private-dns/` was added — a self-hosted `CoreDNS` (official `coredns/coredns` image, not `dnsmasq`: there's no well-maintained `dnsmasq` image, and CoreDNS is already the server Kubernetes uses internally) with the `hosts` plugin serving a static A record for each private route, `fallthrough` + `forward` to the real public DNS (`1.1.1.1`/`1.0.0.1`) for everything else — it never becomes a black hole if something uses it by mistake. Fixed IP `192.168.122.253` via the same Cilium L2 Announcements mechanism already used for the Gateways (`CiliumLoadBalancerIPPool` with `serviceSelector`). It lives **inside** the cluster, not on the hypervisor: if the cluster is down these hostnames wouldn't be useful anyway (they point to services on that same down cluster), so it doesn't add a new failure point — and it is **not** used as the primary DNS for the whole LAN, it only resolves `cristianpuenguenan.online` (Tailscale Split DNS and the port 53 forward in `ansible/host-network.yaml` scope it to that). Reloader (`autoReloadAll`) restarts the pod only when the `Corefile` `ConfigMap` changes — adding a new route is just a `git push`.
 
-| Opción | Razón de descarte |
-|--------|-------------------|
-| **Mantener solo Agent Gateway** | Sostiene un segundo proxy/CRD para tráfico que Cilium ya puede servir igual de bien vía Gateway API estándar |
-| **Migrar todo a Cilium, retirar Agent Gateway** | Pierde la única capacidad diferencial real (multiplexing/virtual MCP) que sí se planea seguir usando/explorando a futuro |
+**Update (2026-09-06): LAN access was still broken, a different cause.** After fixing the fixed IPs, `ansible/host-network.yaml`'s port-forward still didn't work from real LAN devices (confirmed with a real phone — even a `ping` wasn't enough proof, real HTTP/DNS was needed). Troubleshooting with `tcpdump` on the LAN interface and `virbr0` simultaneously: the `SYN` reached the hypervisor, firewalld applied the DNAT correctly (confirmed by inspecting `nft list ruleset` — the `nat_PRE_FedoraServer_allow` table with the correct rules, zone dispatch verified), but the packet **never went out toward `virbr0`** — the hypervisor replied with `ICMP port unreachable` in its own name. Real cause: the `table ip libvirt_network` (managed by `libvirtd`, not firewalld) has a `guest_input` chain that by design **rejects any new inbound connection toward the virtual NAT network**, even after DNAT — it only lets through traffic from already-established connections (libvirt's standard protection for NAT networks, so VMs behind NAT don't receive unsolicited connections). Validated by inserting a test `accept` rule before the `reject` — the same `curl` that gave `000` started giving a real `404` (connection + DNAT + Gateway response, only the correct `Host` header was missing).
 
-### Decisión
+Persistent solution: `ansible/host-network.yaml` installs `/etc/libvirt/hooks/network` (`ansible/templates/libvirt-network-hook.sh.j2`) — a hook that libvirt invokes on every event of its `default` network; on the `started` event (including after a hypervisor reboot, when libvirt regenerates `guest_input` from scratch) it re-inserts the 6 `accept` exceptions needed (one per IP:port combination of the 3 fixed-IP Services: `main`, `agentgateway-mcp`, `private-dns`). Libvirt's `<portForward>` element couldn't be used (it exists, but it's for `passt` interfaces of an individual VM, not for traditional bridged `<forward mode='nat'>` networks like this one) — the hook pattern is the supported one for this case.
 
-**Híbrido**: dos `Gateway` conviviendo en el namespace `networking`, cada uno con su propósito:
+**Update (2026-09-06): own domain for private stuff (`cristianpuenguenan.internal`).** With everything above working, a confusing `404` still appeared when testing a private route without the internal DNS configured on the device: `argocd.cristianpuenguenan.online` resolves the same way against Cloudflare's real public record (the wildcard), landing on the `public` Gateway — a `404` that looks like an app bug but is actually "you never reached the private CoreDNS". Fix: the 11 `main`/`agentgateway-mcp` `HTTPRoute`s move to `*.cristianpuenguenan.internal` (`.internal` is not a TLD delegated in public DNS, it can never collide), and the `Corefile` in `platform/networking/private-dns/configmap.yaml` serves that domain instead of `.online`. `portfolio`/`api` (`public` Gateway) remain on `.online`, unchanged. With this, without the private DNS configured, the private hostname simply doesn't resolve (NXDOMAIN) — an unambiguous "DNS not configured" error, not an ambiguous `404`.
 
-- **Cilium Gateway API** (`gatewayClassName: cilium`, `Gateway` `main`) sirve el tráfico HTTP genérico — 10 de los 13 `HTTPRoute` actuales.
-- **Agent Gateway** (`gatewayClassName: agentgateway`, `Gateway` `agentgateway-mcp`) queda retenido solo para las rutas que dependen de servidores MCP (SonarQube MCP, OpenMemory) y su propia admin UI.
+## ADR-012: TLS for internal routes with a private cluster CA
 
-Los CRDs de Gateway API ya estaban instalados por una Application separada (`gateway-api-crds`, no forma parte del chart de Cilium ni del de Agent Gateway), así que ambos controllers los comparten sin duplicación.
+**Status**: Accepted
+**Date**: 2026-09-06
 
-### Consecuencias
+### Context
 
-- `bootstrap/cilium/values.yaml` pasa `gatewayAPI.enabled` a `true` — Cilium crea automáticamente la `GatewayClass cilium` y, por cada `Gateway`, un `Service` `cilium-gateway-<nombre>`.
-- El tunel de Cloudflare (config remota, fuera de Git) debe reapuntar manualmente los hostnames migrados hacia el nuevo Service de Cilium — no hay forma de versionar ese cambio.
-- Queda abierta la puerta a seguir experimentando con features de protocolo MCP (nuevos servidores, virtual MCP) sin tener que reintroducir Agent Gateway desde cero.
-- El TLS interno (listener HTTPS en cualquiera de los dos Gateway) sigue sin resolverse — ninguno de los dos tiene un listener HTTPS ni referencia el certificado wildcard; deuda técnica preexistente al ADR-002, no introducida ni resuelta por este cambio.
+Private routes served everything over plain HTTP (port 80). In addition, "physical LAN without Tailscale" access required permanent maintenance (hosts file per device, explicit `:8080` ports, firewall exceptions) for a use case that in practice isn't used: all of the user's real devices are on the tailnet.
 
-## ADR-011: Segmentar acceso público (Cloudflare) vs privado (LAN + Tailscale)
+Hard constraint for TLS: `.internal` is a reserved TLD — the CA/Browser Forum prohibits public CAs from issuing certificates for it. Let's Encrypt is not an option for `*.cristianpuenguenan.internal`.
 
-**Estado**: Aceptado  
-**Fecha**: 2026-09-06
+### Decision
 
-### Contexto
+- **Private CA inside the cluster** (`platform/networking/cert-manager/internal-tls.yaml`), replicating the pattern already existing for Hubble's PKI: `selfSigned` Issuer → `Certificate` `internal-root-ca` (isCA, 10 years) → `ClusterIssuer` `internal-ca` → leaf. No dependency on any external CA; renewal is automatic via cert-manager.
+- **Single wildcard** `*.cristianpuenguenan.internal` (+ apex) in the `wildcard-internal-tls` secret (namespace `networking`), referenced by `main`'s `https` listener (TLS terminate). A single certificate to renew, not 11.
+- **HTTP→HTTPS 301 redirect on `main`**: port 80 is restricted (`allowedRoutes` only namespace `networking`) to a catch-all `HTTPRoute` with a `RequestRedirect` filter. `main`'s 8 content routes set `sectionName: https` in their `parentRefs` — without that they would attach to both listeners and still serve content over HTTP.
+- **`agentgateway-mcp` stays on plain HTTP** (documented exception): its controller (v1.1.0) silently ignores HTTPS listeners — it doesn't create the listener in `status`, nor port 443 on the Service, nor reports any error/event. The 3 MCP routes (`mcp`, `openmemory-api`, `agentgateway` UI) are served over the private tailnet's port 80; the transport is already encrypted by WireGuard at the Tailscale layer. Reevaluate when Agent Gateway supports TLS termination.
+- **Tailscale as the only supported path** for devices: the physical LAN without Tailscale is declared out of scope (the HTTPS redirect points to internal IPs unreachable from the LAN — an explicit failure, not a degraded one). The forward-ports and the libvirt hook are kept because Tailscale→cluster traffic that crosses the hypervisor still needs them.
 
-De las 13 rutas del cluster, la mayoría son herramientas de administración/observabilidad (ArgoCD, Grafana, Headlamp, Hubble, Longhorn, OpenBao, SonarQube UI, admin UI de Agent Gateway, OpenMemory UI/API, SonarQube MCP) que nunca deberían haber sido alcanzables desde Internet — solo `portfolio` (sitio personal) y `api.cristianpuenguenan.online` (`/webhooks`, consumida por servicios externos) son públicas de verdad.
+### Consequences
 
-Qué está expuesto a Internet o no se decide en el dashboard de Cloudflare (Zero Trust → Public Hostnames) — pero ver la actualización del 2026-09-06 abajo: acá se asumió que existía una entrada por ruta, cuando en realidad hay un único wildcard, y el fix real sí requirió mover `HTTPRoute`. Además faltaba una vía de acceso privada real: investigando, `ansible/host-network.yaml` (forward de puertos LAN → VM) ya estaba roto — hacía forward al puerto 80/443 de la VM, pero ningún proceso escuchaba ahí (los Services de ambos Gateways son `LoadBalancer` sin IP asignada, sin ningún MetalLB u otro controlador que los resolviera; solo existían sus `NodePort` aleatorios).
+- The CA must be trusted by hand once per tailnet device (`docs/OPERATIONS.md` §11.5) — acceptable because the user controls all devices; a visitor on the LAN cannot use these routes in any way.
+- If the `internal-root-ca` secret is lost, the regenerated CA won't be trusted by devices until the installation is repeated (today there's no specific backup of the secret; the certificate lasts 10 years).
+- The public plane doesn't change: Cloudflare keeps terminating TLS at the edge for `portfolio`/`api`; `wildcard-home-tls` (Let's Encrypt) is still issued but not referenced.
+- The URLs of Agent Gateway's 3 routes remain `http://` (port 80): `http://mcp.cristianpuenguenan.internal/sonarqube`, `http://openmemory-api...`, `http://agentgateway...` — the rest of the private ones are `https://`.
+- Apps unchanged: ArgoCD already ran `--insecure` (TLS delegated to the edge is the expected pattern); Grafana/Headlamp don't use `secure` cookies.
 
-### Decisión
+**Update (2026-09-06): Agent Gateway's 3 routes also move to HTTPS.** The exception above ("`agentgateway-mcp` stays on plain HTTP") still left those 3 URLs without client-facing TLS, not just as an internal exception — and Agent Gateway's controller still doesn't support HTTPS listeners, so there was no way to resolve it there directly. Solution: **`main` acts as a TLS proxy toward `agentgateway-mcp`**, no different from how it already proxies to any other backend — a new `HTTPRoute` (`platform/networking/cilium-gateway/httproute-agentgateway-proxy.yaml`) with `parentRefs: [{name: main, sectionName: https}]`, the 3 hostnames, and `backendRefs` pointing directly to the `Service agentgateway-mcp:80` (same `networking` namespace, no `ReferenceGrant`). No path matching or rewrite: Agent Gateway keeps doing its own routing/rewrite/multiplexing internally with its usual `HTTPRoute`s (`mcp-sonarqube`, `openmemory`, `agentgateway-ui`), which didn't change — only who delivers the traffic to it changed. With this, there are 11 routes again (not 8) with `sectionName: https` against `main`.
 
-- **Cilium L2 Announcements + LB IPAM** (nativo desde Cilium 1.20, sin instalar MetalLB aparte): dos `CiliumLoadBalancerIPPool` de una IP cada uno (`192.168.122.240` y `192.168.122.250`, deliberadamente no consecutivas dentro de la subred NAT de libvirt) + `CiliumL2AnnouncementPolicy` sobre `eth0` de la VM. Cada `Gateway` fija su IP con `spec.addresses` (campo estándar de Gateway API v1) — pero el controller de **Agent Gateway no lo traduce** a una petición real en el `Service` que genera (confirmado contra el cluster: sin la annotation `io.cilium/lb-ipam-ips`, a diferencia de Cilium que sí la agrega). Con un pool compartido sin filtro, Cilium LB IPAM le daba la primera IP libre a `agentgateway-mcp` sin que la pidiera, pisando la IP que le correspondía al Gateway de Cilium. Solución: un pool de 1 IP por `Service`, seleccionado por `serviceSelector` (`io.kubernetes.service.name`/`.namespace`, metadata especial de Cilium) en vez de depender de `spec.addresses`.
-- **`ansible/host-network.yaml`** reescrito: en vez de un forward a la IP de la VM, dos juegos de reglas — `80/443` → IP de Cilium, `8080/8443` → IP de Agent Gateway (puerto 80/443 real ahí). Cubre la LAN física (dispositivos sin Tailscale).
-- **Tailscale subnet router**: el hipervisor (ya en el tailnet, hasta ahora solo para SSH de CI) pasa a anunciar `192.168.122.0/24` (`tailscale up --advertise-routes=192.168.122.0/24`, aprobado una vez en el admin de Tailscale) — cualquier dispositivo del usuario en su tailnet llega directo a las IPs de los Gateways, sin pasar por el forward del host, desde cualquier lado (no solo en casa).
-- **Cloudflare dashboard**: ver actualización 2026-09-06 abajo — este punto original (sacar 11 rutas de una lista) asumía un modelo que no existe.
+Consequence: `agentgateway-mcp` no longer needs its own LAN IP. It moves to a `ClusterIP` `Service` (`gateway.controller.service.type` in `platform/networking/agentgateway/agentgateway.yaml`) — the `Gateway`'s `spec.addresses: 192.168.122.250` is removed (it was already dead config, see above: the controller never translated it into a real request) and its `CiliumLoadBalancerIPPool` in `lb-ippool.yaml` is deleted (orphaned with no `Service LoadBalancer` claiming it). Private DNS (`private-dns/configmap.yaml`) moves `mcp`/`agentgateway`/`openmemory-api`.internal from `.250` to `.240`, and the forward-port/firewall rules pointing to `.250` (which pointed to nothing) are cleaned up from `ansible/host-network.yaml` and the libvirt hook. The access plane becomes symmetric: all 11 private routes come in through `192.168.122.240:443`, with no client-visible transport exceptions.
 
-### Consecuencias
+**Update (2026-09-07): the own CA is dropped — real Let's Encrypt via a `cristianpuenguenan.online` subdomain.** The private CA (`internal-root-ca`) worked, but required manual installation on every tailnet device (`certutil -addstore`, once per device — tedious and easy to forget on a new one), and exposes an underlying risk not obvious at decision time: a device that trusts a private root CA trusts **any** certificate signed by that CA, for **any** domain — if the `internal-root-ca` secret's private key were leaked, someone could forge a valid certificate for any site (bank, `google.com`, etc.) and that device would accept it without warning. Decision: replace it with a real certificate.
 
-- Riesgo aceptado: `192.168.122.240` y `192.168.122.250` caen dentro del rango DHCP *configurado* de libvirt (`.2`–`.254`), aunque hoy solo la VM usa esa red (`.10`). Colisionaría si se agregan más VMs a la misma red NAT sin antes reducir el rango DHCP de libvirt.
-- Acceso privado sin Split DNS por ahora: se accede por IP directa (con el header `Host` correcto) o agregando entradas al `hosts` file local. Tailscale Split DNS queda como mejora futura, no resuelta acá.
-- El acceso LAN "sin Tailscale" (dispositivos que el usuario no controla o no quiere sumar al tailnet) queda limitado a quien tenga acceso físico a la LAN de casa — el resto del mundo, incluido el propio usuario fuera de casa, entra por Tailscale.
+`.internal` still can't be used with a public CA (still a reserved TLD, no change to that restriction) — but the user already owns `cristianpuenguenan.online`, which already has a working Let's Encrypt `ClusterIssuer` via DNS-01 (`letsencrypt-prod-cloudflare-dns01`, the same one issuing `wildcard-home-tls`). The DNS-01 challenge **doesn't require the name to resolve to anything real** — it only requires a `_acme-challenge.*` TXT record to be creatable via Cloudflare's API, something cert-manager already does. That allows requesting a real wildcard for a dedicated subdomain, `*.internal.cristianpuenguenan.online`, without ever publishing an A/AAAA record for it.
 
-**Actualización (2026-09-06):** el punto de partida de este ADR era incorrecto — Cloudflare no tiene una entrada de Public Hostname por ruta, tiene un único wildcard (`*.cristianpuenguenan.online`) apuntando a un solo destino. Consecuencia real no anticipada: con ese modelo, **cualquier** `HTTPRoute` que exista contra el Gateway al que apunta el wildcard es automáticamente pública — no hay lista que editar para "sacar" una ruta. El fix correcto no es gestionar una lista (el usuario explícitamente no lo quería, con razón), sino estructural: un **tercer `Gateway`, `public`** (`platform/networking/cilium-gateway/gateway-public.yaml`), sin IP LAN fija (su único consumidor es `cloudflared`, vía `ClusterIP`), donde viven *únicamente* los `HTTPRoute` de `portfolio` y `flow-api` (movidos ahí, `parentRefs` actualizado). El wildcard de Cloudflare se reapunta una sola vez a `cilium-gateway-public.networking.svc.cluster.local:80`. Lo que es público queda decidido por dónde vive el `HTTPRoute` en el código, no por una lista aparte — agregar una ruta nueva a `main`/`agentgateway-mcp` nunca la expone a Internet por accidente.
+Migration executed in 3 phases to avoid risking the cluster (access to admin routes was never cut):
 
-**Actualización (2026-09-06): DNS privado.** Las rutas de `main`/`agentgateway-mcp` solo se podían alcanzar por IP directa o `hosts` file manual. Se agregó `platform/networking/private-dns/` — un `CoreDNS` propio (imagen oficial `coredns/coredns`, no `dnsmasq`: no hay ninguna imagen de `dnsmasq` bien mantenida, y CoreDNS ya es el servidor que usa Kubernetes internamente) con el plugin `hosts` sirviendo un registro A estático por cada ruta privada, `fallthrough` + `forward` al DNS público real (`1.1.1.1`/`1.0.0.1`) para todo lo demás — nunca se convierte en agujero negro si algo lo usa por error. IP fija `192.168.122.253` vía el mismo mecanismo de Cilium L2 Announcements ya usado para los Gateways (`CiliumLoadBalancerIPPool` con `serviceSelector`). Vive **dentro** del cluster, no en el hipervisor: si el cluster está caído estos hostnames no servirían para nada de todos modos (apuntan a servicios del mismo cluster caído), así que no suma un punto de falla nuevo — y **no** se usa como DNS primario de la LAN completa, solo resuelve `cristianpuenguenan.online` (Tailscale Split DNS y el forward de puerto 53 en `ansible/host-network.yaml` lo acotan a eso). Reloader (`autoReloadAll`) reinicia el pod solo cuando cambia el `ConfigMap` del `Corefile` — agregar una ruta nueva es solo `git push`.
+1. **Additive**: new `Certificate` `wildcard-internal-online` (same Issuer as `wildcard-home-tls`) → secret `wildcard-internal-online-tls`; second HTTPS listener on `main` (`https-online`, with its own `hostname` and `certificateRefs` — **Cilium/Envoy doesn't support multiple `certificateRefs` on the same listener**, two listeners with disjoint `hostname`s on the same port 443 is the supported pattern for serving 2 certs by SNI); the 11 `HTTPRoute`s receive the new hostname in addition to the old one (and a second `parentRef` where they attach directly to `main`); `private-dns` resolves both domains. Nothing on the old `.internal` was touched.
+2. **Actual enablement**: a second Tailscale Split DNS entry was added (same `192.168.122.253` nameserver, restricted to `internal.cristianpuenguenan.online`) — without this, the new hostname didn't resolve for any tailnet device.
+3. **Decommission**: once confirmed live from a real device (valid TLS, nothing installed, `curl`/browser without `-k`), the old hostname and listener were removed, and `platform/networking/cert-manager/internal-tls.yaml` was deleted entirely (selfSigned Issuer + CA + `internal-ca` ClusterIssuer).
 
-**Actualización (2026-09-06): el acceso LAN seguía roto, causa distinta.** Tras arreglar las IPs fijas, el forward-port de `ansible/host-network.yaml` seguía sin funcionar desde dispositivos reales de la LAN (confirmado con un celular real — ni siquiera un `ping` bastaba como prueba, hacía falta HTTP/DNS real). Troubleshooting con `tcpdump` en la interfaz LAN y `virbr0` simultáneamente: el `SYN` llegaba al hipervisor, firewalld aplicaba el DNAT correctamente (confirmado inspeccionando `nft list ruleset` — la tabla `nat_PRE_FedoraServer_allow` con las reglas correctas, dispatch de zona verificado), pero el paquete **nunca salía hacia `virbr0`** — el hipervisor respondía `ICMP port unreachable` en su propio nombre. Causa real: `table ip libvirt_network` (gestionada por `libvirtd`, no por firewalld) tiene una cadena `guest_input` que por diseño **rechaza cualquier conexión nueva entrante hacia la red NAT virtual**, incluso después del DNAT — solo deja pasar tráfico de conexiones ya establecidas (protección estándar de libvirt para redes NAT, para que VMs detrás de NAT no reciban conexiones no solicitadas). Validado insertando una regla `accept` de prueba antes del `reject` — el mismo `curl` que daba `000` pasó a dar `404` real (conexión + DNAT + respuesta del Gateway, solo faltaba el `Host` header correcto).
+**Finding during validation, correction to what was documented above about "never resolves publicly":** the **public** wildcard `*.cristianpuenguenan.online` does DNS-match `argocd.internal.cristianpuenguenan.online` and the rest — DNS wildcard rules (RFC 1034 §4.3.3) apply at any subdomain depth as long as there's no explicit record blocking an intermediate level (`internal.cristianpuenguenan.online` has none). Confirmed live: `nslookup argocd.internal.cristianpuenguenan.online 1.1.1.1` responds with Cloudflare's IPs. This is **not a real breach**: when actually connecting to that IP with that hostname, the TLS handshake fails at Cloudflare's edge (`SEC_E_ILLEGAL_MESSAGE`, fatal alert) because that hostname was never registered as a valid "Hostname" in Cloudflare's SSL config — DNS resolution is public, the connection is not. Different from `.internal` (which gave a clean `NXDOMAIN`), but functionally equivalent in security.
 
-Solución persistente: `ansible/host-network.yaml` instala `/etc/libvirt/hooks/network` (`ansible/templates/libvirt-network-hook.sh.j2`) — un hook que libvirt invoca en cada evento de su red `default`; en el evento `started` (incluido tras un reboot del hipervisor, cuando libvirt regenera `guest_input` desde cero) reinserta las 6 excepciones `accept` necesarias (una por combinación IP:puerto de los 3 Services con IP fija: `main`, `agentgateway-mcp`, `private-dns`). No se pudo usar el elemento `<portForward>` de libvirt (existe, pero es para interfaces `passt` de una VM individual, no para redes `<forward mode='nat'>` tradicionales con bridge como esta) — el patrón de hook es el soportado para este caso.
-
-**Actualización (2026-09-06): dominio propio para lo privado (`cristianpuenguenan.internal`).** Con todo lo anterior funcionando, seguía apareciendo un `404` confuso al probar una ruta privada sin el DNS interno configurado en el dispositivo: `argocd.cristianpuenguenan.online` resuelve igual contra el registro público real de Cloudflare (el wildcard), cayendo en el Gateway `public` — un `404` que parece un bug de la app pero en realidad es "nunca llegaste al CoreDNS privado". Fix: los 11 `HTTPRoute` de `main`/`agentgateway-mcp` pasan a `*.cristianpuenguenan.internal` (`.internal` no es un TLD delegado en el DNS público, nunca puede colisionar), y el `Corefile` de `platform/networking/private-dns/configmap.yaml` sirve ese dominio en vez de `.online`. `portfolio`/`api` (Gateway `public`) siguen en `.online`, sin cambios. Con esto, sin el DNS privado configurado el hostname privado directamente no resuelve (NXDOMAIN) — un error inequívoco de "falta configurar DNS", no un `404` ambiguo.
-
-## ADR-012: TLS para las rutas internas con CA privada del cluster
-
-**Estado**: Aceptado
-**Fecha**: 2026-09-06
-
-### Contexto
-
-Las rutas privadas servían todo por HTTP plano (puerto 80). Además, el acceso "LAN física sin Tailscale" exigía mantención permanente (hosts file por dispositivo, puertos explícitos `:8080`, excepciones de firewall) para un caso de uso que en la práctica no se usa: todos los dispositivos reales del usuario están en el tailnet.
-
-Restricción dura para el TLS: `.internal` es un TLD reservado — el CA/Browser Forum prohíbe a las CAs públicas emitir certificados para él. Let's Encrypt no es opción para `*.cristianpuenguenan.internal`.
-
-### Decisión
-
-- **CA privada dentro del cluster** (`platform/networking/cert-manager/internal-tls.yaml`), replicando el patrón ya existente de la PKI de Hubble: Issuer `selfSigned` → `Certificate` `internal-root-ca` (isCA, 10 años) → `ClusterIssuer` `internal-ca` → leaf. Sin dependencia de ninguna CA externa; la renovación es automática vía cert-manager.
-- **Wildcard único** `*.cristianpuenguenan.internal` (+ apex) en el secret `wildcard-internal-tls` (namespace `networking`), referenciado por el listener `https` (TLS terminate) de `main`. Un solo certificado que renovar, no 11.
-- **Redirect 301 HTTP→HTTPS en `main`**: el puerto 80 queda restringido (`allowedRoutes` solo namespace `networking`) a una `HTTPRoute` catch-all con filter `RequestRedirect`. Las 8 rutas de contenido de `main` fijan `sectionName: https` en sus `parentRefs` — sin eso se adjuntarían a ambos listeners y servirían contenido por HTTP igual.
-- **`agentgateway-mcp` se queda en HTTP plano** (excepción documentada): su controller (v1.1.0) ignora silenciosamente los listeners HTTPS — no crea el listener en `status`, ni el puerto 443 en el Service, ni reporta error/evento alguno. Las 3 rutas MCP (`mcp`, `openmemory-api`, `agentgateway` UI) sirven por el puerto 80 del tailnet privado; el transporte ya está cifrado por WireGuard en el plano de Tailscale. Reevaluar cuando Agent Gateway soporte TLS termination.
-- **Tailscale como única vía soportada** para dispositivos: la LAN física sin Tailscale queda declarada fuera de alcance (el redirect a HTTPS apunta a IPs internas inalcanzables desde la LAN — falla explícita, no degradada). Los forward-ports y el hook de libvirt se mantienen porque el tráfico Tailscale→cluster que atraviesa el hipervisor los sigue necesitando.
-
-### Consecuencias
-
-- La CA debe confiarse a mano una vez por dispositivo del tailnet (`docs/OPERATIONS.md` §11.5) — aceptable porque el usuario controla todos los dispositivos; un visitante en la LAN no puede usar estas rutas de ninguna forma.
-- Si el secret `internal-root-ca` se pierde, la CA regenerada no será confiable por los dispositivos hasta repetir la instalación (hoy no hay backup específico del secret; el certificado dura 10 años).
-- El plano público no cambia: Cloudflare sigue terminando TLS en el borde para `portfolio`/`api`; `wildcard-home-tls` (Let's Encrypt) sigue emitido pero sin referenciar.
-- Las URLs de las 3 rutas de Agent Gateway quedan `http://` (puerto 80): `http://mcp.cristianpuenguenan.internal/sonarqube`, `http://openmemory-api...`, `http://agentgateway...` — el resto de las privadas son `https://`.
-- Apps sin cambios: ArgoCD ya corría `--insecure` (TLS delegado al edge es el patrón previsto); Grafana/Headlamp no usan cookies `secure`.
-
-**Actualización (2026-09-06): las 3 rutas de Agent Gateway también pasan a HTTPS.** La excepción de arriba ("`agentgateway-mcp` se queda en HTTP plano") seguía dejando esas 3 URLs sin TLS de cara al cliente, no solo como excepción interna — y el controller de Agent Gateway sigue sin soportar listeners HTTPS, así que no había manera de resolverlo ahí directamente. Solución: **`main` hace de proxy TLS hacia `agentgateway-mcp`**, no distinto de cómo ya proxya hacia cualquier otro backend — una nueva `HTTPRoute` (`platform/networking/cilium-gateway/httproute-agentgateway-proxy.yaml`) con `parentRefs: [{name: main, sectionName: https}]`, las 3 hostnames, y `backendRefs` apuntando directo al `Service agentgateway-mcp:80` (mismo namespace `networking`, sin `ReferenceGrant`). Sin matching de path ni rewrite: Agent Gateway sigue haciendo su propio ruteo/rewrite/multiplexing puertas adentro con sus `HTTPRoute` de siempre (`mcp-sonarqube`, `openmemory`, `agentgateway-ui`), que no cambiaron — solo cambió quién le entrega el tráfico. Con esto vuelven a ser 11 rutas (no 8) con `sectionName: https` contra `main`.
-
-Consecuencia: `agentgateway-mcp` ya no necesita IP LAN propia. Pasa a `Service` `ClusterIP` (`gateway.controller.service.type` en `platform/networking/agentgateway/agentgateway.yaml`) — el `spec.addresses: 192.168.122.250` del `Gateway` se quita (ya era dead config, ver arriba: el controller nunca lo tradujo a una petición real) y se elimina su `CiliumLoadBalancerIPPool` en `lb-ippool.yaml` (huérfano sin `Service LoadBalancer` que lo reclame). El DNS privado (`private-dns/configmap.yaml`) mueve `mcp`/`agentgateway`/`openmemory-api`.internal de `.250` a `.240`, y se limpian del `ansible/host-network.yaml` y del hook de libvirt las reglas de forward-port/firewall que apuntaban a `.250` (quedaban apuntando a nada). El plano de acceso queda simétrico: las 11 rutas privadas entran todas por `192.168.122.240:443`, sin excepciones de transporte visibles para el cliente.
-
-**Actualización (2026-09-07): se abandona la CA propia — Let's Encrypt real vía subdominio de `cristianpuenguenan.online`.** La CA privada (`internal-root-ca`) cumplía, pero exigía instalarla a mano en cada dispositivo del tailnet (`certutil -addstore`, una vez por dispositivo — tedioso y fácil de olvidar en uno nuevo), y expone un riesgo de fondo no evidente al momento de decidir: un dispositivo que confía en una CA raíz propia confía en **cualquier** certificado que esa CA firme, para **cualquier** dominio — si la clave privada del secret `internal-root-ca` se filtrara, alguien podría falsificar un certificado válido para cualquier sitio (banco, `google.com`, etc.) y ese dispositivo lo aceptaría sin avisar. Decisión: reemplazar por un certificado real.
-
-`.internal` sigue sin poder usarse con una CA pública (sigue siendo TLD reservado, sin cambios en esa restricción) — pero el usuario ya es dueño de `cristianpuenguenan.online`, que ya tiene un `ClusterIssuer` de Let's Encrypt funcionando vía DNS-01 (`letsencrypt-prod-cloudflare-dns01`, el mismo que emite `wildcard-home-tls`). El desafío DNS-01 **no exige que el nombre resuelva a nada real** — solo que se pueda crear un registro TXT `_acme-challenge.*` vía la API de Cloudflare, algo que cert-manager ya hace. Eso permite pedir un wildcard real para un subdominio dedicado, `*.internal.cristianpuenguenan.online`, sin publicar jamás un registro A/AAAA para él.
-
-Migración ejecutada en 3 fases para no arriesgar el cluster (nunca se cortó acceso a las rutas de administración):
-
-1. **Aditiva**: nuevo `Certificate` `wildcard-internal-online` (mismo Issuer que `wildcard-home-tls`) → secret `wildcard-internal-online-tls`; segundo listener HTTPS en `main` (`https-online`, con su propio `hostname` y `certificateRefs` — **Cilium/Envoy no soporta múltiples `certificateRefs` en un mismo listener**, dos listeners con `hostname` disjuntos en el mismo puerto 443 es el patrón soportado para servir 2 certs por SNI); las 11 `HTTPRoute` reciben el hostname nuevo además del viejo (y un segundo `parentRef` donde adjuntan directo a `main`); `private-dns` resuelve ambos dominios. Nada del `.internal` viejo se tocó.
-2. **Habilitación real**: se agregó una segunda entrada de Tailscale Split DNS (mismo nameserver `192.168.122.253`, restringida a `internal.cristianpuenguenan.online`) — sin esto el hostname nuevo no resolvía para ningún dispositivo del tailnet.
-3. **Decomiso**: una vez confirmado en vivo desde un dispositivo real (TLS válido, sin instalar nada, `curl`/navegador sin `-k`), se sacaron el hostname y el listener viejos, y se borró `platform/networking/cert-manager/internal-tls.yaml` completo (Issuer selfSigned + CA + ClusterIssuer `internal-ca`).
-
-**Hallazgo durante la validación, corrección a lo documentado arriba sobre "nunca resuelve publicamente":** el wildcard **público** `*.cristianpuenguenan.online` sí matchea por DNS a `argocd.internal.cristianpuenguenan.online` y demás — las reglas de wildcard DNS (RFC 1034 §4.3.3) aplican a cualquier profundidad de subdominio mientras no exista un registro explícito bloqueando un nivel intermedio (`internal.cristianpuenguenan.online` no tiene ninguno). Confirmado en vivo: `nslookup argocd.internal.cristianpuenguenan.online 1.1.1.1` responde con las IPs de Cloudflare. Esto **no es una brecha real**: al conectar de verdad contra esa IP con ese hostname, el handshake TLS falla en el borde de Cloudflare (`SEC_E_ILLEGAL_MESSAGE`, alerta fatal) porque ese hostname nunca fue dado de alta como "Hostname" válido en la config SSL de Cloudflare — la resolución DNS es pública, la conexión no. Distinto de `.internal` (que daba `NXDOMAIN` limpio), pero funcionalmente equivalente en seguridad.
-
-Consecuencias:
-- Cero instalación por dispositivo, para siempre — el certificado lo confía cualquier navegador de fábrica.
-- Certificate Transparency: cualquiera puede ver en `crt.sh` que existe `*.internal.cristianpuenguenan.online` — revela que hay una zona de administración privada (no revela qué hostnames específicos, esos nunca se emiten individualmente), algo que con `.internal` (TLD reservado) no era ni remotamente posible. Riesgo aceptado: es solo reconocimiento, no acceso.
-- Un solo `ClusterIssuer` para los dos wildcards (público y privado) — mismo token de Cloudflare, sin credenciales nuevas.
-- Riesgo de error humano ligeramente mayor que antes: `.internal` y `.online` eran visualmente imposibles de confundir; `internal.cristianpuenguenan.online` vs `cristianpuenguenan.online` difieren en una sola etiqueta — un `HTTPRoute` mal armado (parentRef al Gateway `public` en vez de `main`, o el hostname sin el prefijo `internal.`) expondría una ruta de administración a Internet. Mitigado por convención de nombres consistente y revisión de diffs, no por control automático.
+Consequences:
+- Zero installation per device, forever — the certificate is trusted by any browser out of the box.
+- Certificate Transparency: anyone can see on `crt.sh` that `*.internal.cristianpuenguenan.online` exists — it reveals that there's a private administration zone (it doesn't reveal specific hostnames, those are never issued individually), something that with `.internal` (reserved TLD) wasn't even remotely possible. Accepted risk: it's only reconnaissance, not access.
+- A single `ClusterIssuer` for both wildcards (public and private) — same Cloudflare token, no new credentials.
+- Slightly higher risk of human error than before: `.internal` and `.online` were visually impossible to confuse; `internal.cristianpuenguenan.online` vs. `cristianpuenguenan.online` differ by a single label — a badly built `HTTPRoute` (parentRef to the `public` Gateway instead of `main`, or the hostname without the `internal.` prefix) would expose an admin route to the Internet. Mitigated by consistent naming convention and diff review, not by automatic control.
 
 ---
 
-## ADR-013: Reemplazo de Longhorn por OpenEBS Local PV LVM
+## ADR-013: Replacing Longhorn with OpenEBS Local PV LVM
 
-**Estado**: Superseded por [ADR-014](#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv) — el motor LVM elegido acá se reemplazó por ZFS al migrar a Talos (ver ADR-014); el razonamiento de esta entrada (por qué no Longhorn) sigue vigente.  
-**Fecha**: 2026-09-08
+**Status**: Superseded by [ADR-014](#adr-014-migration-from-k0slibvirtfedora-to-talos-linuxproxmox-ve-and-from-openebs-lvm-to-openebs-zfs-localpv) — the LVM engine chosen here was replaced by ZFS when migrating to Talos (see ADR-014); the reasoning in this entry (why not Longhorn) remains valid.
+**Date**: 2026-09-08
 
-### Contexto
+### Context
 
-ADR-004 descartó OpenEBS por "más complejo de configurar, comunidad más pequeña" y adoptó Longhorn con réplicas=1 (sin ganancia real de redundancia en single-node). Ese mismo mecanismo de Longhorn —volúmenes expuestos vía iSCSI (`iscsid`, `ansible/tasks/longhorn-prereqs.yaml`)— resultó ser la causa más probable de un cuelgue real de `k0s reset` durante un teardown (2026-09-07, documentado en memoria de sesión y en `ansible/tasks/graceful-shutdown.yaml`): si el kubelet muere antes de que el CSI driver desmonte y haga logout de esas sesiones, quedan mounts/sesiones "busy" que cuelgan el `umount` interno del reset.
+ADR-004 rejected OpenEBS for "more complex to configure, smaller community" and adopted Longhorn with replicas=1 (no real redundancy gain on single-node). That same Longhorn mechanism — volumes exposed via iSCSI (`iscsid`, `ansible/tasks/longhorn-prereqs.yaml`) — turned out to be the most likely cause of a real `k0s reset` hang during a teardown (2026-09-07, documented in session memory and in `ansible/tasks/graceful-shutdown.yaml`): if the kubelet dies before the CSI driver unmounts and logs out of those sessions, "busy" mounts/sessions remain that hang the internal `umount` of the reset.
 
-Se aprovechó un ciclo de teardown/rebuild del cluster (sin cargas productivas todavía) para revisar la decisión: en un solo nodo, la capa de red + réplicas + iSCSI de Longhorn no compra nada (replicaCount ya estaba fijo en 1) y sí paga en superficie de fallo y en throughput/latencia frente a un motor puramente local.
+A cluster teardown/rebuild cycle (with no production workloads yet) was used as an opportunity to review the decision: on a single node, Longhorn's network + replica + iSCSI layer buys nothing (replicaCount was already fixed at 1) and does cost failure surface and throughput/latency compared to a purely local engine.
 
-### Opciones consideradas
+### Options considered
 
-Motores de OpenEBS Local PV evaluados para reemplazar a Longhorn (ver tabla completa de trade-offs discutida con el operador):
+OpenEBS Local PV engines evaluated to replace Longhorn (see full trade-off table discussed with the operator):
 
-| Opción | Razón de descarte / elección |
+| Option | Reason for rejection / choice |
 |--------|------------------------------|
-| **Local PV Hostpath** | Máxima performance y cero aprovisionamiento adicional, pero sin snapshots ni resize online ni thin-provisioning |
-| **Local PV ZFS** | Requiere ZFS (DKMS/kmod) en un host Fedora que no lo trae por defecto — más piezas nuevas que mantener |
-| **Mayastor (NVMe-oF)** | Pensado para replicación multi-nodo; overkill para un solo nodo, no aporta nada sobre Local PV |
-| **Local PV LVM** (elegido) | Requiere un Volume Group LVM dedicado (no existía) — a cambio da snapshots, thin-provisioning y resize online con performance cercana a la nativa del disco |
+| **Local PV Hostpath** | Maximum performance and zero additional provisioning, but no snapshots, no online resize, no thin-provisioning |
+| **Local PV ZFS** | Requires ZFS (DKMS/kmod) on a Fedora host that doesn't include it by default — more new pieces to maintain |
+| **Mayastor (NVMe-oF)** | Designed for multi-node replication; overkill for a single node, adds nothing over Local PV |
+| **Local PV LVM** (chosen) | Requires a dedicated LVM Volume Group (didn't exist) — in exchange, gives snapshots, thin-provisioning, and online resize with performance close to the disk's native one |
 
-### Decisión
+### Decision
 
-**OpenEBS Local PV LVM** (chart standalone `lvm-localpv` de `https://openebs.github.io/lvm-localpv`, no el paquete umbrella `openebs/openebs` con NDM/Mayastor — solo se instala el motor que se usa):
+**OpenEBS Local PV LVM** (standalone `lvm-localpv` chart from `https://openebs.github.io/lvm-localpv`, not the `openebs/openebs` umbrella package with NDM/Mayastor — only the engine actually used is installed):
 
-- Disco dedicado nuevo (`vdb`, raw, sin `backing_store` qcow2) en la VM vía Terraform (`libvirt_volume.openebs_data_disk`, `terraform/variables.tf` `openebs_disk_size_bytes`), separado del disco raíz para que el VG no compita con el filesystem del SO.
-- Volume Group `vg-openebs` creado por Ansible (`ansible/tasks/openebs-prereqs.yaml`, idempotente vía `pvcreate`/`vgcreate`), reemplazando el prerequisito de `iscsi-initiator-utils`/`iscsid`.
-- Mismo split de dos StorageClasses que Longhorn, renombradas 1:1 para minimizar el diff en los consumidores: `openebs-lvm` (default, `Delete`) y `openebs-lvm-retain` (`Retain`, bases de datos). `provisioner: local.csi.openebs.io`, `parameters: {storage: "lvm", volgroup: "vg-openebs"}`.
-- Namespace `openebs` (reemplaza `longhorn-system`).
-- ServiceMonitor propio del chart (`lvmNode.serviceMonitor.enabled: true`) en vez del ServiceMonitor manual que tenía Longhorn.
+- New dedicated disk (`vdb`, raw, no qcow2 `backing_store`) on the VM via Terraform (`libvirt_volume.openebs_data_disk`, `terraform/variables.tf` `openebs_disk_size_bytes`), separate from the root disk so the VG doesn't compete with the OS filesystem.
+- Volume Group `vg-openebs` created by Ansible (`ansible/tasks/openebs-prereqs.yaml`, idempotent via `pvcreate`/`vgcreate`), replacing the `iscsi-initiator-utils`/`iscsid` prerequisite.
+- Same two-StorageClass split as Longhorn, renamed 1:1 to minimize the diff on consumers: `openebs-lvm` (default, `Delete`) and `openebs-lvm-retain` (`Retain`, databases). `provisioner: local.csi.openebs.io`, `parameters: {storage: "lvm", volgroup: "vg-openebs"}`.
+- Namespace `openebs` (replaces `longhorn-system`).
+- The chart's own ServiceMonitor (`lvmNode.serviceMonitor.enabled: true`) instead of the manual ServiceMonitor Longhorn had.
 
-### Consecuencias
+### Consequences
 
-- **Sin UI web**: Longhorn tenía una UI propia (HTTPRoute + DNS `longhorn.internal...`); LVM-LocalPV no tiene equivalente. Se retira sin reemplazo — inspección de volúmenes queda vía `kubectl get lvmvolumes -n openebs` / `lvs`/`vgs` en el nodo.
-- **Sin réplicas** (igual que antes: Longhorn ya corría con `replicaCount: 1`, no es una regresión real): un fallo del disco `vdb` es pérdida total de datos. Mitigable con snapshots LVM manuales (`lvcreate --snapshot`), sin automatización todavía — misma deuda de backups que ya existía con Longhorn.
-- El footprint de disco de la VM sube de 120GiB a 120+100GiB (root + VG dedicado).
-- Se simplifica el ciclo de shutdown: sin iSCSI de por medio, `ansible/tasks/graceful-shutdown.yaml` ya no necesita esperar "volúmenes detached" ni forzar logout — el drenaje normal de Kubernetes basta, porque LVM-LocalPV monta los LVs directo (sin capa NBD/iSCSI).
-- El argumento original de ADR-004 contra OpenEBS ("más complejo de configurar") se acepta ahora a cambio de performance en single-node: el chart standalone de un solo motor (LVM) es en la práctica más simple de operar que Longhorn con su UI, su manager y su engine-image por réplica.
-
----
-
-## ADR-014: Migración de k0s/libvirt/Fedora a Talos Linux/Proxmox VE, y de OpenEBS LVM a OpenEBS ZFS LocalPV
-
-**Estado**: Aceptado
-**Fecha**: 2026-09-09
-
-### Contexto
-
-ADR-008 ya había documentado varias fuentes de fragilidad de la VM libvirt/KVM sobre un host generalista: el hang silencioso con firmware UEFI/OVMF (mitigado forzando BIOS legacy), el footegun de `memory` en KiB por defecto del provider `dmacvicar/libvirt`, y la dependencia de NAT (`192.168.122.0/24`) porque bridging sobre WiFi es frágil. A esto se suma que Ansible seguía siendo responsable de aprovisionar el sistema operativo del nodo por SSH (ADR-007): cada drift de paquetes, configuración o estado del host quedaba fuera del control declarativo de Terraform/GitOps, y era la superficie más grande de fallos no reproducibles del proyecto (incluida la causa raíz de ADR-013: iSCSI de Longhorn colgando `k0s reset` en el teardown).
-
-El paso a un hipervisor dedicado (Proxmox VE) con conectividad LAN real vía bridge (`vmbr0`) resuelve la limitación de red de ADR-008. Y Talos Linux — Kubernetes inmutable, sin SSH ni shell, configurado 100% vía API declarativa (`talosctl`/machine config) — elimina por completo la capa de Ansible-sobre-SSH que aprovisionaba el nodo: ya no hay sistema operativo que mantener, parchear ni al que pueda dividergir del estado declarado.
-
-### Decisión
-
-**Talos Linux sobre Proxmox VE**, con Terraform dividido en dos etapas independientes (dos state files, ver `terraform/infra/versions.tf` y `terraform/cluster/versions.tf`):
-
-- **`terraform/infra`** (providers `bpg/proxmox` + `siderolabs/talos`): descarga el ISO de Talos generado por el [Image Factory](https://factory.talos.dev) con un schematic que incluye las extensiones `qemu-guest-agent`, `tailscale` y `zfs` (`terraform/infra/variables.tf`, `talos_schematic_id`); crea la VM en Proxmox con dos discos — uno para la instalación de Talos y uno dedicado, sin formatear, para el zpool de OpenEBS (`terraform/infra/proxmox.tf`); aplica la machine config (incluye `RawVolumeConfig` para particionar el disco de ZFS) y bootstrapea el cluster (`terraform/infra/talos.tf`).
-- **`terraform/cluster`** (providers `kubernetes` + `helm`): namespaces, `helm_release` de Cilium y ArgoCD, y los secrets iniciales del cluster (`terraform/cluster/*.tf`) — reemplaza lo que antes hacía Ansible (`site.yaml`) + Helmfile (`bootstrap/helmfile.yaml`).
-- **Red**: la VM pasa de la NAT interna de libvirt (`192.168.122.0/24`) a una IP estática real en la LAN del homelab (`192.168.80.0/24`, bridge `vmbr0` de Proxmox) con MAC fija reservada en el DHCP del router (`terraform/infra/variables.tf`, `vm_mac_address`) — ya no hace falta el port-forward de firewalld que exigía ADR-008 (`ansible/host-network.yaml`, eliminado).
-- **Ansible** se reduce a lo que no puede resolverse de forma declarativa dentro de Talos ni de Terraform: `preflight.yaml` (valida credenciales antes de que CI gaste tiempo aprovisionando). Ya no existen `site.yaml`, `teardown.yaml`, `host-network.yaml` ni ninguna task que instale paquetes o configure el nodo — Talos no tiene shell (`nsenter`+`chroot` al host falla con "can't execute 'sh'").
-  > **Actualización (ADR-015)**: poblar OpenBao dejó de ser un playbook de Ansible (`vault-populate.yaml`/`load-extra-secrets.yaml`) — es un script standalone (`scripts/load-secrets-to-openbao.sh`) que corre manual, nunca en CI.
-- **Storage: OpenEBS LVM (ADR-013) → OpenEBS ZFS LocalPV** (`zfs-localpv` 2.11.1, `platform/storage/openebs/`): la elección de LVM en ADR-013 asumía un host donde Ansible podía correr `pvcreate`/`vgcreate` por SSH — imposible en Talos, que no expone shell ni permite instalar paquetes arbitrarios en el host. ZFS sí es viable porque el módulo de kernel se carga declarativamente vía la extensión `zfs` del schematic y `machine.kernel.modules` (`terraform/infra/talos.tf`); el zpool se crea con un `Job` de Kubernetes (`kubernetes_job_v1.openebs_zpool_create`, `terraform/cluster/storage.tf`) que corre las herramientas de ZFS *dentro* de un contenedor privilegiado montando `/dev` del host, ya que Talos no trae `zfs`/`blkid` en el host y no corre `udev` (se resuelve el device real vía `blkid -t PARTLABEL=`, no `/dev/disk/by-partlabel/`). Nuevas StorageClasses: `openebs-zfs` (default) y `openebs-zfs-retain`.
-- **Rename**: la VM y el cluster pasan de `talos-01` a `talos` (un solo nodo, sufijo numérico sin objeto).
-
-### Consecuencias
-
-- **Menos superficie de drift**: no hay sistema operativo del nodo que mantener/parchear/divergir — Talos se actualiza reemplazando la imagen completa (`talosctl upgrade`), no con `apt`/`dnf`.
-- **CI/CD (ADR-009) cambia de variables, no de forma**: `TF_VAR_proxmox_endpoint`, `TF_VAR_proxmox_api_token`, `TF_VAR_talos_schematic_id`, `TF_VAR_vm_static_ip`, `TF_VAR_vm_gateway` reemplazan a las variables de libvirt/Fedora en `.github/workflows/deploy.yml` y `terraform-plan.yml`. El flujo de dos `terraform apply` secuenciales (infra → cluster) y el gate de aprobación manual no cambian.
-- **Troubleshooting cambia de herramientas**: ya no hay `ssh`/`journalctl`/`k0s ctr` contra el nodo — el equivalente es `talosctl` (logs, dashboard, `talosctl upgrade`) contra la IP del nodo, con el `talosconfig` que genera `terraform/infra/talos.tf` (`local_file.talosconfig`).
-- **Deuda pendiente identificada durante esta revisión**: varios manifiestos de `platform/networking/` (Gateway, `CiliumLoadBalancerIPPool`, DNS interno) seguían hardcodeados a la subred vieja de libvirt (`192.168.122.x`) después de la migración — corregido a `192.168.80.x` como parte de este ADR. `docs/ARCHITECTURE.md`, `docs/INSTALL.md` y `docs/OPERATIONS.md` seguían describiendo k0s/libvirt/Fedora — actualizados junto con este ADR.
-- **Storage sin réplicas** (igual que con LVM/Longhorn): sigue siendo copia única, local al nodo — no es una regresión de esta migración, es una decisión ya aceptada en ADR-004/013.
+- **No web UI**: Longhorn had its own UI (HTTPRoute + DNS `longhorn.internal...`); LVM-LocalPV has no equivalent. Removed with no replacement — volume inspection is now via `kubectl get lvmvolumes -n openebs` / `lvs`/`vgs` on the node.
+- **No replicas** (same as before: Longhorn was already running with `replicaCount: 1`, not a real regression): a failure of the `vdb` disk is total data loss. Mitigable with manual LVM snapshots (`lvcreate --snapshot`), no automation yet — same backup debt that already existed with Longhorn.
+- The VM's disk footprint goes from 120GiB to 120+100GiB (root + dedicated VG).
+- The shutdown cycle is simplified: without iSCSI in the mix, `ansible/tasks/graceful-shutdown.yaml` no longer needs to wait for "detached volumes" or force a logout — normal Kubernetes draining is enough, because LVM-LocalPV mounts the LVs directly (no NBD/iSCSI layer).
+- ADR-004's original argument against OpenEBS ("more complex to configure") is now accepted in exchange for single-node performance: the standalone single-engine (LVM) chart is in practice simpler to operate than Longhorn with its UI, its manager, and its per-replica engine-image.
 
 ---
 
-## ADR-015: Carga de secretos en OpenBao sale de CI/CD, siempre manual
+## ADR-014: Migration from k0s/libvirt/Fedora to Talos Linux/Proxmox VE, and from OpenEBS LVM to OpenEBS ZFS LocalPV
 
-**Estado**: Aceptado
-**Fecha**: 2026-09-09
+**Status**: Accepted
+**Date**: 2026-09-09
 
-### Contexto
+### Context
 
-`vault-populate.yaml` y `load-extra-secrets.yaml` corrían automáticamente en cada push a `master` (`.github/workflows/deploy.yml`), escribiendo en OpenBao las credenciales de infraestructura y de aplicaciones (`ansible/group_vars/all.yaml`, cifrado con `ansible-vault` y commiteado; `ansible/extra-secrets.yaml`, plano y gitignored). El operador decidió que la carga de secretos reales en el cluster **nunca** debe depender de un runner de CI, sin importar qué tan controlado esté el pipeline — quiere ejecutarlo a mano siempre. También pidió sacar la dependencia de Ansible específicamente para esta tarea (ansible sigue en uso para `preflight.yaml`).
+ADR-008 had already documented several sources of fragility of the libvirt/KVM VM on a generalist host: the silent hang with UEFI/OVMF firmware (mitigated by forcing legacy BIOS), the `dmacvicar/libvirt` provider's `memory`-in-KiB-by-default footgun, and the dependency on NAT (`192.168.122.0/24`) because bridging over WiFi is fragile. On top of this, Ansible remained responsible for provisioning the node's operating system over SSH (ADR-007): every drift in packages, configuration, or host state fell outside Terraform/GitOps's declarative control, and was the project's largest surface of non-reproducible failures (including ADR-013's root cause: Longhorn's iSCSI hanging `k0s reset` during teardown).
 
-### Opciones consideradas
+Moving to a dedicated hypervisor (Proxmox VE) with real LAN connectivity via bridge (`vmbr0`) resolves ADR-008's network limitation. And Talos Linux — immutable Kubernetes, with no SSH or shell, configured 100% via a declarative API (`talosctl`/machine config) — completely eliminates the Ansible-over-SSH layer that provisioned the node: there's no longer an operating system to maintain, patch, or that could drift from the declared state.
 
-| Opción | Razón de descarte |
-|--------|-------------------|
-| Mantener Ansible pero solo invocarlo a mano | El operador pidió explícitamente no depender de Ansible para esto — prefiere un script sin esa dependencia |
-| Dos archivos de secretos separados (infra cifrada con vault + apps en plano) | El operador prefirió unificar en un único archivo plano — más simple de mantener, a costa de perder el respaldo cifrado-en-git de los 5 secretos de infra |
+### Decision
 
-### Decisión
+**Talos Linux on Proxmox VE**, with Terraform split into two independent stages (two state files, see `terraform/infra/versions.tf` and `terraform/cluster/versions.tf`):
 
-- **`secrets/homelab.env`** (gitignored) + `secrets/homelab.env.example` (commiteado): único archivo con todas las credenciales, infra y apps, formato `KEY=value`. Reemplaza a `ansible/group_vars/all.yaml` (borrado, ya no hay `ansible-vault` en el repo) y `ansible/extra-secrets.yaml.example` (borrado).
-- **`scripts/load-secrets-to-openbao.sh`**: bash standalone, sin Ansible. Espera OpenBao/`openbao-init`, hace port-forward, y escribe cada path de KV vía `curl`+`jq`. Reemplaza a `vault-populate.yaml`, `load-extra-secrets.yaml` y `tasks/openbao-kv-write.yaml` (los tres borrados). Se ejecuta a mano, nunca en CI.
-- **`.github/workflows/deploy.yml`**: se quitan los steps que corrían esos playbooks. El preflight de credenciales (`ansible/preflight.yaml`, sigue en Ansible) ahora toma sus valores desde GitHub Actions secrets/vars inyectados como env vars del step, en vez de `group_vars/all.yaml` + `ANSIBLE_VAULT_PASSWORD`.
-- Las Applications de ArgoCD que dependen de esos secretos (webhook de ArgoCD, `cloudflared`, bases de datos, SonarQube, OpenMemory, Flow) quedan en `Progressing`/`Degraded` hasta que el operador corra el script manualmente — comportamiento esperado, no un fallo del pipeline (los sync-waves ya ordenan OpenBao antes que sus consumidores, y `ExternalSecret` reintenta por `refreshInterval`).
+- **`terraform/infra`** (providers `bpg/proxmox` + `siderolabs/talos`): downloads the Talos ISO generated by the [Image Factory](https://factory.talos.dev) with a schematic that includes the `qemu-guest-agent`, `tailscale`, and `zfs` extensions (`terraform/infra/variables.tf`, `talos_schematic_id`); creates the VM on Proxmox with two disks — one for the Talos installation and one dedicated, unformatted, for the OpenEBS zpool (`terraform/infra/proxmox.tf`); applies the machine config (includes `RawVolumeConfig` to partition the ZFS disk) and bootstraps the cluster (`terraform/infra/talos.tf`).
+- **`terraform/cluster`** (providers `kubernetes` + `helm`): namespaces, `helm_release` for Cilium and ArgoCD, and the cluster's initial secrets (`terraform/cluster/*.tf`) — replaces what Ansible (`site.yaml`) + Helmfile (`bootstrap/helmfile.yaml`) used to do.
+- **Network**: the VM moves from libvirt's internal NAT (`192.168.122.0/24`) to a real static IP on the homelab's LAN (`192.168.80.0/24`, Proxmox's `vmbr0` bridge) with a fixed MAC reserved in the router's DHCP (`terraform/infra/variables.tf`, `vm_mac_address`) — the firewalld port-forward ADR-008 required is no longer needed (`ansible/host-network.yaml`, removed).
+- **Ansible** is reduced to what can't be solved declaratively within Talos or Terraform: `preflight.yaml` (validates credentials before CI spends time provisioning). `site.yaml`, `teardown.yaml`, `host-network.yaml`, and any task that installs packages or configures the node no longer exist — Talos has no shell (`nsenter`+`chroot` into the host fails with "can't execute 'sh'").
+  > **Update (ADR-015)**: populating OpenBao stopped being an Ansible playbook (`vault-populate.yaml`/`load-extra-secrets.yaml`) — it's a standalone script (`scripts/load-secrets-to-openbao.sh`) that runs manually, never in CI.
+- **Storage: OpenEBS LVM (ADR-013) → OpenEBS ZFS LocalPV** (`zfs-localpv` 2.11.1, `platform/storage/openebs/`): ADR-013's choice of LVM assumed a host where Ansible could run `pvcreate`/`vgcreate` over SSH — impossible on Talos, which exposes no shell and doesn't allow installing arbitrary packages on the host. ZFS is viable because the kernel module loads declaratively via the schematic's `zfs` extension and `machine.kernel.modules` (`terraform/infra/talos.tf`); the zpool is created with a Kubernetes `Job` (`kubernetes_job_v1.openebs_zpool_create`, `terraform/cluster/storage.tf`) that runs the ZFS tools *inside* a privileged container mounting the host's `/dev`, since Talos doesn't ship `zfs`/`blkid` on the host and doesn't run `udev` (the real device is resolved via `blkid -t PARTLABEL=`, not `/dev/disk/by-partlabel/`). New StorageClasses: `openebs-zfs` (default) and `openebs-zfs-retain`.
+- **Rename**: the VM and cluster move from `talos-01` to `talos` (a single node, numeric suffix without an object).
 
-### Consecuencias
+### Consequences
 
-- Ningún secreto real puede terminar en el cluster por un push accidental a `master` — requiere una acción manual explícita del operador.
-- Se pierde el respaldo cifrado-en-git de los 5 secretos de infra que antes vivían en `group_vars/all.yaml`: si se pierde el `secrets/homelab.env` local sin backup aparte, hay que regenerar/rotar esos tokens.
-- Un solo lenguaje (bash) para todo el script en vez de YAML+Jinja de Ansible — más fácil de leer de punta a punta, a costa de perder el manejo de errores/retries estructurado que Ansible daba gratis (reimplementado a mano con `set -euo pipefail` + loops de espera).
-
-> **Actualización (2026-09-09, mismo día):** la primera versión de este ADR hacía que el preflight de CI validara los 6 secretos (incluidos `cloudflare_api_token`, `cloudflared_token`, `argocd_webhook_secret`), exigiendo 3 GitHub Actions secrets nuevos solo para eso. Al revisar antes de desplegar se confirmó que **CI no consume esos 3 valores en ningún paso** — solo los usa `scripts/load-secrets-to-openbao.sh`, que ya los valida por su cuenta antes de escribir en OpenBao. El preflight de CI quedó acotado a lo que Terraform realmente necesita (`argocd_github_pat`, `openbao_static_seal_key`, más `argocd_repo_url` para el chequeo de acceso al repo) — ya no hace falta crear esos 3 secrets en GitHub. De paso se corrigió un bug real: `lookup('env', 'VAR') | default('x')` en Ansible no cae al default cuando la env var existe pero está vacía (que es lo que pasa si un secret de GitHub no está configurado) — hace falta `default('x', true)`.
+- **Less drift surface**: there's no node operating system to maintain/patch/drift — Talos updates by replacing the whole image (`talosctl upgrade`), not with `apt`/`dnf`.
+- **CI/CD (ADR-009) changes variables, not shape**: `TF_VAR_proxmox_endpoint`, `TF_VAR_proxmox_api_token`, `TF_VAR_talos_schematic_id`, `TF_VAR_vm_static_ip`, `TF_VAR_vm_gateway` replace the libvirt/Fedora variables in `.github/workflows/deploy.yml` and `terraform-plan.yml`. The flow of two sequential `terraform apply`s (infra → cluster) and the manual approval gate don't change.
+- **Troubleshooting tools change**: there's no more `ssh`/`journalctl`/`k0s ctr` against the node — the equivalent is `talosctl` (logs, dashboard, `talosctl upgrade`) against the node's IP, with the `talosconfig` generated by `terraform/infra/talos.tf` (`local_file.talosconfig`).
+- **Pending debt identified during this review**: several manifests under `platform/networking/` (Gateway, `CiliumLoadBalancerIPPool`, internal DNS) remained hardcoded to the old libvirt subnet (`192.168.122.x`) after the migration — fixed to `192.168.80.x` as part of this ADR. `docs/ARCHITECTURE.md`, `docs/INSTALL.md`, and `docs/OPERATIONS.md` still described k0s/libvirt/Fedora — updated together with this ADR.
+- **Storage with no replicas** (same as with LVM/Longhorn): still a single copy, local to the node — not a regression from this migration, it's a decision already accepted in ADR-004/013.
 
 ---
 
-## ADR-016: Servicios de datos fuera del cluster, en LXC de Proxmox — un único PostgreSQL multi-base
+## ADR-015: Loading secrets into OpenBao moves out of CI/CD, always manual
 
-**Estado**: Aceptado
-**Fecha**: 2026-09-13
+**Status**: Accepted
+**Date**: 2026-09-09
 
-### Contexto
+### Context
 
-El cluster corría cinco servicios de datos dentro de Kubernetes: dos instancias de PostgreSQL gestionadas por **CloudNative-PG** (la del app `homelab` y una dedicada a SonarQube), **MongoDB** vía Percona PSMDB Operator, **Qdrant** y **Redis** — en total dos operadores, seis Applications de ArgoCD y varios PVCs de OpenEBS ZFS con copia única (`openebs-zfs-retain`).
+`vault-populate.yaml` and `load-extra-secrets.yaml` ran automatically on every push to `master` (`.github/workflows/deploy.yml`), writing infrastructure and application credentials into OpenBao (`ansible/group_vars/all.yaml`, encrypted with `ansible-vault` and committed; `ansible/extra-secrets.yaml`, plain and gitignored). The operator decided that loading real secrets into the cluster must **never** depend on a CI runner, no matter how controlled the pipeline is — he wants to always run it by hand. He also asked to remove the Ansible dependency specifically for this task (Ansible remains in use for `preflight.yaml`).
 
-En un cluster de un solo nodo eso no compra ninguna de las ventajas de correr datos en Kubernetes: no hay réplicas, no hay live migration, no hay multitenancy que aislar. Lo que sí suma es superficie — dos operadores y sus CRDs que mantener, NetworkPolicies por servicio, PVCs que compiten con las apps por el zpool del nodo — y, lo peor, **el ciclo de vida de los datos queda atado al del cluster**: cada `talosctl upgrade`, teardown o rebuild del cluster (el propio ADR-014 migró de plataforma completa) arriesga justo lo que debería sobrevivirle.
+### Options considered
 
-Proxmox VE ya es el hipervisor del proyecto; un LXC es la forma natural de correr un servicio con estado que no necesita nada de Kubernetes.
+| Option | Reason for rejection |
+|--------|------------------|
+| Keep Ansible but only invoke it by hand | The operator explicitly asked not to depend on Ansible for this — prefers a script without that dependency |
+| Two separate secret files (infra encrypted with vault + apps plain) | The operator preferred unifying into a single plain file — simpler to maintain, at the cost of losing the encrypted-in-git backup of the 5 infra secrets |
 
-### Opciones consideradas
+### Decision
 
-| Opción | Razón de descarte |
-|--------|-------------------|
-| **Mantener los datos en el cluster** | Sigue acoplando el ciclo de vida de los datos al del cluster; operadores y PVCs consumen el único nodo sin dar nada a cambio (single-node = sin réplicas) |
-| **Una VM completa por servicio** | Cuatro VMs con kernel propio para servicios livianos — overhead de RAM/disco innecesario frente a un contenedor de sistema |
-| **Un LXC por servicio, PostgreSQL separado por consumidor** | Duplica instancia, RAM, disco y backups de un mismo motor para dos bases pequeñas, sin ganar aislamiento real (mismo hipervisor, mismo host de Proxmox) |
+- **`secrets/homelab.env`** (gitignored) + `secrets/homelab.env.example` (committed): a single file with all credentials, infra and apps, `KEY=value` format. Replaces `ansible/group_vars/all.yaml` (deleted, no more `ansible-vault` in the repo) and `ansible/extra-secrets.yaml.example` (deleted).
+- **`scripts/load-secrets-to-openbao.sh`**: standalone bash, no Ansible. Waits for OpenBao/`openbao-init`, does a port-forward, and writes each KV path via `curl`+`jq`. Replaces `vault-populate.yaml`, `load-extra-secrets.yaml`, and `tasks/openbao-kv-write.yaml` (all three deleted). Run by hand, never in CI.
+- **`.github/workflows/deploy.yml`**: the steps that ran those playbooks are removed. The credential preflight (`ansible/preflight.yaml`, still in Ansible) now takes its values from GitHub Actions secrets/vars injected as step env vars, instead of `group_vars/all.yaml` + `ANSIBLE_VAULT_PASSWORD`.
+- ArgoCD Applications that depend on those secrets (ArgoCD webhook, `cloudflared`, databases, SonarQube, OpenMemory, Flow) stay `Progressing`/`Degraded` until the operator manually runs the script — expected behavior, not a pipeline failure (sync-waves already order OpenBao before its consumers, and `ExternalSecret` retries via `refreshInterval`).
 
-### Decisión
+### Consequences
 
-**Cuatro LXC de Debian 13** creados de forma declarativa por Terraform (`terraform/infra/lxc.tf`) — bridge `vmbr0`, datastore `local-lvm`, IP estática en la LAN. Proxmox no soporta cloud-init para LXC (cicustom es exclusivo de QEMU), así que los contenedores se entregan **sin motor instalado**: la instalación de cada motor y sus credenciales (`TF_VAR_*` desde `secrets/homelab.env`) quedan como aprovisionamiento posterior, registrado como deuda en una historia propia:
+- No real secret can end up in the cluster from an accidental push to `master` — it requires an explicit manual action from the operator.
+- The encrypted-in-git backup of the 5 infra secrets that used to live in `group_vars/all.yaml` is lost: if the local `secrets/homelab.env` is lost without a separate backup, those tokens need to be regenerated/rotated.
+- A single language (bash) for the whole script instead of Ansible's YAML+Jinja — easier to read end to end, at the cost of losing the structured error handling/retries Ansible gave for free (reimplemented by hand with `set -euo pipefail` + wait loops).
 
-| LXC | vmid | IP | Motor |
+> **Update (2026-09-09, same day):** the first version of this ADR had the CI preflight validate all 6 secrets (including `cloudflare_api_token`, `cloudflared_token`, `argocd_webhook_secret`), requiring 3 new GitHub Actions secrets just for that. When reviewing before deploying, it was confirmed that **CI doesn't consume those 3 values in any step** — only `scripts/load-secrets-to-openbao.sh` uses them, and it already validates them on its own before writing to OpenBao. The CI preflight was scoped down to what Terraform actually needs (`argocd_github_pat`, `openbao_static_seal_key`, plus `argocd_repo_url` for the repo access check) — no longer necessary to create those 3 secrets on GitHub. A real bug was also fixed along the way: `lookup('env', 'VAR') | default('x')` in Ansible doesn't fall back to the default when the env var exists but is empty (which is what happens if a GitHub secret isn't configured) — `default('x', true)` is needed.
+
+---
+
+## ADR-016: Data services outside the cluster, in Proxmox LXC — a single multi-database PostgreSQL
+
+**Status**: Accepted
+**Date**: 2026-09-13
+
+### Context
+
+The cluster ran five data services inside Kubernetes: two PostgreSQL instances managed by **CloudNative-PG** (the `homelab` app's and one dedicated to SonarQube), **MongoDB** via the Percona PSMDB Operator, **Qdrant**, and **Redis** — in total two operators, six ArgoCD Applications, and several OpenEBS ZFS PVCs with a single copy (`openebs-zfs-retain`).
+
+On a single-node cluster that buys none of the advantages of running data in Kubernetes: no replicas, no live migration, no multitenancy to isolate. What it does add is surface — two operators and their CRDs to maintain, per-service NetworkPolicies, PVCs competing with the apps for the node's zpool — and, worst of all, **the data's lifecycle becomes tied to the cluster's**: every `talosctl upgrade`, teardown, or cluster rebuild (ADR-014 itself migrated the entire platform) risks exactly what should outlive it.
+
+Proxmox VE is already the project's hypervisor; an LXC is the natural way to run a stateful service that needs nothing from Kubernetes.
+
+### Options considered
+
+| Option | Reason for rejection |
+|--------|------------------|
+| **Keep the data in the cluster** | Keeps coupling the data's lifecycle to the cluster's; operators and PVCs consume the single node without giving anything in return (single-node = no replicas) |
+| **A full VM per service** | Four VMs with their own kernel for lightweight services — unnecessary RAM/disk overhead compared to a system container |
+| **One LXC per service, PostgreSQL separated by consumer** | Duplicates instance, RAM, disk, and backups of the same engine for two small databases, without gaining real isolation (same hypervisor, same Proxmox host) |
+
+### Decision
+
+**Four Debian 13 LXCs** created declaratively by Terraform (`terraform/infra/lxc.tf`) — `vmbr0` bridge, `local-lvm` datastore, static LAN IP. Proxmox doesn't support cloud-init for LXC (cicustom is QEMU-exclusive), so the containers are delivered **with no engine installed**: installing each engine and its credentials (`TF_VAR_*` from `secrets/homelab.env`) is left as follow-up provisioning, logged as debt in its own story:
+
+| LXC | vmid | IP | Engine |
 |-----|------|----|-------|
-| `postgresql` | 121 | `192.168.80.31` | PostgreSQL 17, bases `homelab` y `sonarqube` |
+| `postgresql` | 121 | `192.168.80.31` | PostgreSQL 17, `homelab` and `sonarqube` databases |
 | `mongodb` | 122 | `192.168.80.32` | MongoDB 8.0 |
 | `qdrant` | 123 | `192.168.80.33` | Qdrant v1.x |
 | `redis` | 124 | `192.168.80.34` | Redis 8 |
 
-- **Un único PostgreSQL multi-base** reemplaza las dos instancias separadas de antes (la de `homelab` y la de SonarQube): un solo motor que actualizar y respaldar, dos bases lógicas.
-- Los consumidores los alcanzan por hostname a través de `private-dns`, con cuatro registros nuevos en el Corefile: `postgres.internal.cristianpuenguenan.online`, `mongodb.internal...`, `qdrant.internal...`, `redis.internal...`. SonarQube apunta a `jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube`; OpenMemory a `qdrant.internal.cristianpuenguenan.online:6333`; las URLs de Flow ya viven en OpenBao (`secret/apps/flow`) como valores planos — solo se actualizan ahí. Reloader reinicia los Deployments afectados por el cambio de env.
-- **Desaparecen del repositorio** los operadores CloudNative-PG y Percona PSMDB, los manifiestos de las instancias y las seis Applications de ArgoCD que los desplegaban, junto con los namespaces que los albergaban. Al mergear, la root app poda las Applications eliminadas y sus finalizers cascaden a los clusters CNPG/PSMDB, Services y NetworkPolicies.
-- El ExternalSecret de credenciales de la base de SonarQube se conserva: sigue alimentando `SONAR_JDBC_USERNAME`/`SONAR_JDBC_PASSWORD`, ahora contra la instancia externa compartida.
+- **A single multi-database PostgreSQL** replaces the two previously separate instances (`homelab`'s and SonarQube's): one engine to update and back up, two logical databases.
+- Consumers reach them by hostname through `private-dns`, with four new records in the Corefile: `postgres.internal.cristianpuenguenan.online`, `mongodb.internal...`, `qdrant.internal...`, `redis.internal...`. SonarQube points to `jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube`; OpenMemory to `qdrant.internal.cristianpuenguenan.online:6333`; Flow's URLs already live in OpenBao (`secret/apps/flow`) as plain values — only updated there. Reloader restarts the Deployments affected by the env change.
+- The CloudNative-PG and Percona PSMDB operators, the instance manifests, and the six ArgoCD Applications that deployed them **disappear from the repository**, along with the namespaces that hosted them. On merge, the root app prunes the deleted Applications and their finalizers cascade to the CNPG/PSMDB clusters, Services, and NetworkPolicies.
+- The SonarQube database credentials' ExternalSecret is kept: it still feeds `SONAR_JDBC_USERNAME`/`SONAR_JDBC_PASSWORD`, now against the shared external instance.
 
-### Consecuencias
+### Consequences
 
-- Los datos sobreviven a upgrades, teardowns y rebuilds del cluster — el cluster vuelve a ser efímero por diseño, tal como lo quiere el enfoque GitOps.
-- **Un solo punto de falla compartido**: un upgrade o restart del PostgreSQL LXC afecta a `homelab` y `sonarqube` a la vez. Aceptado a escala homelab (un operador, dos bases pequeñas); si una base llegara a necesitar aislamiento real, se separa en su propio LXC.
-- Los backups pasan de `kubectl exec` en pods a herramientas estándar contra la red (`pg_dump`/`mongodump` apuntando a los hostnames `*.internal`), con el backup a nivel de contenedor de Proxmox (`vzdump`) como complemento.
-- El cluster libera ~35Gi del zpool de OpenEBS y la RAM/CPU de operadores e instancias; el disco de los LXC vive en `local-lvm` del host de Proxmox, fuera del cluster.
-- Las NetworkPolicies de Kubernetes dejaban de aplicar: el perímetro de las bases pasa a ser la LAN del homelab (los LXC viven en `vmbr0`) — la misma confianza que ya asumen los Gateway de Cilium en esa red.
-- **La instalación de los motores dentro de los LXC queda pendiente** (deuda registral): hasta ese aprovisionamiento, SonarQube y OpenMemory no tienen base de datos operativa — ventana aceptada por el operador, los datos arrancan desde cero de todos modos.
-
----
-
-## ADR-017: Reemplazo de OpenBao por 1Password como backend de secretos
-
-**Estado**: Aceptado
-**Fecha**: 2026-09-16
-
-### Contexto
-
-Se terminó de desplegar OpenBao en su propia LXC externa (`secrets_lxc`, 192.168.80.35) como sucesor del OpenBao in-cluster (ver ADR-016). En el proceso salieron a la luz varios problemas reales, nunca antes ejercitados porque el playbook nunca se había corrido de punta a punta:
-
-- `ansible/openbao.yaml` pedía `-recovery-shares=1 -recovery-threshold=1` en el init, flags que solo aplican con un `seal` de auto-unseal configurado (no es el caso, seal Shamir plano) — se ignoraban en silencio y el init caía al default de 5 shares / umbral 3, rompiendo el diseño de una sola clave.
-- El `Environment=BAO_LOCAL_CONFIG={...}` del Quadlet tenía JSON crudo sin escapar: systemd interpreta las comillas dobles como parte de su propia sintaxis de quoting, así que el contenedor recibía el JSON sin comillas.
-- El entrypoint de la imagen inyecta `-dev-listen-address=0.0.0.0:8200` cada vez que el comando es literalmente `server`, sin importar si `-dev` está activo — eso duplicaba el bind del listener y reventaba con "address already in use".
-- `ExecStartPost` desellaba inmediatamente al arrancar el contenedor, sin esperar a que el server estuviera realmente escuchando ("connection refused"), y además era fatal en el primer arranque (antes de que existiera `bao operator init`), lo que tumbaba toda la unit antes de llegar a inicializar.
-- El storage bind-mounteado quedaba `root:root` pero el proceso dropea privilegios a un usuario no-root (`openbao`, uid 100/gid 1000) — permission denied.
-- `bao write auth/kubernetes/config` intentaba autodetectar el CA cert del filesystem estándar de un pod in-cluster, que no existe fuera del clúster.
-- Las LXC son `unprivileged` sin `features { nesting, fuse }` — Podman no puede montar overlayfs vía fuse-overlayfs sin eso, afectando también a las LXC de datos.
-
-Todos estos bugs se corrigieron y OpenBao terminó funcionando de punta a punta (init con una sola clave, auto-unseal vía Podman secret en cada arranque, auth de Kubernetes configurado). Pero el operador, después de ver cuánta ceremonia hace falta para un vault funcional en un homelab de un solo operador (seal/unseal, Shamir, backend de auth, policies, roles) — decidió que no vale la pena mantenerlo: prefiere delegar todo eso a un servicio gestionado.
-
-### Opciones consideradas
-
-| Opción | Razón de descarte |
-|--------|-------------------|
-| Mantener OpenBao con auto-unseal vía AWS KMS (`seal "awskms"`) | Resuelve solo el unseal (deja de ser una clave cruda en un Podman secret) por ~$1/mes, pero no elimina el resto de la ceremonia (init, auth backend, policies, roles) — mejora parcial, no la simplificación que busca el operador. |
-| Cloudflare como KMS/secret store | No existe: Cloudflare no tiene un servicio de KMS comparable a AWS KMS, y su "Secrets Store" es exclusivo para bindings de Workers/Pages, sin API externa que ESO pueda consumir. |
-| 1Password Connect (self-hosted) | Requiere correr un servidor adicional (API + sync) — más infraestructura a mantener, no menos. Descartado a favor de Service Accounts. |
-
-### Decisión
-
-- **1Password** como backend de secretos, vault dedicado **"Homelab"**, vía un **Service Account** con acceso de solo lectura a ese único vault (no Connect server — sin infraestructura adicional que correr).
-- `ClusterSecretStore` usa el provider `onepasswordSDK` (`platform/secret-management/external-secrets/cluster-secret-store.yaml`), autenticado con el token del Service Account guardado en el Secret de Kubernetes `onepassword-service-account-token` (namespace `secret-management`).
-- Los 10 `ExternalSecret` del repo pasan a `secretStoreRef.name: onepassword` — el `remoteRef.key`/`property` no cambia: 1Password matchea el título del item con `key` y la label del campo con `property`, y se mantuvieron los mismos strings que ya usaba el árbol KV de Vault (`argocd`, `devtools/openmemory`, `infra/cloudflare`, etc.) para minimizar el diff.
-- `scripts/migrate-openbao-to-1password.sh` reemplaza a `migrate-openbao-secrets.sh` y `load-secrets-to-openbao.sh`: camina el árbol KV del OpenBao in-cluster (que sigue vivo, ver ADR-016) y crea/actualiza un item por path en el vault "Homelab" vía `op item create`/`op item edit`. Manual, nunca en CI — mismo criterio que ADR-015.
-- Se destruye la LXC 125 (`openbao`, 192.168.80.35): se elimina el recurso de `terraform/infra/lxc.tf`, `ansible/openbao.yaml`, `ansible/templates/openbao.container.j2`, el grupo `secrets_lxc` del inventario, y las referencias a `OPENBAO_STATIC_SEAL_KEY` en Terraform/CI/preflight (quedaba del mecanismo de sellado estático del OpenBao in-cluster viejo, ya retirado).
-- Se limpiaron 3 `ExternalSecret` huérfanos (`mongodb-app-secret`, `postgresql-app-secret`, `redis-secret`, namespace `infra`) que quedaron del refactor de ADR-016 sin manifiesto en git — el `ClusterSecretStore` roto (ver más abajo) nunca los podó.
-
-### Consecuencias
-
-- Desaparece toda la ceremonia de Vault-family: no hay init, no hay seal/unseal, no hay backend de auth de Kubernetes que configurar, no hay policies ni roles.
-- Se depende de la disponibilidad de la API de 1Password (SaaS) para que ExternalSecrets sincronice — antes esa dependencia era 100% self-hosted (la LXC). Con `deletionPolicy: Retain` en todos los ExternalSecrets, una caída de 1Password no borra los Secrets de Kubernetes ya sincronizados, solo congela las actualizaciones.
-- El Service Account de 1Password tiene rate limits más estrictos que un Connect server (que cachea localmente) — no debería importar al refresh interval de 1h/1m que ya usan estos ExternalSecrets, pero es un límite a tener presente si se agregan muchos más secrets.
-- Se pierde el control total self-hosted sobre el backend de secretos a cambio de simplicidad operativa — trade-off consciente para un homelab de un solo operador.
+- Data survives cluster upgrades, teardowns, and rebuilds — the cluster goes back to being ephemeral by design, as the GitOps approach intends.
+- **A single shared point of failure**: an upgrade or restart of the PostgreSQL LXC affects `homelab` and `sonarqube` at the same time. Accepted at homelab scale (one operator, two small databases); if a database ever needed real isolation, it gets split into its own LXC.
+- Backups move from `kubectl exec` on pods to standard network tools (`pg_dump`/`mongodump` pointing to the `*.internal` hostnames), with container-level Proxmox backup (`vzdump`) as a complement.
+- The cluster frees up ~35Gi of the OpenEBS zpool and the RAM/CPU of the operators and instances; the LXC disks live on `local-lvm` on the Proxmox host, outside the cluster.
+- Kubernetes NetworkPolicies stopped applying: the databases' perimeter becomes the homelab LAN (the LXCs live on `vmbr0`) — the same trust already assumed by the Cilium Gateways on that network.
+- **Installing the engines inside the LXCs remains pending** (logged debt): until that provisioning happens, SonarQube and OpenMemory have no working database — a window accepted by the operator, the data starts from scratch anyway.
 
 ---
 
-## ADR-018: Los secrets de la aplicación pasan de 1Password a SOPS + age, in-cluster
+## ADR-017: Replacing OpenBao with 1Password as secrets backend
 
-**Estado**: Aceptado
-**Fecha**: 2026-09-16
+**Status**: Accepted
+**Date**: 2026-09-16
 
-### Contexto
+### Context
 
-El día que se migró a 1Password (ver ADR-017) se agotó por completo la cuota de la cuenta: `op service-account ratelimit` mostró `account read_write 1000/1000, resetea en 12 horas`. La causa inmediata fue estructural — 6 `ExternalSecret` habían quedado en `refreshInterval: 1m` (herencia de cuando apuntaban al OpenBao self-hosted, donde una lectura local no costaba nada) — pero expuso el problema de fondo: 1Password Individual/Family tiene un límite de cuenta compartido de solo 1,000 requests/24h (Business: 50,000; Teams: 5,000 — confirmado en la documentación oficial). Cualquier volumen de debugging, un pico de sync, o simplemente crecer el número de secrets vuelve a poner en riesgo ese límite.
+Deploying OpenBao on its own external LXC (`secrets_lxc`, 192.168.80.35) as the successor to the in-cluster OpenBao (see ADR-016) was completed. In the process, several real problems came to light, never exercised before because the playbook had never been run end to end:
 
-El operador decidió eliminar la dependencia de un API externo con rate limit para los secrets que corren dentro del clúster, a favor de cifrado local sin límite de requests.
+- `ansible/openbao.yaml` requested `-recovery-shares=1 -recovery-threshold=1` on init, flags that only apply with an auto-unseal `seal` configured (not the case, plain Shamir seal) — they were silently ignored and init fell back to the default of 5 shares / threshold 3, breaking the single-key design.
+- The Quadlet's `Environment=BAO_LOCAL_CONFIG={...}` had raw, unescaped JSON: systemd interprets double quotes as part of its own quoting syntax, so the container received the JSON with the quotes stripped.
+- The image's entrypoint injects `-dev-listen-address=0.0.0.0:8200` any time the command is literally `server`, regardless of whether `-dev` is active — that duplicated the listener's bind and blew up with "address already in use".
+- `ExecStartPost` unsealed immediately on container start, without waiting for the server to actually be listening ("connection refused"), and was also fatal on the very first boot (before `bao operator init` existed), which brought down the whole unit before it could even initialize.
+- The bind-mounted storage ended up `root:root` but the process drops privileges to a non-root user (`openbao`, uid 100/gid 1000) — permission denied.
+- `bao write auth/kubernetes/config` tried to auto-detect the CA cert from an in-cluster pod's standard filesystem, which doesn't exist outside the cluster.
+- The LXCs are `unprivileged` with no `features { nesting, fuse }` — Podman can't mount overlayfs via fuse-overlayfs without that, also affecting the data LXCs.
 
-### Decisión
+All of these bugs were fixed and OpenBao ended up working end to end (init with a single key, auto-unseal via a Podman secret on every start, Kubernetes auth configured). But the operator, after seeing how much ceremony a functional vault requires in a single-operator homelab (seal/unseal, Shamir, auth backend, policies, roles), decided it's not worth maintaining: he prefers to delegate all of that to a managed service.
 
-- **SOPS + age** para los secrets consumidos dentro del clúster: cada valor se cifra con la clave pública de `age` y se commitea cifrado al repo — sin servicio externo, sin rate limit, el `git diff` de un secret rotado es legible (solo cambia el blob cifrado).
-- **sops-secrets-operator** (`isindir/sops-secrets-operator`, Helm chart) corre en el namespace `sops` y traduce cada `SopsSecret` (CRD, cifrado) a un `Secret` de Kubernetes real — mismo patrón que External Secrets Operator, pero sin llamar a ningún API externo en cada reconcile. ArgoCD aplica el `SopsSecret` tal cual, cifrado; nunca necesita saber de SOPS (a diferencia de la alternativa **KSOPS**, que exige un plugin corriendo dentro del `argocd-repo-server` — se descartó por necesitar tocar la imagen/sidecars de ArgoCD).
-- **9 de los 10** `ExternalSecret` migran a `SopsSecret` (`*.sops.yaml`, `spec.enforceOwnership: true` porque el `Secret` destino ya existía, owneado por External Secrets Operator). **`argocd-webhook-secret` se queda en 1Password**: usa `creationPolicy: Merge` sobre `argocd-secret`, que tiene otros campos que administra el propio ArgoCD (`server.secretkey`, `admin.password`) — SopsSecret toma ownership completo del `Secret`, sin merge de campos, así que migrarlo arriesgaba pisar esos campos y romper el login. Bajo volumen (refresh 1h), no vale el riesgo.
-- Las credenciales de `ansible/data-services.yaml` (consumidas por CI, no por el clúster) se quedan en 1Password vía `1password/load-secrets-action` (ver PR #23) — es una lectura puntual por corrida de CI, no un polling continuo, no contribuyó al agotamiento de cuota.
-- **Backup de la clave privada de age**: un documento en el vault "Homelab" de 1Password (`sops-age-homelab-key`) — lectura única y manual para recuperación de desastre, no un backend activo, así que no compite por cuota.
+### Options considered
 
-### Consecuencias
+| Option | Reason for rejection |
+|--------|------------------|
+| Keep OpenBao with auto-unseal via AWS KMS (`seal "awskms"`) | Solves only the unseal (stops being a raw key in a Podman secret) for ~$1/month, but doesn't eliminate the rest of the ceremony (init, auth backend, policies, roles) — a partial improvement, not the simplification the operator wants. |
+| Cloudflare as KMS/secret store | Doesn't exist: Cloudflare has no KMS service comparable to AWS KMS, and its "Secrets Store" is exclusive to Workers/Pages bindings, with no external API that ESO could consume. |
+| 1Password Connect (self-hosted) | Requires running an additional server (API + sync) — more infrastructure to maintain, not less. Rejected in favor of Service Accounts. |
 
-- El clúster ya no depende de la disponibilidad ni del rate limit de un API externo para sus secrets — solo de la clave `age` montada en el operador.
-- **La clave privada de age es ahora la clave maestra de todo el sistema**: si se pierde sin el backup en 1Password, ningún secret cifrado en el repo es recuperable. A diferencia de 1Password (donde la cuenta gestiona la recuperación), acá la responsabilidad de no perder esa clave es enteramente del operador.
-- Se pierde el UI de 1Password para rotar secrets a mano — rotar un valor ahora es `sops decrypt`, editar, `sops encrypt -i`, commit. Más fricción, pero sin límite de requests.
-- 1Password queda como backend "híbrido": sigue siendo la fuente de verdad para `argocd-webhook-secret` y las credenciales de `data-services.yaml`, además del backup de la clave de age — no se elimina del todo, se acota a los casos de bajo volumen donde no representa riesgo.
+### Decision
 
-> **Actualización (2026-09-16, mismo día):** las credenciales de `ansible/data-services.yaml` también migraron a SOPS (`ansible/data-services.env`, consumido vía `sops exec-env` en CI) — ver PR #26. El único consumidor que quedó en 1Password fue `argocd-webhook-secret`, retirado por completo en ADR-019 más abajo el mismo día, tras confirmar en logs del controller de External Secrets que el `ClusterSecretStore` seguía devolviendo `rate limit exceeded` mucho después de la ventana de reset esperada — la cuenta de 1Password resultó no ser confiable ni siquiera para el único consumidor de bajo volumen que quedaba.
+- **1Password** as the secrets backend, dedicated **"Homelab"** vault, via a **Service Account** with read-only access to that single vault (no Connect server — no additional infrastructure to run).
+- `ClusterSecretStore` uses the `onepasswordSDK` provider (`platform/secret-management/external-secrets/cluster-secret-store.yaml`), authenticated with the Service Account token stored in the Kubernetes Secret `onepassword-service-account-token` (namespace `secret-management`).
+- The repo's 10 `ExternalSecret`s move to `secretStoreRef.name: onepassword` — `remoteRef.key`/`property` doesn't change: 1Password matches the item title to `key` and the field label to `property`, and the same strings already used by Vault's KV tree (`argocd`, `devtools/openmemory`, `infra/cloudflare`, etc.) were kept to minimize the diff.
+- `scripts/migrate-openbao-to-1password.sh` replaces `migrate-openbao-secrets.sh` and `load-secrets-to-openbao.sh`: it walks the in-cluster OpenBao's KV tree (which stays alive, see ADR-016) and creates/updates one item per path in the "Homelab" vault via `op item create`/`op item edit`. Manual, never in CI — same criterion as ADR-015.
+- LXC 125 (`openbao`, 192.168.80.35) is destroyed: the resource is removed from `terraform/infra/lxc.tf`, `ansible/openbao.yaml`, `ansible/templates/openbao.container.j2`, the `secrets_lxc` inventory group, and references to `OPENBAO_STATIC_SEAL_KEY` in Terraform/CI/preflight (left over from the old in-cluster OpenBao's static seal mechanism, already retired).
+- 3 orphaned `ExternalSecret`s (`mongodb-app-secret`, `postgresql-app-secret`, `redis-secret`, namespace `infra`) left over from the ADR-016 refactor with no manifest in git were cleaned up — the broken `ClusterSecretStore` (see below) never pruned them.
 
----
+### Consequences
 
-## ADR-019: Se retira el webhook de GitHub (y con él, el último uso de 1Password) — vuelta a polling
-
-**Estado**: Aceptado
-**Fecha**: 2026-09-16
-
-### Contexto
-
-`argocd-webhook-secret` (`platform/argocd/webhook-externalsecret.yaml`) era el único consumidor que quedaba del `ClusterSecretStore` `onepassword` tras ADR-018. Revisando el estado general del clúster después de desplegar `data-services.yaml` se encontró que el `ClusterSecretStore` llevaba horas en `SecretSyncedError` con `rate limit exceeded` en los logs del controller de External Secrets — la cuenta de 1Password seguía sin resetear la cuota mucho después de la ventana esperada (~11-12h desde el agotamiento). Con el store roto, `argocd-secret` nunca recibía `webhook.github.secret`, así que cualquier entrega del webhook de GitHub (`https://argocd.cristianpuenguenan.online/api/webhook`, activo desde el incidente de ADR-011/`docs/TODO.md` #3) fallaba la verificación HMAC. El polling de `timeout.reconciliation: 600s` seguía funcionando como red de seguridad, así que el clúster nunca dejó de sincronizar — pero mantener una integración externa rota, de bajo valor, y ya sin ningún otro consumidor no se justificaba.
-
-### Decisión
-
-- Se elimina `platform/argocd/webhook-externalsecret.yaml`, `platform/argocd/httproute-webhook.yaml` y el `ClusterSecretStore` `onepassword` (`platform/secret-management/external-secrets/cluster-secret-store.yaml`) — con esto, 1Password deja de tener **cualquier** integración activa en el clúster o en CI. Solo queda como backup manual y offline de la clave privada de `age` (ver ADR-018), que no es una integración, es un documento.
-- Se elimina el webhook registrado en GitHub (`gh api -X DELETE repos/cristsr/homelab/hooks/<id>`) y el Secret huérfano `onepassword-service-account-token` (namespace `secret-management`, nunca gestionado por Terraform/GitOps, cargado a mano en su momento).
-- `timeout.reconciliation` vuelve a `180s` (el valor original de antes del webhook, `docs/TODO.md` #3) — ya no es un fallback de seguridad detrás de un webhook que dispara en segundos, es el único mecanismo de sync, así que el intervalo vuelve a ser el que determina la latencia real entre un push y el sync.
-- Explícitamente **temporal**: si más adelante se quiere sync casi instantáneo de nuevo, hay que reimplementar el webhook con un secret que no dependa de un backend externo con rate limit (por ejemplo, un `SopsSecret` normal con `creationPolicy` que no pise los campos que ArgoCD administra en `argocd-secret`, o generar el secret del webhook con Terraform en vez de sincronizarlo).
-
-### Consecuencias
-
-- 1Password queda completamente fuera del camino crítico del clúster y de CI — ADR-017 y ADR-018 quedan cerrados del todo, ya no hay backend "híbrido".
-- Sync más lento tras un push: hasta 180s en vez de segundos. Aceptable para un homelab de un solo operador; se documenta como el trade-off consciente de esta decisión.
-- Si `timeout.reconciliation` se vuelve a poner en `0s` por error, el clúster deja de sincronizar por completo y en silencio (mismo incidente que ADR-011/`docs/TODO.md` #3) — no hay ningún webhook que lo compense esta vez. Vigilar este valor en cualquier cambio futuro a `bootstrap/argocd/values.yaml`.
+- All of the Vault-family ceremony disappears: no init, no seal/unseal, no Kubernetes auth backend to configure, no policies or roles.
+- Now depends on 1Password's API (SaaS) availability for ExternalSecrets to sync — before, that dependency was 100% self-hosted (the LXC). With `deletionPolicy: Retain` on all ExternalSecrets, a 1Password outage doesn't delete already-synced Kubernetes Secrets, it only freezes updates.
+- 1Password's Service Account has stricter rate limits than a Connect server (which caches locally) — shouldn't matter for the 1h/1m refresh interval these ExternalSecrets already use, but it's a limit to keep in mind if many more secrets are added.
+- Total self-hosted control over the secrets backend is traded away for operational simplicity — a conscious trade-off for a single-operator homelab.
 
 ---
 
-## ADR-020: Los workloads in-cluster no pueden usar hostnames `*.internal.cristianpuenguenan.online` para conectar a las LXC de datos
+## ADR-018: Application secrets move from 1Password to SOPS + age, in-cluster
 
-**Estado**: Aceptado
-**Fecha**: 2026-09-16
+**Status**: Accepted
+**Date**: 2026-09-16
 
-### Contexto
+### Context
 
-Al cargar credenciales reales y revisar por qué `sonarqube-sonarqube-0` seguía fallando (`HikariPool: Connect timed out` contra `postgres.internal.cristianpuenguenan.online:5432`), se encontró que ese hostname resuelve, **desde dentro del clúster**, a IPs públicas de Cloudflare (nada escucha ahí en el puerto 5432) — no a la IP real de la LXC (`192.168.80.31`). Causa: `private-dns` (`platform/networking/private-dns/`) es un CoreDNS que corre como Deployment propio, pensado como resolver de **Tailscale Split DNS** para clientes externos (laptop del operador, etc. — ver ADR-011/012); los pods del clúster usan el CoreDNS de `kube-system` (el de Cilium), que nunca conoce esa zona y termina reenviando la consulta al DNS público, donde el wildcard `*.cristianpuenguenan.online` (proxiado por Cloudflare) responde con IPs que no tienen nada relacionado corriendo. `openmemory` tenía el mismo bug con `QDRANT_HOST=qdrant.internal.cristianpuenguenan.online`.
+The day of the migration to 1Password (see ADR-017), the account's quota was completely exhausted: `op service-account ratelimit` showed `account read_write 1000/1000, resets in 12 hours`. The immediate cause was structural — 6 `ExternalSecret`s had been left at `refreshInterval: 1m` (inherited from when they pointed to the self-hosted OpenBao, where a local read cost nothing) — but it exposed the underlying problem: 1Password Individual/Family has a shared account limit of only 1,000 requests/24h (Business: 50,000; Teams: 5,000 — confirmed in the official documentation). Any amount of debugging, a sync spike, or simply growing the number of secrets puts that limit at risk again.
 
-### Decisión
+The operator decided to remove the dependency on a rate-limited external API for secrets that run inside the cluster, in favor of local encryption with no request limit.
 
-- `workloads/sonarqube/sonarqube.yaml` (`SONAR_JDBC_URL`) y `platform/devtools/openmemory/deployment.yaml` (`QDRANT_HOST`) pasan a usar la IP directa de la LXC (`192.168.80.31`/`192.168.80.33`) en vez del hostname `*.internal`.
-- Los hostnames `*.internal.cristianpuenguenan.online` para las LXC de datos (`postgres`, `mongodb`, `qdrant`, `redis`) siguen existiendo en `private-dns` y siguen siendo válidos - solo para acceso manual vía Tailscale (`psql`/`mongosh`/etc. desde tu equipo), nunca para que un pod del clúster los use como target de conexión.
-- No se tocó CoreDNS de `kube-system` para servir esta zona también a los pods (alternativa descartada): más invasivo, afecta la resolución DNS de todo el clúster, y las IPs de las LXC ya son estáticas (Terraform), así que hardcodearlas no introduce un problema real de mantenimiento.
+### Decision
 
-### Consecuencias
+- **SOPS + age** for secrets consumed inside the cluster: each value is encrypted with `age`'s public key and committed encrypted to the repo — no external service, no rate limit, the `git diff` of a rotated secret is readable (only the encrypted blob changes).
+- **sops-secrets-operator** (`isindir/sops-secrets-operator`, Helm chart) runs in the `sops` namespace and translates each `SopsSecret` (CRD, encrypted) into a real Kubernetes `Secret` — same pattern as External Secrets Operator, but without calling any external API on every reconcile. ArgoCD applies the `SopsSecret` as is, encrypted; it never needs to know about SOPS (unlike the alternative **KSOPS**, which requires a plugin running inside `argocd-repo-server` — rejected for needing to touch ArgoCD's image/sidecars).
+- **9 of the 10** `ExternalSecret`s migrate to `SopsSecret` (`*.sops.yaml`, `spec.enforceOwnership: true` because the destination `Secret` already existed, owned by External Secrets Operator). **`argocd-webhook-secret` stays on 1Password**: it uses `creationPolicy: Merge` on `argocd-secret`, which has other fields managed by ArgoCD itself (`server.secretkey`, `admin.password`) — SopsSecret takes full ownership of the `Secret`, with no field merging, so migrating it risked stepping on those fields and breaking login. Low volume (1h refresh), not worth the risk.
+- `ansible/data-services.yaml`'s credentials (consumed by CI, not by the cluster) stay on 1Password via `1password/load-secrets-action` (see PR #23) — it's a one-off read per CI run, not continuous polling, it didn't contribute to the quota exhaustion.
+- **Backup of the age private key**: a document in 1Password's "Homelab" vault (`sops-age-homelab-key`) — a single, manual read for disaster recovery, not an active backend, so it doesn't compete for quota.
 
-- Si la IP de alguna LXC de datos cambia alguna vez, hay que actualizarla en dos lugares: `ansible/inventory.yaml` y el manifiesto del consumidor in-cluster (`sonarqube.yaml`, `deployment.yaml` de openmemory) - `private-dns` ya no es la única fuente de verdad para esas IPs.
-- Cualquier workload nuevo que necesite conectar a una LXC de datos desde dentro del clúster debe usar la IP directa desde el día uno, no el hostname `*.internal` (ese patrón es solo para HTTPRoutes de administración, servidas por el Gateway, no para conexiones salientes de un pod).
+### Consequences
+
+- The cluster no longer depends on the availability or rate limit of an external API for its secrets — only on the `age` key mounted in the operator.
+- **The age private key is now the master key of the whole system**: if it's lost without the 1Password backup, no secret encrypted in the repo is recoverable. Unlike 1Password (where the account manages recovery), here the responsibility of not losing that key is entirely the operator's.
+- The 1Password UI for rotating secrets by hand is lost — rotating a value is now `sops decrypt`, edit, `sops encrypt -i`, commit. More friction, but with no request limit.
+- 1Password stays as a "hybrid" backend: it remains the source of truth for `argocd-webhook-secret` and `data-services.yaml`'s credentials, plus the age key backup — not eliminated entirely, scoped down to the low-volume cases where it poses no risk.
+
+> **Update (2026-09-16, same day):** `ansible/data-services.yaml`'s credentials also migrated to SOPS (`ansible/data-services.env`, consumed via `sops exec-env` in CI) — see PR #26. The only consumer left on 1Password was `argocd-webhook-secret`, fully retired in ADR-019 below the same day, after confirming in the External Secrets controller logs that the `ClusterSecretStore` kept returning `rate limit exceeded` well past the expected reset window — the 1Password account turned out not to be reliable even for the single low-volume consumer that remained.
+
+---
+
+## ADR-019: The GitHub webhook is retired (and with it, the last use of 1Password) — back to polling
+
+**Status**: Accepted
+**Date**: 2026-09-16
+
+### Context
+
+`argocd-webhook-secret` (`platform/argocd/webhook-externalsecret.yaml`) was the last remaining consumer of the `onepassword` `ClusterSecretStore` after ADR-018. While reviewing the cluster's general state after deploying `data-services.yaml`, it was found that the `ClusterSecretStore` had been in `SecretSyncedError` for hours with `rate limit exceeded` in the External Secrets controller logs — the 1Password account still hadn't reset its quota well past the expected window (~11-12h since exhaustion). With the store broken, `argocd-secret` never received `webhook.github.secret`, so any GitHub webhook delivery (`https://argocd.cristianpuenguenan.online/api/webhook`, active since the ADR-011/`docs/TODO.md` #3 incident) failed HMAC verification. Polling via `timeout.reconciliation: 600s` kept working as a safety net, so the cluster never stopped syncing — but keeping a broken, low-value external integration with no other consumer left wasn't justified.
+
+### Decision
+
+- `platform/argocd/webhook-externalsecret.yaml`, `platform/argocd/httproute-webhook.yaml`, and the `onepassword` `ClusterSecretStore` (`platform/secret-management/external-secrets/cluster-secret-store.yaml`) are removed — with this, 1Password no longer has **any** active integration in the cluster or in CI. It only remains as a manual, offline backup of the `age` private key (see ADR-018), which isn't an integration, it's a document.
+- The webhook registered on GitHub is removed (`gh api -X DELETE repos/cristsr/homelab/hooks/<id>`) and the orphaned `onepassword-service-account-token` Secret (namespace `secret-management`, never managed by Terraform/GitOps, loaded by hand at the time).
+- `timeout.reconciliation` goes back to `180s` (the original value from before the webhook, `docs/TODO.md` #3) — it's no longer a safety fallback behind a webhook that fires in seconds, it's the only sync mechanism now, so the interval is once again what determines the real latency between a push and the sync.
+- Explicitly **temporary**: if near-instant sync is wanted again later, the webhook needs to be reimplemented with a secret that doesn't depend on a rate-limited external backend (for example, a normal `SopsSecret` with a `creationPolicy` that doesn't step on the fields ArgoCD manages in `argocd-secret`, or generating the webhook secret with Terraform instead of syncing it).
+
+### Consequences
+
+- 1Password is now completely out of the cluster's and CI's critical path — ADR-017 and ADR-018 are fully closed, there's no more "hybrid" backend.
+- Slower sync after a push: up to 180s instead of seconds. Acceptable for a single-operator homelab; documented as this decision's conscious trade-off.
+- If `timeout.reconciliation` is mistakenly set back to `0s`, the cluster stops syncing completely and silently (same incident as ADR-011/`docs/TODO.md` #3) — there's no webhook to compensate for it this time. Watch this value on any future change to `bootstrap/argocd/values.yaml`.
+
+---
+
+## ADR-020: In-cluster workloads cannot use `*.internal.cristianpuenguenan.online` hostnames to connect to the data LXCs
+
+**Status**: Accepted
+**Date**: 2026-09-16
+
+### Context
+
+While loading real credentials and reviewing why `sonarqube-sonarqube-0` kept failing (`HikariPool: Connect timed out` against `postgres.internal.cristianpuenguenan.online:5432`), it was found that this hostname resolves, **from inside the cluster**, to Cloudflare public IPs (nothing listens there on port 5432) — not to the LXC's real IP (`192.168.80.31`). Cause: `private-dns` (`platform/networking/private-dns/`) is a CoreDNS running as its own Deployment, designed as a **Tailscale Split DNS** resolver for external clients (the operator's laptop, etc. — see ADR-011/012); the cluster's pods use `kube-system`'s CoreDNS (Cilium's), which never knows about that zone and ends up forwarding the query to public DNS, where the `*.cristianpuenguenan.online` wildcard (proxied by Cloudflare) responds with IPs that have nothing relevant running. `openmemory` had the same bug with `QDRANT_HOST=qdrant.internal.cristianpuenguenan.online`.
+
+### Decision
+
+- `workloads/sonarqube/sonarqube.yaml` (`SONAR_JDBC_URL`) and `platform/devtools/openmemory/deployment.yaml` (`QDRANT_HOST`) move to using the LXC's direct IP (`192.168.80.31`/`192.168.80.33`) instead of the `*.internal` hostname.
+- The `*.internal.cristianpuenguenan.online` hostnames for the data LXCs (`postgres`, `mongodb`, `qdrant`, `redis`) keep existing in `private-dns` and remain valid — only for manual access via Tailscale (`psql`/`mongosh`/etc. from your machine), never for a cluster pod to use as a connection target.
+- `kube-system`'s CoreDNS was not modified to also serve this zone to pods (rejected alternative): more invasive, affects DNS resolution for the whole cluster, and the LXCs' IPs are already static (Terraform), so hardcoding them doesn't introduce a real maintenance problem.
+
+### Consequences
+
+- If a data LXC's IP ever changes, it has to be updated in two places: `ansible/inventory.yaml` and the in-cluster consumer's manifest (`sonarqube.yaml`, openmemory's `deployment.yaml`) — `private-dns` is no longer the single source of truth for those IPs.
+- Any new workload that needs to connect to a data LXC from inside the cluster must use the direct IP from day one, not the `*.internal` hostname (that pattern is only for admin HTTPRoutes served by the Gateway, not for a pod's outbound connections).
