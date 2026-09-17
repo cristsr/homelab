@@ -13,6 +13,10 @@ spec:
       labels:
         app: jellyfin
     spec:
+      # linuxserver.io images run as uid/gid 911 ("abc"); the shared library
+      # volume isn't auto-chowned like /config, so grant group write via fsGroup.
+      securityContext:
+        fsGroup: 911
       containers:
         # The VM is passed no GPU, so transcodes run on the CPU: the limit is
         # what keeps one session from taking the node with it.

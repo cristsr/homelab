@@ -13,6 +13,10 @@ spec:
       labels:
         app: bazarr
     spec:
+      # linuxserver.io images run as uid/gid 911 ("abc"); the shared library
+      # volume isn't auto-chowned like /config, so grant group write via fsGroup.
+      securityContext:
+        fsGroup: 911
       containers:
         - name: bazarr
           image: linuxserver/bazarr:v1.6.1-ls364
