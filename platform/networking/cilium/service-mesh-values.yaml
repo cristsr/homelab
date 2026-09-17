@@ -5,6 +5,14 @@ authentication:
       enabled: true
       install:
         enabled: true
+        # El chart crea cilium-spire sin ningun label de PodSecurity -
+        # baseline (el default del cluster) bloquea el DaemonSet
+        # spire-agent (hostNetwork, hostPID, hostPath) y el StatefulSet
+        # spire-server (hostPath). existingNamespace:true saca al chart de
+        # la gestion del Namespace para que namespace.yaml (mismo
+        # directorio, ver gitops/apps/platform/networking/cilium-service-mesh.yaml)
+        # pueda ponerle los labels que hacen falta.
+        existingNamespace: true
         server:
           dataStorage:
             enabled: true

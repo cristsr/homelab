@@ -1,0 +1,14 @@
+# Ver el comentario en service-mesh-values.yaml (existingNamespace: true) -
+# sin este archivo, con existingNamespace:true y sin este Namespace, ArgoCD
+# nunca lo crearia. Necesita privileged por el mismo motivo que
+# platform/storage/openebs/namespace.yaml: el DaemonSet spire-agent usa
+# hostNetwork/hostPID/hostPath, y el StatefulSet spire-server usa hostPath
+# para su Secret montado - baseline (el default del cluster) los bloquea.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cilium-spire
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
