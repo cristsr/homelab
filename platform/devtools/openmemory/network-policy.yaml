@@ -8,8 +8,8 @@ spec:
     matchLabels:
       app: openmemory
   ingress:
-    # openmemory-api.internal... se enruta via Agent Gateway (pod real en
-    # namespace networking, no el cilium-agent embebido) - ver ADR-010/012.
+    # Traffic arrives via Agent Gateway, a real pod in the networking
+    # namespace, not the embedded Cilium proxy.
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: networking

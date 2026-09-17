@@ -1,11 +1,5 @@
-# Talos no tiene SSH ni shell: todo lo que antes corria "dentro de la VM"
-# ahora corre en localhost (la maquina que ejecuta Terraform/Ansible - el
-# runner de CI, o el operador), usando el kubeconfig que Terraform deja en
-# terraform/generated/kubeconfig.
-#
-# The data and secrets LXCs (terraform/infra/lxc.tf) do have shell and SSH,
-# unlike the Talos node: the groups below target them. `ansible_ssh_private_key_file`
-# is passed via -e or an environment variable, never hardcoded here.
+# Talos has no SSH or shell: everything runs on localhost via the generated
+# kubeconfig. The data LXCs do have SSH - the groups below target them.
 all:
   hosts:
     localhost:

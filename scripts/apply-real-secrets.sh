@@ -1,25 +1,17 @@
 #!/bin/bash
-# Carga valores reales en los SopsSecret/`.env` del repo a partir de un
-# archivo de respuestas plano (KEY=value, mismo formato/campos que
-# secrets/homelab.env.example - copialo a secrets/homelab.env, completa los
-# valores, y pasalo como argumento). Usa `sops set` para parchear un campo
-# cifrado a la vez
-# sin tocar el resto del archivo, y re-encripta ansible/data-services.env
-# completo (es dotenv, no tiene estructura anidada que parchear campo por
-# campo). Cualquier KEY ausente o vacia en el archivo de respuestas se
-# omite - el valor cifrado existente queda intacto.
+# Loads real values into the repo's SopsSecret/.env files from a KEY=value
+# answers file. A missing or empty KEY is skipped, leaving the existing
+# encrypted value untouched.
 #
-# Uso: ./scripts/apply-real-secrets.sh <archivo-de-respuestas>
+# Usage: ./scripts/apply-real-secrets.sh <answers-file>
 set -euo pipefail
 
-ANSWERS="${1:?Uso: $0 <archivo-de-respuestas>}"
-[ -f "$ANSWERS" ] || { echo "No existe: $ANSWERS" >&2; exit 1; }
+ANSWERS="${1:?Usage: $0 <answers-file>}"
+[ -f "$ANSWERS" ] || { echo "Not found: $ANSWERS" >&2; exit 1; }
 
 cd "$(git rev-parse --show-toplevel)"
 
 get() {
-  # Ultima ocurrencia de KEY= en el archivo, todo lo que sigue hasta fin de
-  # linea (permite '=' dentro del valor, p.ej. tokens base64).
   grep -E "^$1=" "$ANSWERS" | tail -1 | cut -d= -f2-
 }
 
@@ -97,15 +89,11 @@ set_field platform/observability/secrets/grafana-admin.sops.yaml \
 set_field platform/observability/secrets/grafana-admin.sops.yaml \
   '["spec"]["secretTemplates"][0]["stringData"]["GF_SECURITY_ADMIN_PASSWORD"]' "$(get GRAFANA_ADMIN_PASSWORD)"
 
-# platform/argocd/repo-credentials.sops.yaml se elimino (ver docs/DECISIONS.md
-# ADR-020-bis/commit d85afd3): duplicaba github-repo-creds
-# (terraform/cluster/secrets.tf, ya con el PAT real) con un `repository`-typed
-# secret que, si su `url` llega a coincidir exacto con el repo real mientras
-# username/password quedan en un placeholder viejo, ArgoCD lo prefiere sobre
-# el que si funciona y rompe TODO el sync del cluster. No recrear este
-# archivo - si hace falta un segundo repo-creds, usar Terraform, no SOPS.
+# platform/argocd/repo-credentials.sops.yaml was removed: it broke ArgoCD's
+# sync by overriding github-repo-creds with placeholders. Do not recreate it -
+# a second repo-creds secret belongs in Terraform, not SOPS.
 
-# --- workloads/flow/secrets.sops.yaml (opcional, `flow` hoy es un stub sin uso real) ---
+# --- workloads/flow/secrets.sops.yaml (optional, `flow` is currently an unused stub) ---
 set_field workloads/flow/secrets.sops.yaml \
   '["spec"]["secretTemplates"][0]["stringData"]["database-url"]' "$(get FLOW_DATABASE_URL)"
 set_field workloads/flow/secrets.sops.yaml \

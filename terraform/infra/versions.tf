@@ -16,8 +16,8 @@ terraform {
     }
   }
 
-  # Backend parcial: el endpoint (cuenta de Cloudflare) se completa con
-  # `terraform init -backend-config=backend.hcl` (ver backend.hcl.example).
+  # Partial backend: the endpoint is filled in via
+  # `terraform init -backend-config=backend.hcl`.
   backend "s3" {
     bucket                      = "homelab-tfstate"
     key                         = "terraform.tfstate"

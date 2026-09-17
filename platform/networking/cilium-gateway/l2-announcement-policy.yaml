@@ -1,11 +1,5 @@
-# Sin nodeSelector a proposito: el unico nodo del cluster es control-plane,
-# y los ejemplos tipicos de esta policy lo excluyen - acá no aplica.
-#
-# "ens18" no es un nombre fragil: Proxmox asigna siempre el slot PCI 18 al
-# primer (y unico) network_device de la VM (terraform/infra/proxmox.tf), y
-# el nombrado predecible de Linux deriva "ensN" directo de ese slot PCI, no
-# del orden de deteccion de drivers en el boot. Es estable ante destroy+apply
-# mientras la VM siga con una sola interfaz de red.
+# No nodeSelector: the single cluster node is the control-plane. "ens18" is
+# a stable interface name tied to the VM's PCI slot, not to driver load order.
 apiVersion: cilium.io/v2alpha1
 kind: CiliumL2AnnouncementPolicy
 metadata:

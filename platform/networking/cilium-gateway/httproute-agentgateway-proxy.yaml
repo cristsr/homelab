@@ -1,9 +1,5 @@
-# TLS para las rutas de Agent Gateway: su controller (v1.1.0) ignora los
-# listeners HTTPS (ver ADR-012), asi que la terminacion TLS se hace aca, en
-# `main`, y se reenvia en HTTP plano - dentro del cluster - al Service que
-# ya expone el listener de Agent Gateway. Sin matching de path ni rewrite:
-# Agent Gateway hace su propio ruteo/rewrite/multiplexing puertas adentro
-# con las HTTPRoutes que tiene contra su propio Gateway (sectionName http).
+# Terminates TLS here (Agent Gateway ignores HTTPS listeners) and forwards
+# plain HTTP; Agent Gateway does its own routing internally.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:

@@ -39,10 +39,8 @@ spec:
               value: "openai/text-embedding-3-small"
             - name: EMBEDDER_BASE_URL
               value: "https://openrouter.ai/api/v1"
-            # IP directa de la LXC, no el hostname *.internal - ver el
-            # comentario en workloads/sonarqube/sonarqube.yaml (mismo bug de
-            # DNS: CoreDNS del cluster no sirve esa zona, solo private-dns
-            # via Tailscale Split DNS).
+            # Direct LXC IP, not the *.internal hostname: the cluster's own
+            # DNS can't resolve it.
             - name: QDRANT_HOST
               value: "192.168.80.33"
             - name: QDRANT_PORT

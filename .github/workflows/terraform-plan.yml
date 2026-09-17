@@ -17,8 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Necesario para llegar a la API de Proxmox en la LAN del homelab via
-      # la ruta de subred que advierte el nodo Tailscale del hipervisor.
+      # Needed to reach the Proxmox API on the homelab LAN via the subnet
+      # route the hypervisor's Tailscale node advertises.
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
         with:

@@ -1,12 +1,7 @@
-# Unico Gateway al que apunta el wildcard de Cloudflare Tunnel
-# (*.cristianpuenguenan.online). Solo deben vivir HTTPRoutes acá los que
-# realmente deban ser publicos - ver docs/DECISIONS.md ADR-011.
-#
-# Sin spec.addresses a proposito: a diferencia de `main` y
-# `agentgateway-mcp`, este Gateway no necesita IP LAN fija - su unico
-# consumidor es cloudflared, que lo alcanza por ClusterIP/DNS interno
-# (cilium-gateway-public.networking.svc.cluster.local), sin importar que
-# el LoadBalancer quede <pending>.
+# The only Gateway the Cloudflare Tunnel wildcard points to - only routes
+# meant to be public should attach here. No spec.addresses on purpose:
+# cloudflared reaches it via ClusterIP/internal DNS, so a <pending>
+# LoadBalancer doesn't matter.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:

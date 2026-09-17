@@ -30,10 +30,7 @@ jobs:
       - name: Install Ansible
         run: pip install ansible
 
-      # Falla en segundos si falta o es invalida una credencial, antes de
-      # gastar tiempo conectando Tailscale y aprovisionando la VM. Solo
-      # valida lo que Terraform realmente consume mas abajo en este mismo
-      # job.
+      # Fail fast if a required credential is missing, before provisioning anything.
       - name: Preflight - validate secrets
         working-directory: ansible
         env:
@@ -41,10 +38,7 @@ jobs:
           ARGOCD_REPO_URL: ${{ vars.ARGOCD_REPO_URL }}
         run: ansible-playbook preflight.yaml
 
-      # Necesario porque Proxmox y la VM Talos viven en la LAN del homelab
-      # (192.168.80.0/24), no publicamente alcanzable - el runner hosted
-      # llega vía la ruta de subred que el nodo Tailscale del hipervisor
-      # advierte (ver docs/CI_CD_HYPERVISOR_SETUP.md).
+      # Reaches Proxmox/Talos on the homelab LAN via the subnet route the hypervisor advertises.
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
         with:
@@ -134,19 +128,14 @@ jobs:
             done
           done
 
-      # Ultimo paso del bootstrap: registra la Application raiz de ArgoCD,
-      # que ya tiene su namespace/secrets creados por terraform/cluster. Los
-      # secrets reales viven cifrados en el repo (SOPS + age, ver ADR-018/019
-      # en docs/DECISIONS.md) - las Applications que dependen de ellos quedan
-      # en Progressing/Degraded hasta que se corra
-      # `./scripts/apply-real-secrets.sh` a mano (docs/INSTALL.md §7) - es
-      # esperado, no un fallo del pipeline.
+      # Apps depending on real secrets stay Progressing/Degraded until
+      # scripts/apply-real-secrets.sh is run manually - expected, not a pipeline failure.
       - name: Register ArgoCD root Application
         env:
           KUBECONFIG: ${{ github.workspace }}/terraform/infra/generated/kubeconfig
         run: kubectl apply -f gitops/root-app.yaml
 
-      # Motores de datos (postgresql/mongodb/qdrant/redis) en sus LXCs.
+      # Data-service engines (postgresql/mongodb/qdrant/redis) each run in their own LXC.
       - name: Write CI SSH key for the data LXCs
         run: |
           install -m 700 -d ~/.ssh
@@ -154,12 +143,8 @@ jobs:
           chmod 600 ~/.ssh/ci_ed25519
           ssh-keygen -y -f ~/.ssh/ci_ed25519 > ~/.ssh/ci_ed25519.pub
 
-      # ansible_ssh_bootstrap_pubkey se pasa por ANSIBLE_SSH_BOOTSTRAP_PUBKEY
-      # (env var), nunca por -e: el pubkey tiene espacios ("ssh-ed25519 AAAA...
-      # comentario"), y Ansible trata un -e key=value con espacios como
-      # multiples asignaciones separadas - solo la primera palabra
-      # ("ssh-ed25519") llegaba a la tarea, dejando authorized_keys con una
-      # linea incompleta que sshd simplemente ignora.
+      # Pass the pubkey via env var, not -e: it contains spaces, and Ansible
+      # truncates a -e key=value pair at the first space.
       - name: Bootstrap SSH access to the data LXCs
         working-directory: ansible
         run: |
@@ -168,15 +153,8 @@ jobs:
             -e proxmox_ssh_user=root \
             -e proxmox_ssh_private_key_file="$HOME/.ssh/ci_ed25519"
 
-      # 1Password (vault "Homelab", item "data-services") es la unica fuente
-      # de verdad de estas credenciales - CI las lee ahi en cada corrida en
-      # vez de mantener una copia aparte en GitHub Secrets que se puede
-      # desincronizar. Mismo Service Account token de solo lectura que ya
-      # usa el ClusterSecretStore del cluster.
-      # Same class of secret as the SopsSecret CRDs the cluster reads (see
-      # ADR-018) - no external API, no rate limit, just the age key. Only
-      # ansible/data-services.env is decrypted here; the SopsSecret ones
-      # are decrypted in-cluster by sops-secrets-operator, never by CI.
+      # Only ansible/data-services.env is decrypted here; SopsSecret CRDs are
+      # decrypted in-cluster by sops-secrets-operator, not by CI.
       - name: Install sops
         run: |
           curl -sL -o /usr/local/bin/sops \

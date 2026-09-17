@@ -1,10 +1,5 @@
-# Dos pools de 1 IP cada uno, cada uno atado a un Service especifico via
-# serviceSelector (io.kubernetes.service.name/namespace son selectores
-# especiales de metadata, no labels reales del Service) en vez de un pool
-# compartido sin filtro - evita que Cilium LB IPAM le de a un Service la IP
-# que le correspondia a otro (ver ADR-012 en docs/DECISIONS.md, incluida su
-# actualizacion: agentgateway-mcp tenia un tercer pool aca hasta que paso a
-# ClusterIP - TLS ahora lo termina `main` y reenvia puertas adentro).
+# One dedicated pool per Service instead of a shared pool, so Cilium's LB
+# IPAM can't hand a Service the IP meant for another one.
 apiVersion: cilium.io/v2alpha1
 kind: CiliumLoadBalancerIPPool
 metadata:
