@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jellyfin
+  namespace: media
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jellyfin
+  template:
+    metadata:
+      labels:
+        app: jellyfin
+    spec:
+      containers:
+        # The VM is passed no GPU, so transcodes run on the CPU: the limit is
+        # what keeps one session from taking the node with it.
+        - name: jellyfin
+          image: linuxserver/jellyfin:12.1ubu2604-ls50
+          ports:
+            - containerPort: 8096
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            # Same mount path as the rest of the stack: an import is a move or
+            # a hardlink, never a copy across volumes.
+            - name: library
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: jellyfin-config
+        - name: library
+          persistentVolumeClaim:
+            claimName: media-library
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin
+  namespace: media
+spec:
+  selector:
+    app: jellyfin
+  ports:
+    - port: 8096
+      targetPort: 8096
+  type: ClusterIP

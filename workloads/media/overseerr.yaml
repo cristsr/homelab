@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: overseerr
+  namespace: media
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: overseerr
+  template:
+    metadata:
+      labels:
+        app: overseerr
+    spec:
+      containers:
+        - name: overseerr
+          image: sctx/overseerr:1.35.0
+          ports:
+            - containerPort: 5055
+          # The image carries its own config directory inside /app, which no
+          # volume backs; this points the app at the claim instead.
+          env:
+            - name: CONFIG_DIRECTORY
+              value: /config
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          resources:
+            requests:
+              cpu: 25m
+              memory: 192Mi
+            limits:
+              cpu: 250m
+              memory: 768Mi
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: overseerr-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: overseerr
+  namespace: media
+spec:
+  selector:
+    app: overseerr
+  ports:
+    - port: 5055
+      targetPort: 5055
+  type: ClusterIP

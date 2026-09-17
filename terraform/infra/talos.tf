@@ -68,18 +68,32 @@ resource "talos_machine_configuration_apply" "this" {
       auto       = "off"
       hostname   = var.vm_name
     }),
-    # Partitions the dedicated ZFS disk without formatting it, matching any
-    # disk that isn't the Talos install disk. The resulting partition label
-    # is what storage.tf looks up to create the zpool.
+    # Partitions the dedicated ZFS disks without formatting them - the resulting
+    # partition labels are what storage.tf looks up to create each zpool. Both
+    # selectors pin a device path instead of matching "!system_disk": a CEL
+    # match takes the *first* disk that satisfies it, so with more than one
+    # non-system disk the choice would fall to an ordering this config doesn't
+    # control. The paths follow the virtio disk order declared in proxmox.tf.
     yamlencode({
       apiVersion = "v1alpha1"
       kind       = "RawVolumeConfig"
       name       = "openebs-zfs"
       provisioning = {
         diskSelector = {
-          match = "!system_disk"
+          match = "disk.dev_path == \"/dev/vdb\""
         }
         maxSize = "${var.zfs_disk_size_gb}GiB"
+      }
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "RawVolumeConfig"
+      name       = "openebs-media"
+      provisioning = {
+        diskSelector = {
+          match = "disk.dev_path == \"/dev/vdc\""
+        }
+        maxSize = "${var.media_disk_size_gb}GiB"
       }
     })
   ]

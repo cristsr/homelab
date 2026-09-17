@@ -1,0 +1,15 @@
+# poolname must match the zpool created by Terraform - hardcoded on both sides on purpose.
+# Not marked as the cluster default: openebs-zfs stays the default, and claims that want
+# the media disk name this class explicitly.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openebs-zfs-media
+provisioner: zfs.csi.openebs.io
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+parameters:
+  poolname: "media-pool"
+  fstype: "zfs"
+  compression: "zstd"

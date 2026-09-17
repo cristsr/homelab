@@ -48,6 +48,14 @@ resource "proxmox_virtual_environment_vm" "talos_node" {
     size         = var.zfs_disk_size_gb
   }
 
+  # Dedicated disk for the media library's ZFS LocalPV pool, kept separate from
+  # the install disk and the OpenEBS pool disk.
+  disk {
+    interface    = "virtio2"
+    datastore_id = var.proxmox_datastore_id
+    size         = var.media_disk_size_gb
+  }
+
   cdrom {
     file_id   = proxmox_download_file.talos_iso.id
     interface = "ide3"

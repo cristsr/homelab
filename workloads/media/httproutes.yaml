@@ -1,0 +1,118 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: sonarr
+  namespace: media
+spec:
+  parentRefs:
+    - name: main
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - sonarr.internal.cristianpuenguenan.online
+  rules:
+    - backendRefs:
+        - name: sonarr
+          port: 8989
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: radarr
+  namespace: media
+spec:
+  parentRefs:
+    - name: main
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - radarr.internal.cristianpuenguenan.online
+  rules:
+    - backendRefs:
+        - name: radarr
+          port: 7878
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: prowlarr
+  namespace: media
+spec:
+  parentRefs:
+    - name: main
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - prowlarr.internal.cristianpuenguenan.online
+  rules:
+    - backendRefs:
+        - name: prowlarr
+          port: 9696
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: qbittorrent
+  namespace: media
+spec:
+  parentRefs:
+    - name: main
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - qbittorrent.internal.cristianpuenguenan.online
+  rules:
+    - backendRefs:
+        - name: qbittorrent
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: bazarr
+  namespace: media
+spec:
+  parentRefs:
+    - name: main
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - bazarr.internal.cristianpuenguenan.online
+  rules:
+    - backendRefs:
+        - name: bazarr
+          port: 6767
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: jellyfin
+  namespace: media
+spec:
+  parentRefs:
+    - name: main
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - jellyfin.internal.cristianpuenguenan.online
+  rules:
+    - backendRefs:
+        - name: jellyfin
+          port: 8096
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: overseerr
+  namespace: media
+spec:
+  parentRefs:
+    - name: main
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - overseerr.internal.cristianpuenguenan.online
+  rules:
+    - backendRefs:
+        - name: overseerr
+          port: 5055

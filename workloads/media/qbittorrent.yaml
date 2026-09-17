@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qbittorrent
+  namespace: media
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qbittorrent
+  template:
+    metadata:
+      labels:
+        app: qbittorrent
+    spec:
+      containers:
+        # Owns the pod's network namespace, which qBittorrent joins: a dropped
+        # tunnel leaves the client with no route out instead of the cluster's
+        # own address. Its firewall admits the WebUI port, so the Service still
+        # reaches it through the tunnel.
+        - name: gluetun
+          image: qmcgaw/gluetun:v3.41.3
+          envFrom:
+            - secretRef:
+                name: qbittorrent-vpn
+          env:
+            - name: FIREWALL_INPUT_PORTS
+              value: "8080"
+          ports:
+            - containerPort: 8080
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+        - name: qbittorrent
+          image: linuxserver/qbittorrent:5.2.3_v2.0.14-ls476
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            # Same mount path as the rest of the stack: an import is a move or
+            # a hardlink, never a copy across volumes.
+            - name: library
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: qbittorrent-config
+        - name: library
+          persistentVolumeClaim:
+            claimName: media-library
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qbittorrent
+  namespace: media
+spec:
+  selector:
+    app: qbittorrent
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
