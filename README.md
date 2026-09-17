@@ -1,87 +1,87 @@
 # Homelab Kubernetes
 
-Infraestructura de homelab personal basada en Kubernetes, orquestada con GitOps. El nodo corre como una VM Talos Linux sobre Proxmox VE, aprovisionada con Terraform.
+Personal homelab infrastructure based on Kubernetes, orchestrated with GitOps. The node runs as a Talos Linux VM on Proxmox VE, provisioned with Terraform.
 
 ---
 
-## Que es este proyecto
+## What is this project
 
-Este repositorio contiene la configuracion completa para levantar un cluster Kubernetes de un solo nodo usando **Talos Linux** (inmutable, sin SSH), con un stack moderno de plataforma que incluye:
+This repository contains the complete configuration to spin up a single-node Kubernetes cluster using **Talos Linux** (immutable, no SSH), with a modern platform stack that includes:
 
-- **GitOps**: ArgoCD gestiona todo el ciclo de vida de las aplicaciones desde Git.
-- **Networking**: Cilium como CNI con reemplazo completo de kube-proxy via eBPF.
-- **Ingress**: Cilium Gateway API para el trafico generico, Agent Gateway retenido solo para servidores MCP (ver ADR-010).
-- **Secretos**: 1Password como backend de secretos, sincronizado con Kubernetes via External Secrets Operator.
-- **Almacenamiento**: OpenEBS ZFS LocalPV como storage local (ver ADR-013 y ADR-014).
-- **Monitoreo**: Prometheus, Grafana y Headlamp.
-- **Bases de datos**: PostgreSQL, MongoDB, Redis y Qdrant en LXC de Proxmox, fuera del cluster (ver ADR-016).
-- **Herramientas**: SonarQube, OpenMemory.
-- **Acceso externo**: Cloudflare Tunnel para exponer servicios sin abrir puertos.
+- **GitOps**: ArgoCD manages the entire application lifecycle from Git.
+- **Networking**: Cilium as CNI with full kube-proxy replacement via eBPF.
+- **Ingress**: Cilium Gateway API for generic traffic, Agent Gateway retained only for MCP servers (see ADR-010).
+- **Secrets**: 1Password as the secrets backend, synced with Kubernetes via External Secrets Operator.
+- **Storage**: OpenEBS ZFS LocalPV as local storage (see ADR-013 and ADR-014).
+- **Monitoring**: Prometheus, Grafana and Headlamp.
+- **Databases**: PostgreSQL, MongoDB, Redis and Qdrant in Proxmox LXC, outside the cluster (see ADR-016).
+- **Tools**: SonarQube, OpenMemory.
+- **External access**: Cloudflare Tunnel to expose services without opening ports.
 
-La VM se crea con **Terraform** (provider `bpg/proxmox` + `siderolabs/talos`) en dos etapas: `terraform/infra` (VM, Talos, discos) y `terraform/cluster` (namespaces, Cilium, ArgoCD, secrets iniciales). **Ansible** se usa solo para validaciones de preflight y para aprovisionar los motores de datos en sus LXC — Talos no tiene SSH ni shell, asi que ya no aprovisiona el sistema operativo del nodo.
+The VM is created with **Terraform** (provider `bpg/proxmox` + `siderolabs/talos`) in two stages: `terraform/infra` (VM, Talos, disks) and `terraform/cluster` (namespaces, Cilium, ArgoCD, initial secrets). **Ansible** is used only for preflight validations and to provision the data engines on their LXC — Talos has no SSH or shell, so it no longer provisions the node's operating system.
 
 ---
 
-## Stack Tecnologico
+## Technology Stack
 
-| Capa | Tecnologia | Version |
+| Layer | Technology | Version |
 |------|-----------|---------|
-| VM / Hipervisor | Terraform + Proxmox VE (`bpg/proxmox`) | - |
+| VM / Hypervisor | Terraform + Proxmox VE (`bpg/proxmox`) | - |
 | Kubernetes | Talos Linux (`siderolabs/talos`) | v1.14.0 |
 | CNI | Cilium | 1.20.1 |
 | GitOps | Argo CD | 9.5.13 |
-| Ingress (generico) | Cilium Gateway API | 1.20.1 |
+| Ingress (generic) | Cilium Gateway API | 1.20.1 |
 | Ingress (MCP) | Agent Gateway | 1.1.0 |
 | Storage | OpenEBS ZFS LocalPV | 2.11.1 |
 | Secrets | 1Password | - |
 | Secret Sync | External Secrets Operator | - |
-| Monitoreo | kube-prometheus-stack / Grafana Operator | - |
+| Monitoring | kube-prometheus-stack / Grafana Operator | - |
 | Ingress TLS | cert-manager + Let's Encrypt + Cloudflare DNS-01 | - |
-| Tunel WAN | Cloudflare Tunnel (cloudflared) | - |
+| WAN Tunnel | Cloudflare Tunnel (cloudflared) | - |
 | Runtime security | Tetragon | - |
-| Bases de datos | PostgreSQL 17, MongoDB 8.0, Qdrant, Redis 8 (LXC de Proxmox) | - |
+| Databases | PostgreSQL 17, MongoDB 8.0, Qdrant, Redis 8 (Proxmox LXC) | - |
 
 ---
 
-## Estructura del Repositorio
+## Repository Structure
 
 ```
 homelab/
 ├── terraform/
-│   ├── infra/                   # VM Talos + LXC de datos en Proxmox: disco, red, bootstrap de Talos
-│   │   ├── proxmox.tf           # VM, discos (instalacion + dedicado a ZFS), ISO de Talos
-│   │   ├── lxc.tf               # Cuatro LXC de datos: PostgreSQL, MongoDB, Qdrant, Redis
-│   │   ├── talos.tf             # machine config, bootstrap, kubeconfig/talosconfig generados
+│   ├── infra/                   # Talos VM + data LXC on Proxmox: disk, network, Talos bootstrap
+│   │   ├── proxmox.tf           # VM, disks (installation + dedicated to ZFS), Talos ISO
+│   │   ├── lxc.tf               # Four data LXC: PostgreSQL, MongoDB, Qdrant, Redis
+│   │   ├── talos.tf             # machine config, bootstrap, generated kubeconfig/talosconfig
 │   │   └── generated/           # kubeconfig/talosconfig (gitignored)
-│   └── cluster/                 # Bootstrap de Kubernetes sobre el cluster ya arrancado
+│   └── cluster/                 # Kubernetes bootstrap on the already-running cluster
 │       ├── bootstrap.tf         # helm_release: Cilium, ArgoCD
-│       ├── namespaces.tf        # Namespaces base
-│       ├── secrets.tf           # Secrets iniciales (repo-creds, in-cluster)
-│       └── storage.tf           # Job que crea el zpool de OpenEBS ZFS LocalPV
+│       ├── namespaces.tf        # Base namespaces
+│       ├── secrets.tf           # Initial secrets (repo-creds, in-cluster)
+│       └── storage.tf           # Job that creates the OpenEBS ZFS LocalPV zpool
 │
-├── ansible/                     # Preflight de credenciales + aprovisionamiento de las LXC de datos
-│   ├── preflight.yaml           # Valida credenciales antes de correr Terraform (falla rapido en CI)
-│   ├── ansible.cfg              # Configuracion de Ansible
-│   └── tasks/                   # Tareas individuales
+├── ansible/                     # Credentials preflight + data LXC provisioning
+│   ├── preflight.yaml           # Validates credentials before running Terraform (fails fast in CI)
+│   ├── ansible.cfg              # Ansible configuration
+│   └── tasks/                   # Individual tasks
 │
 ├── secrets/
-│   └── homelab.env.example      # Plantilla de todas las credenciales (infra + apps)
+│   └── homelab.env.example      # Template of all credentials (infra + apps)
 │
 ├── scripts/
-│   └── apply-real-secrets.sh    # Carga secrets/homelab.env en los SopsSecret/env cifrados del repo - manual, no corre en CI
+│   └── apply-real-secrets.sh    # Loads secrets/homelab.env into the repo's encrypted SopsSecret/env - manual, does not run in CI
 │
-├── bootstrap/                   # Values/scripts que consume terraform/cluster/bootstrap.tf
-│   ├── cilium/values.yaml       # Configuracion de Cilium (incluye ajustes especificos de Talos)
-│   ├── argocd/values.yaml       # Configuracion de ArgoCD
-│   └── adopt-cilium-gateway-secrets.sh  # Hook de idempotencia para el chart de Cilium
+├── bootstrap/                   # Values/scripts consumed by terraform/cluster/bootstrap.tf
+│   ├── cilium/values.yaml       # Cilium configuration (includes Talos-specific settings)
+│   ├── argocd/values.yaml       # ArgoCD configuration
+│   └── adopt-cilium-gateway-secrets.sh  # Idempotency hook for the Cilium chart
 │
-├── gitops/                      # Aplicaciones de ArgoCD (App of Apps)
-│   ├── root-app.yaml            # Aplicacion raiz
+├── gitops/                      # ArgoCD applications (App of Apps)
+│   ├── root-app.yaml            # Root application
 │   └── apps/
-│       ├── platform/            # ArgoCD Applications de infraestructura
-│       └── workloads/           # ArgoCD Applications de apps de usuario
+│       ├── platform/            # ArgoCD Applications for infrastructure
+│       └── workloads/           # ArgoCD Applications for user apps
 │
-├── platform/                    # Manifiestos y valores Helm de infraestructura
+├── platform/                    # Infrastructure manifests and Helm values
 │   ├── networking/
 │   ├── storage/
 │   ├── devtools/
@@ -89,121 +89,121 @@ homelab/
 │   ├── secret-management/
 │   └── security/
 │
-├── workloads/                   # Aplicaciones de usuario/negocio
+├── workloads/                   # User/business applications
 │   ├── flow/                    # Flow API
-│   ├── portfolio/                # Sitio personal
+│   ├── portfolio/                # Personal site
 │   └── sonarqube/                # SonarQube + MCP server
 │
-└── docs/                        # Documentacion del proyecto
-    ├── ARCHITECTURE.md          # Arquitectura completa
-    ├── INSTALL.md                # Guia de instalacion paso a paso
-    ├── OPERATIONS.md             # Manual operativo y troubleshooting
-    ├── DECISIONS.md              # Registro de decisiones (ADR)
-    └── CI_CD_HYPERVISOR_SETUP.md # Runbook de setup manual del hipervisor
+└── docs/                        # Project documentation
+    ├── ARCHITECTURE.md          # Full architecture
+    ├── INSTALL.md                # Step-by-step installation guide
+    ├── OPERATIONS.md             # Operations manual and troubleshooting
+    ├── DECISIONS.md              # Decision log (ADR)
+    └── CI_CD_HYPERVISOR_SETUP.md # Manual hypervisor setup runbook
 ```
 
 ---
 
-## Documentacion
+## Documentation
 
-Toda la documentacion se encuentra en la carpeta [`docs/`](./docs/):
+All documentation is located in the [`docs/`](./docs/) folder:
 
-- **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)**: Descripcion detallada de la arquitectura, componentes, networking, seguridad y flujo de datos.
-- **[docs/INSTALL.md](./docs/INSTALL.md)**: Requisitos previos, configuracion de Terraform y de `secrets/homelab.env`, instalacion del cluster y activacion de GitOps.
-- **[docs/OPERATIONS.md](./docs/OPERATIONS.md)**: Operaciones diarias, gestion de secretos, backups, actualizaciones, troubleshooting y procedimientos de emergencia.
-- **[docs/DECISIONS.md](./docs/DECISIONS.md)**: Registro de decisiones de arquitectura (ADR): Talos, Proxmox, Agent Gateway, Cilium, OpenEBS, Ansible y CI/CD.
-- **[docs/CI_CD_HYPERVISOR_SETUP.md](./docs/CI_CD_HYPERVISOR_SETUP.md)**: Runbook de setup manual del hipervisor (Tailscale, SSH, sudoers) para que CI/CD funcione.
+- **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)**: Detailed description of the architecture, components, networking, security and data flow.
+- **[docs/INSTALL.md](./docs/INSTALL.md)**: Prerequisites, Terraform and `secrets/homelab.env` configuration, cluster installation and GitOps activation.
+- **[docs/OPERATIONS.md](./docs/OPERATIONS.md)**: Day-to-day operations, secrets management, backups, upgrades, troubleshooting and emergency procedures.
+- **[docs/DECISIONS.md](./docs/DECISIONS.md)**: Architecture decision log (ADR): Talos, Proxmox, Agent Gateway, Cilium, OpenEBS, Ansible and CI/CD.
+- **[docs/CI_CD_HYPERVISOR_SETUP.md](./docs/CI_CD_HYPERVISOR_SETUP.md)**: Manual hypervisor setup runbook (Tailscale, SSH, sudoers) for CI/CD to work.
 
 ---
 
-## Instalacion Rapida
+## Quick Install
 
-> Requiere Proxmox VE corriendo en el hipervisor y acceso a su API.
+> Requires Proxmox VE running on the hypervisor and access to its API.
 
 ```bash
-# 1. Clonar repo
+# 1. Clone repo
 git clone git@github.com:cristsr/homelab.git && cd homelab
 
-# 2. Configurar secretos (infra + apps, un solo archivo, nunca se commitea)
+# 2. Configure secrets (infra + apps, a single file, never committed)
 cp secrets/homelab.env.example secrets/homelab.env
-# editar secrets/homelab.env con los valores reales
+# edit secrets/homelab.env with the real values
 
-# 3. Validar credenciales antes de aprovisionar (falla rapido si falta algo)
+# 3. Validate credentials before provisioning (fails fast if something is missing)
 set -a; source secrets/homelab.env; set +a
 cd ansible
 ansible-playbook preflight.yaml
 cd ..
 
-# 4. Instalar cluster infra (VM Talos en Proxmox)
+# 4. Install cluster infra (Talos VM on Proxmox)
 cd terraform/infra
 terraform init -backend-config=backend.hcl
 terraform apply
 
-# 5. Bootstrap K8s (Cilium, ArgoCD, ZFS) y configuraciones base
+# 5. Bootstrap K8s (Cilium, ArgoCD, ZFS) and base configurations
 cd ../cluster
 terraform init -backend-config=backend.hcl
 terraform apply
 
-# 6. Activar GitOps
+# 6. Activate GitOps
 cd ../../
 kubectl apply -f gitops/root-app.yaml
 
-# 7. Cargar los secrets en 1Password (vault "Homelab") y el Service Account
-#    token del clúster - ver docs/INSTALL.md, seccion "Poblar 1Password".
+# 7. Load the secrets into 1Password (vault "Homelab") and the cluster's
+#    Service Account token - see docs/INSTALL.md, "Populate 1Password" section.
 ```
 
-Para una guia detallada, consulta [docs/INSTALL.md](./docs/INSTALL.md).
+For a detailed guide, see [docs/INSTALL.md](./docs/INSTALL.md).
 
 ---
 
 ## CI/CD
 
-Terraform y Ansible **no** corren en el homeserver: cada push a `master` dispara [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml) en un runner hosted de GitHub Actions, que se conecta al hipervisor por Tailscale y aplica el cambio (`ansible-playbook preflight.yaml`, `terraform apply` en `infra` y `cluster`, aprovisionamiento de las LXC de datos, y `kubectl apply -f gitops/root-app.yaml`), detras de un gate de aprobacion manual (Environment `prod`). Los secretos de la app viven en 1Password y nunca pasan por CI. Cada PR que toque `terraform/**` dispara [`terraform-plan.yml`](./.github/workflows/terraform-plan.yml), que comenta el plan antes de mergear. Detalle completo de la arquitectura en [ADR-009](./docs/DECISIONS.md#adr-009-cicd-con-github-actions-hosted--tailscale--cloudflare-r2).
+Terraform and Ansible **do not** run on the homeserver: every push to `master` triggers [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml) on a GitHub Actions hosted runner, which connects to the hypervisor via Tailscale and applies the change (`ansible-playbook preflight.yaml`, `terraform apply` in `infra` and `cluster`, provisioning of the data LXC, and `kubectl apply -f gitops/root-app.yaml`), behind a manual approval gate (Environment `prod`). The app's secrets live in 1Password and never pass through CI. Every PR touching `terraform/**` triggers [`terraform-plan.yml`](./.github/workflows/terraform-plan.yml), which comments the plan before merging. Full architecture details in [ADR-009](./docs/DECISIONS.md#adr-009-cicd-with-github-actions-hosted--tailscale--cloudflare-r2).
 
 ---
 
-## Acceso a Servicios
+## Service Access
 
-| Servicio | URL | Notas |
+| Service | URL | Notes |
 |----------|-----|-------|
-| ArgoCD | `https://argocd.cristianpuenguenan.online` | Admin / contrasena inicial del secret `argocd-initial-admin-secret` |
-| Grafana | `https://grafana.cristianpuenguenan.online` | Credenciales en 1Password |
-| Headlamp | `https://headlamp.cristianpuenguenan.online` | Requiere token de servicio |
-| SonarQube | `https://sonarqube.cristianpuenguenan.online` | Credenciales en 1Password |
+| ArgoCD | `https://argocd.cristianpuenguenan.online` | Admin / initial password from the `argocd-initial-admin-secret` secret |
+| Grafana | `https://grafana.cristianpuenguenan.online` | Credentials in 1Password |
+| Headlamp | `https://headlamp.cristianpuenguenan.online` | Requires service token |
+| SonarQube | `https://sonarqube.cristianpuenguenan.online` | Credentials in 1Password |
 | Agent Gateway | `https://agentgateway.cristianpuenguenan.online` | Admin / admin |
-| Hubble | `https://hubble.cristianpuenguenan.online` | Sin autenticacion |
+| Hubble | `https://hubble.cristianpuenguenan.online` | No authentication |
 
 ---
 
-## Seguridad
+## Security
 
-- Las credenciales de las LXC de datos viven en `secrets/homelab.env`, plano y **nunca versionado** (esta en `.gitignore`), exportado antes de correr Ansible a mano.
-- Los secretos del cluster se gestionan mediante **1Password** (vault "Homelab") y se sincronizan con Kubernetes via **External Secrets Operator**, autenticado con un Service Account token de solo lectura acotado a ese vault.
-- En CI, el preflight de credenciales usa GitHub Actions secrets/vars (ver [CI_CD_HYPERVISOR_SETUP.md](./docs/CI_CD_HYPERVISOR_SETUP.md)) — nunca un archivo del repo.
-- El acceso externo se realiza a traves de **Cloudflare Tunnel**, sin necesidad de abrir puertos en el router.
-- **Tetragon** monitorea a nivel de kernel escalamiento de privilegios, acceso a archivos sensibles y syscalls sospechosas.
-
----
-
-## Mantenimiento y Operaciones
-
-Consulta [docs/OPERATIONS.md](./docs/OPERATIONS.md) para:
-
-- Verificar salud del cluster.
-- Gestionar secretos y ExternalSecrets.
-- Realizar backups de bases de datos.
-- Actualizar versiones de componentes.
-- Troubleshooting por componente.
-- Procedimientos de emergencia.
+- The data LXC credentials live in `secrets/homelab.env`, in plain text and **never versioned** (it is in `.gitignore`), exported before running Ansible by hand.
+- Cluster secrets are managed via **1Password** (vault "Homelab") and synced with Kubernetes via **External Secrets Operator**, authenticated with a read-only Service Account token scoped to that vault.
+- In CI, the credentials preflight uses GitHub Actions secrets/vars (see [CI_CD_HYPERVISOR_SETUP.md](./docs/CI_CD_HYPERVISOR_SETUP.md)) — never a file from the repo.
+- External access is done through **Cloudflare Tunnel**, without needing to open ports on the router.
+- **Tetragon** monitors at the kernel level for privilege escalation, access to sensitive files and suspicious syscalls.
 
 ---
 
-## Autor
+## Maintenance and Operations
+
+See [docs/OPERATIONS.md](./docs/OPERATIONS.md) for:
+
+- Checking cluster health.
+- Managing secrets and ExternalSecrets.
+- Performing database backups.
+- Updating component versions.
+- Troubleshooting by component.
+- Emergency procedures.
+
+---
+
+## Author
 
 - **Cristian Puenguenan** ([@cristsr](https://github.com/cristsr))
 
 ---
 
-## Licencia
+## License
 
-Este proyecto es de uso personal. Puedes tomar ideas y adaptarlas a tu propio homelab.
+This project is for personal use. Feel free to take ideas and adapt them to your own homelab.

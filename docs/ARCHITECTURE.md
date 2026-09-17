@@ -1,101 +1,101 @@
-# Arquitectura del Homelab Kubernetes
+# Homelab Kubernetes Architecture
 
-## Indice
+## Index
 
-1. [Vision General](#1-vision-general)
-2. [Infraestructura Base](#2-infraestructura-base)
-3. [Componentes de Plataforma](#3-componentes-de-plataforma)
-4. [Aplicaciones y Herramientas](#4-aplicaciones-y-herramientas)
-5. [Bases de Datos](#5-bases-de-datos)
-6. [Monitoreo](#6-monitoreo)
-7. [Networking y Acceso](#7-networking-y-acceso)
-8. [Seguridad y Secretos](#8-seguridad-y-secretos)
-9. [GitOps y Orden de Despliegue](#9-gitops-y-orden-de-despliegue)
-10. [Almacenamiento y Recursos](#10-almacenamiento-y-recursos)
-11. [Flujo de Instalacion Inicial](#11-flujo-de-instalacion-inicial)
+1. [Overview](#1-overview)
+2. [Base Infrastructure](#2-base-infrastructure)
+3. [Platform Components](#3-platform-components)
+4. [Applications and Tools](#4-applications-and-tools)
+5. [Databases](#5-databases)
+6. [Monitoring](#6-monitoring)
+7. [Networking and Access](#7-networking-and-access)
+8. [Security and Secrets](#8-security-and-secrets)
+9. [GitOps and Deployment Order](#9-gitops-and-deployment-order)
+10. [Storage and Resources](#10-storage-and-resources)
+11. [Initial Installation Flow](#11-initial-installation-flow)
 
 ---
 
-## 1. Vision General
+## 1. Overview
 
-Homelab de un solo nodo construido sobre Talos Linux (VM en Proxmox VE) con GitOps completo. ArgoCD gestiona todas las aplicaciones desde este repositorio. El ingress esta dividido entre dos Gateway API implementations: **Cilium Gateway API** para el trafico HTTP generico y **Agent Gateway** retenido solo para las rutas de servidores MCP (ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp)). Cloudflare Tunnel expone servicios seleccionados a Internet sin abrir puertos en el router. Ver [ADR-014](DECISIONS.md#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv) para el contexto completo de la migración desde k0s/libvirt/Fedora. Los servicios de datos (PostgreSQL, MongoDB, Qdrant, Redis) corren **fuera del cluster**, en LXC de Proxmox (ver [ADR-016](DECISIONS.md) y §5).
+Single-node homelab built on Talos Linux (a VM on Proxmox VE) with full GitOps. ArgoCD manages all applications from this repository. Ingress is split between two Gateway API implementations: **Cilium Gateway API** for generic HTTP traffic and **Agent Gateway** retained only for MCP server routes (see [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-for-generic-ingress-agent-gateway-only-for-mcp)). Cloudflare Tunnel exposes selected services to the Internet without opening ports on the router. See [ADR-014](DECISIONS.md#adr-014-migration-from-k0slibvirtfedora-to-talos-linuxproxmox-ve-and-from-openebs-lvm-to-openebs-zfs-localpv) for the full context of the migration from k0s/libvirt/Fedora. Data services (PostgreSQL, MongoDB, Qdrant, Redis) run **outside the cluster**, in Proxmox LXCs (see [ADR-016](DECISIONS.md) and §5).
 
-### Stack tecnologico
+### Technology stack
 
-| Capa | Tecnologia |
+| Layer | Technology |
 |------|-----------|
-| Hipervisor | Proxmox VE (provider Terraform `bpg/proxmox`) |
-| Kubernetes | Talos Linux v1.14.0 (inmutable, sin SSH) |
+| Hypervisor | Proxmox VE (Terraform provider `bpg/proxmox`) |
+| Kubernetes | Talos Linux v1.14.0 (immutable, no SSH) |
 | CNI / NetworkPolicy | Cilium 1.20.1 (eBPF, kube-proxy replacement) |
-| Ingress / Gateway (generico) | Cilium Gateway API |
+| Ingress / Gateway (generic) | Cilium Gateway API |
 | Ingress / Gateway (MCP) | Agent Gateway 1.1.0 |
 | GitOps | Argo CD 9.5.13 |
-| Certificados TLS | cert-manager: Let's Encrypt (publico y privado, DNS-01 via Cloudflare) |
+| TLS Certificates | cert-manager: Let's Encrypt (public and private, DNS-01 via Cloudflare) |
 | Storage | OpenEBS ZFS LocalPV 2.11.1 |
-| Bases de datos | PostgreSQL 17, MongoDB 8.0, Qdrant v1.x, Redis 8 en LXC de Proxmox (ADR-016) |
-| Tunel Internet | Cloudflare Tunnel (cloudflared) |
-| Monitoreo | kube-prometheus-stack + Grafana Operator |
+| Databases | PostgreSQL 17, MongoDB 8.0, Qdrant v1.x, Redis 8 on Proxmox LXCs (ADR-016) |
+| Internet Tunnel | Cloudflare Tunnel (cloudflared) |
+| Monitoring | kube-prometheus-stack + Grafana Operator |
 | Secrets | 1Password + External Secrets Operator |
 | Runtime security | Tetragon |
 
-### Estructura del repositorio
+### Repository structure
 
 ```
 homelab/
 ├── terraform/
-│   ├── infra/                   # VM Talos + LXC de datos en Proxmox (provider bpg/proxmox + siderolabs/talos)
-│   │   ├── proxmox.tf            # VM, discos (instalacion + dedicado a ZFS), ISO de Talos
-│   │   ├── lxc.tf                # Cuatro LXC de datos: PostgreSQL, MongoDB, Qdrant, Redis
-│   │   ├── talos.tf              # machine config, bootstrap, kubeconfig/talosconfig generados
-│   │   ├── variables.tf          # Sizing, red, schematic de Talos
+│   ├── infra/                   # Talos VM + data LXCs on Proxmox (bpg/proxmox + siderolabs/talos providers)
+│   │   ├── proxmox.tf            # VM, disks (installation + dedicated to ZFS), Talos ISO
+│   │   ├── lxc.tf                # Four data LXCs: PostgreSQL, MongoDB, Qdrant, Redis
+│   │   ├── talos.tf              # machine config, bootstrap, generated kubeconfig/talosconfig
+│   │   ├── variables.tf          # Sizing, network, Talos schematic
 │   │   ├── outputs.tf            # vm_static_ip, kubeconfig_path, talosconfig_path
 │   │   └── generated/            # kubeconfig/talosconfig (gitignored)
-│   └── cluster/                  # Bootstrap de Kubernetes (una vez el cluster ya arranco)
+│   └── cluster/                  # Kubernetes bootstrap (once the cluster is already up)
 │       ├── bootstrap.tf          # helm_release: Cilium, ArgoCD
-│       ├── namespaces.tf         # Namespaces base
-│       ├── secrets.tf            # Secrets iniciales (repo-creds, in-cluster)
-│       ├── storage.tf            # Job que crea el zpool de OpenEBS ZFS LocalPV
-│       └── variables.tf          # kubeconfig_path, credenciales de ArgoCD
+│       ├── namespaces.tf         # Base namespaces
+│       ├── secrets.tf            # Initial secrets (repo-creds, in-cluster)
+│       ├── storage.tf            # Job that creates the OpenEBS ZFS LocalPV zpool
+│       └── variables.tf          # kubeconfig_path, ArgoCD credentials
 │
-├── ansible/                    # Preflight + aprovisionamiento de las LXC de datos (Talos no tiene SSH)
+├── ansible/                    # Preflight + provisioning of the data LXCs (Talos has no SSH)
 │   ├── tasks/
-│   │   ├── preflight-secrets.yaml        # Valida que las credenciales no esten vacias
-│   │   ├── preflight-remote-checks.yaml  # Chequeos de conectividad remota
-│   │   └── install-podman.yaml           # Instalacion compartida de Podman + auto-update
-│   ├── data-services.yaml      # Levanta postgresql/mongodb/qdrant/redis via Podman Quadlet
-│   ├── bootstrap-lxc-ssh.yaml   # Siembra la pubkey de SSH en las LXC via pct exec
-│   ├── ansible.cfg             # Configuracion de Ansible
-│   ├── inventory.yaml          # localhost + las LXC de datos (Talos no expone SSH/shell al nodo)
-│   └── preflight.yaml          # Corre antes de `terraform apply` en CI (falla rapido)
+│   │   ├── preflight-secrets.yaml        # Validates that credentials are not empty
+│   │   ├── preflight-remote-checks.yaml  # Remote connectivity checks
+│   │   └── install-podman.yaml           # Shared Podman installation + auto-update
+│   ├── data-services.yaml      # Brings up postgresql/mongodb/qdrant/redis via Podman Quadlet
+│   ├── bootstrap-lxc-ssh.yaml   # Seeds the SSH pubkey on the LXCs via pct exec
+│   ├── ansible.cfg             # Ansible configuration
+│   ├── inventory.yaml          # localhost + the data LXCs (Talos exposes no SSH/shell on the node)
+│   └── preflight.yaml          # Runs before `terraform apply` in CI (fails fast)
 │
 ├── secrets/
-│   └── homelab.env.example     # Plantilla de credenciales de infra y de las LXC de datos, gitignored el real
+│   └── homelab.env.example     # Template for infra and data LXC credentials, the real file is gitignored
 │
 ├── scripts/
-│   └── apply-real-secrets.sh    # Carga secrets/homelab.env en los SopsSecret/env cifrados del repo (manual, no corre en CI)
+│   └── apply-real-secrets.sh    # Loads secrets/homelab.env into the repo's encrypted SopsSecret/env (manual, doesn't run in CI)
 │
-├── bootstrap/                   # Values/scripts que consume terraform/cluster/bootstrap.tf
-│   ├── cilium/values.yaml       # Valores de Cilium (incluye ajustes especificos de Talos)
-│   ├── argocd/values.yaml       # Valores de ArgoCD (GitOps)
-│   └── adopt-cilium-gateway-secrets.sh  # Hook de idempotencia para el chart de Cilium
+├── bootstrap/                   # Values/scripts consumed by terraform/cluster/bootstrap.tf
+│   ├── cilium/values.yaml       # Cilium values (includes Talos-specific tweaks)
+│   ├── argocd/values.yaml       # ArgoCD values (GitOps)
+│   └── adopt-cilium-gateway-secrets.sh  # Idempotency hook for the Cilium chart
 │
-├── gitops/                     # Aplicaciones de ArgoCD (App of Apps)
-│   ├── root-app.yaml           # Aplicacion raiz que apunta a gitops/apps/
+├── gitops/                     # ArgoCD applications (App of Apps)
+│   ├── root-app.yaml           # Root application pointing to gitops/apps/
 │   └── apps/
-│       ├── platform/           # ArgoCD Applications de infraestructura
-│       │   ├── argocd/         # Configuracion adicional de ArgoCD
+│       ├── platform/           # Infrastructure ArgoCD Applications
+│       │   ├── argocd/         # Additional ArgoCD configuration
 │       │   ├── networking/     # cert-manager, cloudflared, agentgateway, cilium-gateway
 │       │   ├── storage/        # OpenEBS ZFS LocalPV
 │       │   ├── devtools/       # OpenMemory
 │       │   ├── observability/  # Prometheus, Grafana, Headlamp
-│       │   ├── secret-management/ # ClusterSecretStore de 1Password, External Secrets
+│       │   ├── secret-management/ # 1Password ClusterSecretStore, External Secrets
 │       │   └── security/       # Tetragon
-│       └── workloads/          # ArgoCD Applications de apps de usuario
+│       └── workloads/          # User application ArgoCD Applications
 │           ├── flow.yaml
 │           ├── portfolio.yaml
 │           └── sonarqube/
 │
-├── platform/                   # Manifiestos y valores Helm de infraestructura
+├── platform/                   # Infrastructure manifests and Helm values
 │   ├── argocd/
 │   ├── networking/
 │   ├── storage/
@@ -104,12 +104,12 @@ homelab/
 │   ├── secret-management/
 │   └── security/
 │
-├── workloads/                  # Aplicaciones de usuario/negocio
+├── workloads/                  # User/business applications
 │   ├── flow/                   # Flow API (Deployment, ExternalSecret, HTTPRoute)
-│   ├── portfolio/              # Sitio personal (Deployment, ConfigMap, HTTPRoute)
-│   └── sonarqube/              # SonarQube + MCP server (DB externa, ver §5)
+│   ├── portfolio/              # Personal site (Deployment, ConfigMap, HTTPRoute)
+│   └── sonarqube/              # SonarQube + MCP server (external DB, see §5)
 │
-└── docs/                       # Documentacion del proyecto
+└── docs/                       # Project documentation
     ├── ARCHITECTURE.md
     ├── INSTALL.md
     ├── OPERATIONS.md
@@ -119,33 +119,33 @@ homelab/
 
 ---
 
-## 2. Infraestructura Base
+## 2. Base Infrastructure
 
 ### 2.1 Talos Linux (Kubernetes)
 
-**Version**: `v1.14.0` — **Modo**: Single node (controlplane, sin workers separados)
+**Version**: `v1.14.0` — **Mode**: Single node (control-plane, no separate workers)
 
-- Corre en una VM sobre Proxmox VE, provisionada por Terraform (`terraform/infra/`, ver [ADR-014](DECISIONS.md#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv)).
-- Talos es inmutable y no tiene SSH ni shell: la configuracion es 100% declarativa via machine config, aplicada por el provider Terraform `siderolabs/talos` (`terraform/infra/talos.tf`). Ya no hay Ansible aprovisionando el sistema operativo del nodo.
-- El ISO se genera con el [Image Factory](https://factory.talos.dev) a partir de un schematic con las extensiones `qemu-guest-agent`, `tailscale` y `zfs` (`talos_schematic_id` en `terraform/infra/variables.tf`).
-- kube-proxy esta deshabilitado (`cluster.proxy.disabled = true`, reemplazado por Cilium eBPF); el CNI tambien queda deshabilitado a nivel de Talos (`cluster.network.cni.name = "none"`) para que lo instale Cilium.
-- El control-plane corre workloads (cluster de un solo nodo): varios charts (ArgoCD, el Job de OpenEBS ZFS) necesitan `tolerations` explicitas para el taint `node-role.kubernetes.io/control-plane:NoSchedule`.
+- Runs on a VM on Proxmox VE, provisioned by Terraform (`terraform/infra/`, see [ADR-014](DECISIONS.md#adr-014-migration-from-k0slibvirtfedora-to-talos-linuxproxmox-ve-and-from-openebs-lvm-to-openebs-zfs-localpv)).
+- Talos is immutable and has no SSH or shell: configuration is 100% declarative via machine config, applied by the Terraform provider `siderolabs/talos` (`terraform/infra/talos.tf`). Ansible no longer provisions the node's operating system.
+- The ISO is generated with the [Image Factory](https://factory.talos.dev) from a schematic with the `qemu-guest-agent`, `tailscale`, and `zfs` extensions (`talos_schematic_id` in `terraform/infra/variables.tf`).
+- kube-proxy is disabled (`cluster.proxy.disabled = true`, replaced by Cilium eBPF); the CNI is also disabled at the Talos level (`cluster.network.cni.name = "none"`) so Cilium installs it.
+- The control-plane runs workloads (single-node cluster): several charts (ArgoCD, the OpenEBS ZFS Job) need explicit `tolerations` for the `node-role.kubernetes.io/control-plane:NoSchedule` taint.
 
-| Parametro | Valor |
+| Parameter | Value |
 |-----------|-------|
-| `vm_static_ip` (nodo) | `192.168.80.x` (LAN real, bridge `vmbr0` de Proxmox) |
+| `vm_static_ip` (node) | `192.168.80.x` (real LAN, Proxmox bridge `vmbr0`) |
 | Pod CIDR (Cilium `ipam.operator.clusterPoolIPv4PodCIDRList`) | `10.244.0.0/16` |
-| Service CIDR | `10.96.0.0/12` (default de Talos) |
-| Disco de instalacion | `/dev/vda` (`virtio0`) |
-| Disco dedicado a ZFS | `/dev/vdb` (`virtio1`, particionado declarativamente con `RawVolumeConfig`, label `r-openebs-zfs`) |
+| Service CIDR | `10.96.0.0/12` (Talos default) |
+| Installation disk | `/dev/vda` (`virtio0`) |
+| Disk dedicated to ZFS | `/dev/vdb` (`virtio1`, declaratively partitioned with `RawVolumeConfig`, label `r-openebs-zfs`) |
 
 ### 2.2 Cilium (CNI)
 
 **Chart**: `cilium/cilium` — **Namespace**: `kube-system` — **Version**: `1.20.1`
 
-Reemplaza completamente kube-proxy con eBPF. Provee conectividad de pods, NetworkPolicies y observabilidad via Hubble.
+Fully replaces kube-proxy with eBPF. Provides pod connectivity, NetworkPolicies, and observability via Hubble.
 
-| Parametro | Valor |
+| Parameter | Value |
 |-----------|-------|
 | `kubeProxyReplacement` | `true` |
 | `k8sServiceHost` | `127.0.0.1` |
@@ -157,29 +157,29 @@ Reemplaza completamente kube-proxy con eBPF. Provee conectividad de pods, Networ
 | `hubble.relay.enabled` | `true` |
 | `hubble.ui.enabled` | `true` |
 | Daemon run path | `/var/run/cilium` |
-| `cgroup.autoMount.enabled` | `false` (Talos ya monta cgroupv2/bpffs) |
-| `securityContext.capabilities` | Ajustado sin `SYS_MODULE` — Talos no permite a los workloads cargar modulos de kernel |
+| `cgroup.autoMount.enabled` | `false` (Talos already mounts cgroupv2/bpffs) |
+| `securityContext.capabilities` | Adjusted without `SYS_MODULE` — Talos doesn't allow workloads to load kernel modules |
 
 ### 2.3 Argo CD (GitOps)
 
 **Chart**: `argo/argo-cd` — **Namespace**: `argocd` — **Version**: `9.5.13`
 
-Controla el ciclo de vida de todas las aplicaciones del cluster. La `root-app` apunta a `gitops/apps/` y crea las sub-aplicaciones que despliegan cada componente.
+Controls the lifecycle of all applications in the cluster. The `root-app` points to `gitops/apps/` and creates the sub-applications that deploy each component.
 
-| Parametro | Valor |
+| Parameter | Value |
 |-----------|-------|
-| `server.ingress.enabled` | `false` (gestionado por HTTPRoute contra el Gateway de Cilium) |
-| `server.insecure` | `true` (TLS terminado en el Gateway `main` con Let's Encrypt — el backend siempre habla HTTP plano, ver §3.1 TLS) |
-| Timeout de reconciliacion | `180s` (unico mecanismo de sync desde ADR-019 — el webhook de GitHub se retiro, ver `docs/DECISIONS.md`) |
-| RBAC por defecto | `role:readonly` |
-| Dominio | `argocd.internal.cristianpuenguenan.online` |
-| Tolerations | `node-role.kubernetes.io/control-plane:NoSchedule` (cluster de un solo nodo, ver §2.1) |
+| `server.ingress.enabled` | `false` (managed via HTTPRoute against the Cilium Gateway) |
+| `server.insecure` | `true` (TLS terminated at the `main` Gateway with Let's Encrypt — the backend always speaks plain HTTP, see §3.1 TLS) |
+| Reconciliation timeout | `180s` (the only sync mechanism since ADR-019 — the GitHub webhook was retired, see `docs/DECISIONS.md`) |
+| Default RBAC | `role:readonly` |
+| Domain | `argocd.internal.cristianpuenguenan.online` |
+| Tolerations | `node-role.kubernetes.io/control-plane:NoSchedule` (single-node cluster, see §2.1) |
 
 ### 2.4 Namespaces
 
-Creados por `terraform/cluster/namespaces.tf` (`kubernetes_namespace_v1.namespaces`, `for_each` sobre una lista fija) o con `syncOptions: CreateNamespace=true` en la Application de ArgoCD correspondiente:
+Created by `terraform/cluster/namespaces.tf` (`kubernetes_namespace_v1.namespaces`, `for_each` over a fixed list) or with `syncOptions: CreateNamespace=true` in the corresponding ArgoCD Application:
 
-| Namespace | Contenido |
+| Namespace | Content |
 |-----------|-----------|
 | `argocd` | Argo CD |
 | `apps` | Flow API, Portfolio |
@@ -187,36 +187,36 @@ Creados por `terraform/cluster/namespaces.tf` (`kubernetes_namespace_v1.namespac
 | `openebs` | OpenEBS ZFS LocalPV |
 | `networking` | Cilium Gateway, Agent Gateway (MCP), cloudflared, cert-manager, private-dns |
 | `observability` | Prometheus, Grafana, Alertmanager, Headlamp |
-| `secret-management` | ClusterSecretStore de 1Password, External Secrets, Reloader |
+| `secret-management` | 1Password ClusterSecretStore, External Secrets, Reloader |
 | `tetragon` | Tetragon |
 | `sonarqube` | SonarQube, MCP server |
 
 ---
 
-## 3. Componentes de Plataforma
+## 3. Platform Components
 
-### 3.1 Ingress: tres Gateway API, uno por audiencia
+### 3.1 Ingress: three Gateway APIs, one per audience
 
-Ver [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-para-ingress-genérico-agent-gateway-solo-para-mcp), ADR-011 y ADR-012 en [DECISIONS.md](DECISIONS.md). Los tres `Gateway` viven en el namespace `networking`. `main` termina TLS en HTTPS:443 con un certificado real de Let's Encrypt (ver TLS abajo); su puerto 80 solo hace redirect a HTTPS. `agentgateway-mcp` sirve HTTP:80 plano puertas adentro (su controller no soporta listeners HTTPS, ADR-012) pero no tiene IP externa propia: sus 3 rutas entran igual por HTTPS, vía `main` haciendo de proxy TLS hacia su Service. `public` escucha HTTP:80 plano — el TLS de cara a Internet lo termina Cloudflare en el borde del tunel. La separacion entre `public` y `main` no es por tipo de trafico sino por **audiencia**: `public` es el unico Gateway al que apunta el wildcard de Cloudflare — lo que es publico queda decidido por que `HTTPRoute` vive ahi, no por una lista aparte.
+See [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-for-generic-ingress-agent-gateway-only-for-mcp), ADR-011, and ADR-012 in [DECISIONS.md](DECISIONS.md). The three `Gateway`s live in the `networking` namespace. `main` terminates TLS on HTTPS:443 with a real Let's Encrypt certificate (see TLS below); its port 80 only redirects to HTTPS. `agentgateway-mcp` serves plain HTTP:80 internally (its controller doesn't support HTTPS listeners, ADR-012) but has no external IP of its own: its 3 routes still come in over HTTPS, via `main` acting as a TLS proxy to its Service. `public` listens on plain HTTP:80 — the internet-facing TLS is terminated by Cloudflare at the tunnel edge. The separation between `public` and `main` isn't by traffic type but by **audience**: `public` is the only Gateway the Cloudflare wildcard points to — what's public is decided by which `HTTPRoute` lives there, not by a separate list.
 
-#### 3.1.a Cilium Gateway API — público (`public`)
+#### 3.1.a Cilium Gateway API — public (`public`)
 
-**`Gateway`**: `public` (`platform/networking/cilium-gateway/gateway-public.yaml`) — **Service generado**: `cilium-gateway-public` — sin IP LAN fija (solo lo consume `cloudflared`, via `ClusterIP`)
+**`Gateway`**: `public` (`platform/networking/cilium-gateway/gateway-public.yaml`) — **Generated Service**: `cilium-gateway-public` — no fixed LAN IP (only consumed by `cloudflared`, via `ClusterIP`)
 
-Único Gateway alcanzable desde Internet — las únicas dos rutas que deben serlo:
+The only Gateway reachable from the Internet — the only two routes that need to be:
 
-| Subdominio | Backend | Namespace |
+| Subdomain | Backend | Namespace |
 |-----------|---------|-----------|
 | `api.cristianpuenguenan.online` | flow:80 (`/flow`, `/webhooks`) | apps |
 | `portfolio.cristianpuenguenan.online` | portfolio:80 | apps |
 
-#### 3.1.b Cilium Gateway API — privado (`main`)
+#### 3.1.b Cilium Gateway API — private (`main`)
 
-**`GatewayClass`**: `cilium` (creada automaticamente por Cilium al habilitar `gatewayAPI.enabled: true`) — **`Gateway`**: `main` (`platform/networking/cilium-gateway/gateway.yaml`) — **Service generado**: `cilium-gateway-main` — IP LAN fija `192.168.80.240` (Cilium L2 Announcements, ver §7) — listeners: `https` (443, TLS terminate con `wildcard-internal-online-tls`) y `http` (80, solo redirect)
+**`GatewayClass`**: `cilium` (created automatically by Cilium when `gatewayAPI.enabled: true` is set) — **`Gateway`**: `main` (`platform/networking/cilium-gateway/gateway.yaml`) — **Generated Service**: `cilium-gateway-main` — fixed LAN IP `192.168.80.240` (Cilium L2 Announcements, see §7) — listeners: `https` (443, TLS terminate with `wildcard-internal-online-tls`) and `http` (80, redirect only)
 
-Herramientas de administracion/observabilidad — solo alcanzables por LAN/Tailscale, nunca por el wildcard de Cloudflare:
+Administration/observability tools — reachable only via LAN/Tailscale, never via the Cloudflare wildcard:
 
-| Subdominio | Backend | Namespace |
+| Subdomain | Backend | Namespace |
 |-----------|---------|-----------|
 | `argocd.internal.cristianpuenguenan.online` | argocd-server:80 | argocd |
 | `grafana.internal.cristianpuenguenan.online` | prometheus-grafana:80 | observability |
@@ -225,13 +225,13 @@ Herramientas de administracion/observabilidad — solo alcanzables por LAN/Tails
 | `openmemory.internal.cristianpuenguenan.online` | openmemory-ui:3000 | devtools |
 | `sonarqube.internal.cristianpuenguenan.online` | sonarqube-sonarqube:9000 | sonarqube |
 
-#### 3.1.c Agent Gateway (solo servidores MCP)
+#### 3.1.c Agent Gateway (MCP servers only)
 
-**Chart**: `oci://cr.agentgateway.dev/charts/agentgateway` — **`GatewayClass`**: `agentgateway` — **`Gateway`**: `agentgateway-mcp` (`platform/networking/agentgateway/gateway.yaml`) — listener unico `http` (80, HTTP plano — el controller v1.1.0 no soporta listeners HTTPS, ver ADR-012) — **Service generado**: `agentgateway-mcp`, `ClusterIP` (sin IP LAN fija: el unico que lo alcanza es el proxy interno de `main`, ver TLS abajo)
+**Chart**: `oci://cr.agentgateway.dev/charts/agentgateway` — **`GatewayClass`**: `agentgateway` — **`Gateway`**: `agentgateway-mcp` (`platform/networking/agentgateway/gateway.yaml`) — single `http` listener (80, plain HTTP — the v1.1.0 controller doesn't support HTTPS listeners, see ADR-012) — **Generated Service**: `agentgateway-mcp`, `ClusterIP` (no fixed LAN IP: the only thing that reaches it is `main`'s internal proxy, see TLS below)
 
-Retenido unicamente para las rutas que aprovechan features reales de protocolo MCP (multiplexing, virtual MCP) que Cilium no ofrece; sigue haciendo su propio ruteo/rewrite/multiplexing con estas `HTTPRoute` (sin cambios):
+Retained solely for routes that leverage real MCP protocol features (multiplexing, virtual MCP) that Cilium doesn't offer; it still does its own routing/rewrite/multiplexing for these `HTTPRoute`s (unchanged):
 
-| Subdominio | Backend | Namespace |
+| Subdomain | Backend | Namespace |
 |-----------|---------|-----------|
 | `agentgateway.internal.cristianpuenguenan.online` | agentgateway admin UI | networking |
 | `openmemory-api.internal.cristianpuenguenan.online` | openmemory:8765 (MCP server) | devtools |
@@ -239,103 +239,103 @@ Retenido unicamente para las rutas que aprovechan features reales de protocolo M
 
 #### TLS
 
-Dos planos separados, ambos con certificados reales de Let's Encrypt — ya no hay CA propia (ver ADR-012, actualizacion):
+Two separate planes, both with real Let's Encrypt certificates — there's no longer a private CA (see ADR-012 update):
 
-- **Privado (`*.internal.cristianpuenguenan.online`)**: subdominio de un dominio que ya es nuestro, certificado por el mismo `ClusterIssuer` (`letsencrypt-prod-cloudflare-dns01`, DNS-01 via Cloudflare) que emite el wildcard publico — `wildcard-internal-online-tls`, referenciado por el listener HTTPS de `main`. El desafio DNS-01 no exige que el subdominio resuelva a una IP real: no hay ningun registro A/AAAA para `internal.cristianpuenguenan.online`, asi que sigue sin ser alcanzable fuera del tailnet (aunque el wildcard *publico* `*.cristianpuenguenan.online` sí matchea por DNS estas rutas al ser subdominios de el — la conexion real falla igual en el borde de Cloudflare, que rechaza el TLS de cualquier hostname sin un Hostname/certificado propio configurado ahi, ver ADR-012 actualizacion). El puerto 80 de `main` solo responde 301 → HTTPS. Las 3 rutas de `agentgateway-mcp` tambien quedan HTTPS de cara al cliente: su controller sigue sin soportar listeners HTTPS (ADR-012), asi que `main` termina el TLS y reenvia en HTTP plano, puertas adentro del cluster, al Service `agentgateway-mcp` (`platform/networking/cilium-gateway/httproute-agentgateway-proxy.yaml`).
-- **Publico (`*.cristianpuenguenan.online`)**: el TLS de cara a Internet lo termina Cloudflare en el borde del tunel; cloudflared habla HTTP al `Gateway public`. El wildcard `wildcard-home-tls` emitido por cert-manager sigue sin estar referenciado por ningun listener del cluster — se mantiene emitido para uso futuro, no es necesario para el flujo actual.
+- **Private (`*.internal.cristianpuenguenan.online`)**: a subdomain of a domain we already own, certified by the same `ClusterIssuer` (`letsencrypt-prod-cloudflare-dns01`, DNS-01 via Cloudflare) that issues the public wildcard — `wildcard-internal-online-tls`, referenced by `main`'s HTTPS listener. The DNS-01 challenge doesn't require the subdomain to resolve to a real IP: there's no A/AAAA record for `internal.cristianpuenguenan.online`, so it's still unreachable outside the tailnet (although the *public* wildcard `*.cristianpuenguenan.online` does match these routes by DNS since they're subdomains of it — the actual connection still fails at the Cloudflare edge, which rejects TLS for any hostname without its own configured Hostname/certificate there, see ADR-012 update). `main`'s port 80 only responds with 301 → HTTPS. The 3 `agentgateway-mcp` routes are also HTTPS from the client's perspective: its controller still doesn't support HTTPS listeners (ADR-012), so `main` terminates TLS and forwards over plain HTTP, internally within the cluster, to the `agentgateway-mcp` Service (`platform/networking/cilium-gateway/httproute-agentgateway-proxy.yaml`).
+- **Public (`*.cristianpuenguenan.online`)**: internet-facing TLS is terminated by Cloudflare at the tunnel edge; cloudflared speaks HTTP to the `public` Gateway. The `wildcard-home-tls` wildcard issued by cert-manager is still not referenced by any listener in the cluster — it's kept issued for future use, not needed for the current flow.
 
 ### 3.2 cert-manager
 
 **Chart**: `jetstack/cert-manager` — **Namespace**: `networking`
 
-Automatiza la emision y renovacion de certificados TLS.
+Automates the issuance and renewal of TLS certificates.
 
-| Recurso | Detalle |
+| Resource | Detail |
 |---------|---------|
-| ClusterIssuer | `letsencrypt-prod-cloudflare-dns01` (unico, usado por los dos wildcards) |
-| Metodo de validacion | DNS-01 via Cloudflare API |
-| Certificado publico | Wildcard `*.cristianpuenguenan.online` + apex → `wildcard-home-tls` |
-| Certificado privado | Wildcard `*.internal.cristianpuenguenan.online` + apex → `wildcard-internal-online-tls`, usado por `main` |
-| Secret del token | `cloudflare-api-token` en namespace `networking` (via ExternalSecret) |
+| ClusterIssuer | `letsencrypt-prod-cloudflare-dns01` (single one, used by both wildcards) |
+| Validation method | DNS-01 via Cloudflare API |
+| Public certificate | Wildcard `*.cristianpuenguenan.online` + apex → `wildcard-home-tls` |
+| Private certificate | Wildcard `*.internal.cristianpuenguenan.online` + apex → `wildcard-internal-online-tls`, used by `main` |
+| Token secret | `cloudflare-api-token` in the `networking` namespace (via ExternalSecret) |
 
 ### 3.3 OpenEBS Local PV LVM (Storage)
 
 **Chart**: `zfs-localpv` (`https://openebs.github.io/zfs-localpv`, version `2.11.1`) — **Namespace**: `openebs`
 
-Ver [ADR-013](DECISIONS.md#adr-013-reemplazo-de-longhorn-por-openebs-local-pv-lvm) y [ADR-014](DECISIONS.md#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv) en [DECISIONS.md](DECISIONS.md) (reemplaza a Longhorn/ADR-004, y al motor LVM de ADR-013). PVCs provisionados como datasets ZFS dentro de un zpool (`zfspv-pool`) sobre un disco dedicado de la VM (`vdb`/`virtio1`, ver `terraform/infra/proxmox.tf`). El zpool lo crea un `Job` de Kubernetes (`kubernetes_job_v1.openebs_zpool_create`, `terraform/cluster/storage.tf`) — Talos no expone shell para correr herramientas de ZFS en el host. Sin replicacion (copia unica, local al nodo) — igual trade-off que ya aceptaba Longhorn con `replicaCount: 1`.
+See [ADR-013](DECISIONS.md#adr-013-replacing-longhorn-with-openebs-local-pv-lvm) and [ADR-014](DECISIONS.md#adr-014-migration-from-k0slibvirtfedora-to-talos-linuxproxmox-ve-and-from-openebs-lvm-to-openebs-zfs-localpv) in [DECISIONS.md](DECISIONS.md) (replaces Longhorn/ADR-004, and the LVM engine from ADR-013). PVCs are provisioned as ZFS datasets inside a zpool (`zfspv-pool`) on a disk dedicated to the VM (`vdb`/`virtio1`, see `terraform/infra/proxmox.tf`). The zpool is created by a Kubernetes `Job` (`kubernetes_job_v1.openebs_zpool_create`, `terraform/cluster/storage.tf`) — Talos exposes no shell for running ZFS tools on the host. No replication (single copy, local to the node) — the same trade-off Longhorn already accepted with `replicaCount: 1`.
 
-| Parametro | Valor |
+| Parameter | Value |
 |-----------|-------|
-| `zfsNode.kubeletDir` | Default del chart (`/var/lib/kubelet/`) — Talos usa el path estandar, a diferencia de k0s |
+| `zfsNode.kubeletDir` | Chart default (`/var/lib/kubelet/`) — Talos uses the standard path, unlike k0s |
 | `analytics.enabled` | `false` |
-| StorageClass por defecto | `openebs-zfs` |
-| Pool ZFS | `zfspv-pool` (`compression=zstd`, `ashift=12`, `atime=off`) |
+| Default StorageClass | `openebs-zfs` |
+| ZFS pool | `zfspv-pool` (`compression=zstd`, `ashift=12`, `atime=off`) |
 
 #### StorageClasses
 
-| Nombre | ReclaimPolicy | Uso |
+| Name | ReclaimPolicy | Use |
 |--------|--------------|-----|
-| `openebs-zfs` | Delete | Por defecto |
-| `openebs-zfs-retain` | Retain | Bases de datos |
+| `openebs-zfs` | Delete | Default |
+| `openebs-zfs-retain` | Retain | Databases |
 
-### 3.4 Cloudflared (Tunel Internet)
+### 3.4 Cloudflared (Internet Tunnel)
 
-**Imagen**: `cloudflare/cloudflared` — **Namespace**: `networking`
+**Image**: `cloudflare/cloudflared` — **Namespace**: `networking`
 
-Establece un tunel cifrado saliente hacia Cloudflare sin necesidad de abrir puertos en el router.
+Establishes an encrypted outbound tunnel to Cloudflare without needing to open ports on the router.
 
-Secret: `cloudflared-token` (via ExternalSecret desde el item `infra/cloudflared` en 1Password).
+Secret: `cloudflared-token` (via ExternalSecret from the `infra/cloudflared` item in 1Password).
 
-### 3.5 Headlamp (UI Kubernetes)
+### 3.5 Headlamp (Kubernetes UI)
 
 **Chart**: `headlamphq/headlamp` — **Namespace**: `observability`
 
-Dashboard web para inspeccionar el estado del cluster.
+Web dashboard for inspecting the state of the cluster.
 
-| Parametro | Valor |
+| Parameter | Value |
 |-----------|-------|
 | Service | ClusterIP:80 |
-| Acceso | `headlamp.internal.cristianpuenguenan.online` via Cilium Gateway API |
+| Access | `headlamp.internal.cristianpuenguenan.online` via Cilium Gateway API |
 
 ### 3.6 1Password (Secrets Backend)
 
-Backend de secretos gestionado — vault dedicado **"Homelab"**, sin infraestructura propia que correr en el cluster ni en ninguna LXC (ver ADR-017).
+Managed secrets backend — dedicated **"Homelab"** vault, with no infrastructure of its own to run in the cluster or on any LXC (see ADR-017).
 
-| Parametro | Valor |
+| Parameter | Value |
 |-----------|-------|
 | Vault | `Homelab` |
-| Autenticacion | Service Account token (solo lectura, acotado a ese vault) |
-| Token | Secret de Kubernetes `onepassword-service-account-token`, namespace `secret-management` |
-| Modelo de items | Un item por `remoteRef.key` de los ExternalSecret, un campo por `remoteRef.property` |
+| Authentication | Service Account token (read-only, scoped to that vault) |
+| Token | Kubernetes Secret `onepassword-service-account-token`, namespace `secret-management` |
+| Item model | One item per ExternalSecret `remoteRef.key`, one field per `remoteRef.property` |
 
-No hay proceso propio que inicializar, sellar/desellar, ni policies/roles que mantener — eso es justamente lo que reemplazó a OpenBao (ver ADR-017 para el detalle de por qué).
+There's no process of its own to initialize, seal/unseal, or policies/roles to maintain — which is exactly what replaced OpenBao (see ADR-017 for the details on why).
 
 ### 3.7 External Secrets Operator
 
 **Chart**: `external-secrets/external-secrets` — **Namespace**: `secret-management`
 
-Sincroniza secrets desde 1Password hacia Kubernetes.
+Syncs secrets from 1Password into Kubernetes.
 
-| Recurso | Detalle |
+| Resource | Detail |
 |---------|---------|
 | ClusterSecretStore | `onepassword` — provider `onepasswordSDK`, vault `Homelab` |
 | Auth | Service Account token (`onepassword-service-account-token`) |
 
 ### 3.8 Reloader
 
-**Chart**: `stakater/reloader` — Namespace segun configuracion en gitops
+**Chart**: `stakater/reloader` — Namespace per the gitops configuration
 
-Reinicia Deployments/StatefulSets automaticamente cuando cambia un Secret o ConfigMap referenciado.
+Automatically restarts Deployments/StatefulSets when a referenced Secret or ConfigMap changes.
 
 ---
 
-## 4. Aplicaciones y Herramientas
+## 4. Applications and Tools
 
 ### 4.1 Flow API
 
 **Namespace**: `apps`
 
-Aplicacion principal del homelab.
+The homelab's main application.
 
 ```
 Replicas: 1
@@ -345,14 +345,14 @@ Secrets:  flow-secrets via ExternalSecret
 
 ### 4.2 OpenMemory (MCP + Vector Memory)
 
-**Namespace**: `devtools` — **Imagen**: `mem0/openmemory-mcp:latest`
+**Namespace**: `devtools` — **Image**: `mem0/openmemory-mcp:latest`
 
-Agente de memoria vectorial para LLMs. Almacena embeddings en Qdrant.
+Vector memory agent for LLMs. Stores embeddings in Qdrant.
 
 ```
 Replicas: 1
 Port:     8080
-Env:      QDRANT_HOST=qdrant.internal.cristianpuenguenan.online (LXC externo, §5)
+Env:      QDRANT_HOST=qdrant.internal.cristianpuenguenan.online (external LXC, §5)
 Secrets:  openmemory-secrets (OPENAI_API_KEY) via ExternalSecret
 ```
 
@@ -360,143 +360,143 @@ Secrets:  openmemory-secrets (OPENAI_API_KEY) via ExternalSecret
 
 **Chart**: `SonarSource/sonarqube` — **Namespace**: `sonarqube`
 
-Analisis estatico de calidad de codigo.
+Static code quality analysis.
 
 ```
 Edition:  Community
 Port:     9000
-DB:       PostgreSQL en el LXC externo (§5): jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube
+DB:       PostgreSQL on the external LXC (§5): jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube
 ```
 
 ---
 
-## 5. Bases de Datos
+## 5. Databases
 
-Los servicios de datos **no corren en el cluster**: viven en cuatro LXC de Proxmox VE, creados por Terraform (`terraform/infra/lxc.tf`) como Debian 13 base — bridge `vmbr0`, datastore `local-lvm`, IP estatica en la LAN. Ver [ADR-016](DECISIONS.md) para la decision y sus trade-offs. La instalacion de los motores dentro de los LXC esta pendiente (aprovisionamiento posterior); los consumidores ya apuntan a los hostnames que `private-dns` (§7) resuelve, igual que las rutas privadas HTTP.
+Data services **don't run in the cluster**: they live on four Proxmox VE LXCs, created by Terraform (`terraform/infra/lxc.tf`) as base Debian 13 — bridge `vmbr0`, datastore `local-lvm`, static LAN IP. See [ADR-016](DECISIONS.md) for the decision and its trade-offs. Installing the engines inside the LXCs is pending (later provisioning); consumers already point to the hostnames that `private-dns` (§7) resolves, same as the private HTTP routes.
 
-### 5.1 Los cuatro LXC
+### 5.1 The four LXCs
 
-| LXC | vmid | IP | Hostname (`private-dns`) | Motor |
+| LXC | vmid | IP | Hostname (`private-dns`) | Engine |
 |-----|------|----|--------------------------|-------|
-| `postgresql` | 121 | `192.168.80.31` | `postgres.internal.cristianpuenguenan.online` | PostgreSQL 17 — bases `homelab` y `sonarqube` |
+| `postgresql` | 121 | `192.168.80.31` | `postgres.internal.cristianpuenguenan.online` | PostgreSQL 17 — `homelab` and `sonarqube` databases |
 | `mongodb` | 122 | `192.168.80.32` | `mongodb.internal.cristianpuenguenan.online` | MongoDB 8.0 |
 | `qdrant` | 123 | `192.168.80.33` | `qdrant.internal.cristianpuenguenan.online` | Qdrant v1.x (REST 6333, gRPC 6334) |
-| `redis` | 124 | `192.168.80.34` | `redis.internal.cristianpuenguenan.online` | Redis 8 (puerto 6379) |
+| `redis` | 124 | `192.168.80.34` | `redis.internal.cristianpuenguenan.online` | Redis 8 (port 6379) |
 
-Un unico PostgreSQL multi-base (`homelab` + `sonarqube`) reemplaza las dos instancias separadas que corrian en el cluster. Ya no hay operadores ni CRDs de bases de datos dentro de Kubernetes — el ciclo de vida de los LXC es responsabilidad de Terraform, y su SO se actualiza como cualquier Debian, independiente del cluster. Los motores de la tabla son el estado objetivo: los contenedores se crean base y la instalacion de cada motor queda pendiente de un aprovisionamiento posterior (ver ADR-016).
+A single multi-database PostgreSQL (`homelab` + `sonarqube`) replaces the two separate instances that used to run in the cluster. There are no longer any database operators or CRDs inside Kubernetes — the LXCs' lifecycle is Terraform's responsibility, and their OS is updated like any Debian box, independent of the cluster. The engines in the table are the target state: the containers are created bare and installing each engine is pending later provisioning (see ADR-016).
 
-### 5.2 Endpoints de los consumidores
+### 5.2 Consumer endpoints
 
-| Consumidor | Endpoint |
+| Consumer | Endpoint |
 |------------|----------|
-| SonarQube | `jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube` (`SONAR_JDBC_URL`, credenciales via ExternalSecret) |
+| SonarQube | `jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube` (`SONAR_JDBC_URL`, credentials via ExternalSecret) |
 | OpenMemory | `qdrant.internal.cristianpuenguenan.online:6333` (`QDRANT_HOST`/`QDRANT_PORT`) |
-| Flow API | URLs de PostgreSQL/MongoDB/Redis en 1Password (item `apps/flow`), como valores planos |
+| Flow API | PostgreSQL/MongoDB/Redis URLs in 1Password (item `apps/flow`), as plain values |
 
-Los backups y tareas operativas sobre las bases se documentan en `docs/OPERATIONS.md` §3.
+Backups and operational tasks on the databases are documented in `docs/OPERATIONS.md` §3.
 
 ---
 
-## 6. Monitoreo
+## 6. Monitoring
 
 **Namespace**: `observability`
 
-### Componentes
+### Components
 
-| Componente | Descripcion |
+| Component | Description |
 |-----------|-------------|
-| Prometheus | Retencion configurable, scrape via ServiceMonitor |
-| Grafana | Dashboards, datasource Prometheus |
-| Alertmanager | Alertas |
-| node-exporter | Metricas del host |
-| kube-state-metrics | Estado de objetos Kubernetes |
-| Headlamp | UI de gestion del cluster |
+| Prometheus | Configurable retention, scrape via ServiceMonitor |
+| Grafana | Dashboards, Prometheus datasource |
+| Alertmanager | Alerts |
+| node-exporter | Host metrics |
+| kube-state-metrics | Kubernetes object state |
+| Headlamp | Cluster management UI |
 
 ---
 
-## 7. Networking y Acceso
+## 7. Networking and Access
 
-### Acceso segmentado: publico (Cloudflare) vs privado (LAN + Tailscale)
+### Segmented access: public (Cloudflare) vs private (LAN + Tailscale)
 
-Ver ADR-011 en [DECISIONS.md](DECISIONS.md). Solo 2 de las 12 rutas son publicas de verdad (`portfolio`, `api` `/webhooks`) — el resto (ArgoCD, Grafana, Headlamp, Hubble, SonarQube UI, admin UI de Agent Gateway, OpenMemory UI/API, SonarQube MCP) son herramientas de administracion, accesibles solo desde la LAN de casa o el tailnet del usuario. OpenEBS (reemplazo de Longhorn, ver ADR-013) no expone UI web — no hay ruta equivalente que administrar.
+See ADR-011 in [DECISIONS.md](DECISIONS.md). Only 2 of the 12 routes are truly public (`portfolio`, `api` `/webhooks`) — the rest (ArgoCD, Grafana, Headlamp, Hubble, SonarQube UI, Agent Gateway admin UI, OpenMemory UI/API, SonarQube MCP) are administration tools, accessible only from the home LAN or the user's tailnet. OpenEBS (Longhorn's replacement, see ADR-013) exposes no web UI — there's no equivalent route to administer.
 
-Cada Gateway tiene una IP LAN fija, asignada via Cilium L2 Announcements (`CiliumLoadBalancerIPPool` + `CiliumL2AnnouncementPolicy` en `platform/networking/cilium-gateway/`, `spec.addresses` en cada `Gateway`):
+Each Gateway has a fixed LAN IP, assigned via Cilium L2 Announcements (`CiliumLoadBalancerIPPool` + `CiliumL2AnnouncementPolicy` in `platform/networking/cilium-gateway/`, `spec.addresses` on each `Gateway`):
 
-| Gateway / Servicio | IP fija |
+| Gateway / Service | Fixed IP |
 |---------|---------|
-| `cilium-gateway-main` (rutas genericas, incluidas las 3 de Agent Gateway via proxy) | `192.168.80.240` |
-| `private-dns` (CoreDNS, resuelve `internal.cristianpuenguenan.online` para LAN/Tailscale) | `192.168.80.253` |
+| `cilium-gateway-main` (generic routes, including the 3 Agent Gateway ones via proxy) | `192.168.80.240` |
+| `private-dns` (CoreDNS, resolves `internal.cristianpuenguenan.online` for LAN/Tailscale) | `192.168.80.253` |
 
-`agentgateway-mcp` ya no tiene IP LAN fija — es `ClusterIP`, solo alcanzable por el proxy interno de `main` (ver TLS en §3.1).
+`agentgateway-mcp` no longer has a fixed LAN IP — it's `ClusterIP`, reachable only via `main`'s internal proxy (see TLS in §3.1).
 
-Con la VM en el bridge real de Proxmox (`vmbr0`, ver [ADR-014](DECISIONS.md#adr-014-migración-de-k0slibvirtfedora-a-talos-linuxproxmox-ve-y-de-openebs-lvm-a-openebs-zfs-localpv)), las IPs de los Gateway son direcciones LAN reales — cualquier dispositivo de la LAN las alcanza directo, sin el port-forward de firewalld que exigia la NAT de libvirt (`ansible/host-network.yaml`, eliminado).
+With the VM on Proxmox's real bridge (`vmbr0`, see [ADR-014](DECISIONS.md#adr-014-migration-from-k0slibvirtfedora-to-talos-linuxproxmox-ve-and-from-openebs-lvm-to-openebs-zfs-localpv)), the Gateway IPs are real LAN addresses — any device on the LAN reaches them directly, without the firewalld port-forward that libvirt's NAT used to require (`ansible/host-network.yaml`, removed).
 
 ```
-Internet (solo portfolio + api /webhooks)
+Internet (only portfolio + api /webhooks)
   └── Cloudflare (DNS + WAF)
-        └── Cloudflare Tunnel (egreso desde cloudflared, dentro del cluster)
-              └── cilium-gateway-public:80 ──► Backend ClusterIP (portfolio/flow-api, por HTTPRoute)
+        └── Cloudflare Tunnel (egress from cloudflared, inside the cluster)
+              └── cilium-gateway-public:80 ──► Backend ClusterIP (portfolio/flow-api, via HTTPRoute)
 
-LAN fisica del homelab — acceso directo, sin forward-port
+Homelab's physical LAN — direct access, no port-forward
   ├── 192.168.80.240:443 TLS / :80 redirect (cilium-gateway-main,
-  │   incluidas las 3 rutas de agentgateway-mcp, reenviadas puertas
-  │   adentro en HTTP plano hacia su Service ClusterIP)
+  │   including the 3 agentgateway-mcp routes, forwarded internally
+  │   as plain HTTP to its ClusterIP Service)
   └── 192.168.80.253:53 (private-dns)
 
-Tailscale (dispositivos fuera de la LAN fisica, y el runner de CI)
-  └── Nodo Tailscale del hipervisor, rutas /32 acotadas a Proxmox y a la VM
-      (ver docs/CI_CD_HYPERVISOR_SETUP.md — NO se anuncia el /24 completo,
-      para no forzar todo el trafico LAN del operador por el tunel)
+Tailscale (devices outside the physical LAN, and the CI runner)
+  └── Hypervisor's Tailscale node, /32 routes scoped to Proxmox and the VM
+      (see docs/CI_CD_HYPERVISOR_SETUP.md — the full /24 is NOT advertised,
+      to avoid forcing all of the operator's LAN traffic through the tunnel)
         ├── 192.168.80.240 (cilium-gateway-main)
         └── 192.168.80.253 (private-dns, via Tailscale Split DNS)
 ```
 
-Que hostname resuelve contra que Gateway lo decide, para el trafico publico, la configuracion del tunel de Cloudflare (Zero Trust → Public Hostnames, gestionada fuera de Git); para LAN/Tailscale, `private-dns` (CoreDNS, `platform/networking/private-dns/`) resuelve `internal.cristianpuenguenan.online` a la IP fija correspondiente, y los hostnames de los LXC de datos (§5) a sus IPs en la LAN — ver `docs/OPERATIONS.md` para configurar Tailscale Split DNS.
+Which hostname resolves to which Gateway is decided, for public traffic, by the Cloudflare tunnel configuration (Zero Trust → Public Hostnames, managed outside Git); for LAN/Tailscale, `private-dns` (CoreDNS, `platform/networking/private-dns/`) resolves `internal.cristianpuenguenan.online` to the corresponding fixed IP, and the data LXC hostnames (§5) to their LAN IPs — see `docs/OPERATIONS.md` to configure Tailscale Split DNS.
 
-### Puertos expuestos
+### Exposed ports
 
-| Puerto | Protocolo | Descripcion |
+| Port | Protocol | Description |
 |--------|-----------|-------------|
-| 80/443 | TCP | 80 = redirect a HTTPS, 443 = TLS de `cilium-gateway-main` (IP LAN directa); incluye las 3 rutas de `agentgateway-mcp`, reenviadas puertas adentro |
-| 53 | UDP/TCP | DNS de `private-dns` (IP LAN directa) |
+| 80/443 | TCP | 80 = redirect to HTTPS, 443 = TLS on `cilium-gateway-main` (direct LAN IP); includes the 3 `agentgateway-mcp` routes, forwarded internally |
+| 53 | UDP/TCP | `private-dns` DNS (direct LAN IP) |
 
-### DNS y subdominios
+### DNS and subdomains
 
-`portfolio`/`api` resuelven via Cloudflare Tunnel (WAN). El resto de las rutas no tiene DNS publico util — resuelven via `private-dns` con Tailscale Split DNS restringido a `internal.cristianpuenguenan.online` (ver §11 en `docs/OPERATIONS.md`). El wildcard publico `*.cristianpuenguenan.online` técnicamente también matchea estos subdominios por DNS, pero la conexion TLS falla en el borde de Cloudflare (ningun Hostname configurado ahi) — no hay forma real de llegar a estas rutas desde fuera del tailnet.
+`portfolio`/`api` resolve via Cloudflare Tunnel (WAN). The rest of the routes have no useful public DNS — they resolve via `private-dns` with Tailscale Split DNS restricted to `internal.cristianpuenguenan.online` (see §11 in `docs/OPERATIONS.md`). The public wildcard `*.cristianpuenguenan.online` technically also matches these subdomains by DNS, but the TLS connection fails at the Cloudflare edge (no Hostname configured there) — there's no real way to reach these routes from outside the tailnet.
 
 ---
 
-## 8. Seguridad y Secretos
+## 8. Security and Secrets
 
-### Archivo local de secretos
+### Local secrets file
 
-Las credenciales de las LXC de datos vivian antes en `secrets/homelab.env` (plano, gitignored); desde ADR-018 viven cifradas en `ansible/data-services.env` (SOPS + age), consumido por CI via `sops exec-env` antes de correr `ansible/data-services.yaml`. En CI, el preflight de credenciales usa GitHub Actions secrets/vars para lo que Terraform consume (ver `docs/CI_CD_HYPERVISOR_SETUP.md`).
+The data LXC credentials used to live in `secrets/homelab.env` (plaintext, gitignored); since ADR-018 they live encrypted in `ansible/data-services.env` (SOPS + age), consumed by CI via `sops exec-env` before running `ansible/data-services.yaml`. In CI, the credentials preflight uses GitHub Actions secrets/vars for what Terraform consumes (see `docs/CI_CD_HYPERVISOR_SETUP.md`).
 
-### Gestion de Secretos en el Cluster (SOPS + age, ver ADR-018 y ADR-019)
+### Secrets Management in the Cluster (SOPS + age, see ADR-018 and ADR-019)
 
-1. **SOPS + age** es la unica fuente de verdad de los secretos de la aplicacion (dentro y fuera del cluster) — cada valor se cifra con la clave publica de `age` y se commitea cifrado al repo. No hay backend externo, no hay rate limit.
-2. **Terraform** (`terraform/cluster/secrets.tf`) crea los secrets iniciales de ArgoCD (`github-repo-creds`, `in-cluster-secret`).
-3. **`sops-secrets-operator`** (namespace `sops`) corre en el cluster con la clave privada de `age` montada, y traduce cada `SopsSecret` (CRD, cifrado) a un `Secret` de Kubernetes real. ArgoCD aplica el `SopsSecret` tal cual, cifrado — nunca necesita saber de SOPS.
-4. La **clave privada de `age`** es la unica pieza sensible fuera del repo: vive en el `Secret` que monta el operador, y su unico backup es un documento manual en 1Password (`sops-age-homelab-key`, vault "Homelab") — lectura unica para recuperacion de desastre, no una integracion activa. Desde ADR-019, 1Password no tiene ninguna otra integracion en el cluster ni en CI.
+1. **SOPS + age** is the single source of truth for application secrets (inside and outside the cluster) — each value is encrypted with the `age` public key and committed encrypted to the repo. No external backend, no rate limit.
+2. **Terraform** (`terraform/cluster/secrets.tf`) creates ArgoCD's initial secrets (`github-repo-creds`, `in-cluster-secret`).
+3. **`sops-secrets-operator`** (namespace `sops`) runs in the cluster with the `age` private key mounted, and translates each `SopsSecret` (CRD, encrypted) into a real Kubernetes `Secret`. ArgoCD applies the `SopsSecret` as-is, encrypted — it never needs to know about SOPS.
+4. The **`age` private key** is the only sensitive piece outside the repo: it lives in the Secret mounted by the operator, and its only backup is a manual document in 1Password (`sops-age-homelab-key`, vault "Homelab") — a one-time read for disaster recovery, not an active integration. Since ADR-019, 1Password has no other integration in the cluster or in CI.
 
-#### Inventario de `SopsSecret` (`*.sops.yaml` en el repo)
+#### `SopsSecret` inventory (`*.sops.yaml` in the repo)
 
 ```
-platform/argocd/repo-credentials.sops.yaml          -> PAT de GitHub para ArgoCD
-platform/networking/cert-manager/cloudflare-api-token.sops.yaml -> token API Cloudflare (DNS-01)
-platform/networking/cloudflared/token.sops.yaml     -> token del tunel Cloudflare
-platform/observability/secrets/grafana-admin.sops.yaml -> admin de Grafana
+platform/argocd/repo-credentials.sops.yaml          -> GitHub PAT for ArgoCD
+platform/networking/cert-manager/cloudflare-api-token.sops.yaml -> Cloudflare API token (DNS-01)
+platform/networking/cloudflared/token.sops.yaml     -> Cloudflare tunnel token
+platform/observability/secrets/grafana-admin.sops.yaml -> Grafana admin
 platform/devtools/openmemory/secrets.sops.yaml       -> OPENAI_API_KEY, QDRANT_API_KEY, ghcr-pull-secret
 workloads/flow/secrets.sops.yaml                     -> database-url, mongodb-url, redis-url
-workloads/sonarqube/secrets.sops.yaml                -> credenciales de DB, passcode de monitoring
-ansible/data-services.env (dotenv, no CRD)           -> credenciales de Postgres/Mongo/Redis/Qdrant, solo CI
+workloads/sonarqube/secrets.sops.yaml                -> DB credentials, monitoring passcode
+ansible/data-services.env (dotenv, not a CRD)        -> Postgres/Mongo/Redis/Qdrant credentials, CI only
 ```
 
 ---
 
-## 9. GitOps y Orden de Despliegue
+## 9. GitOps and Deployment Order
 
-Orden real por `argocd.argoproj.io/sync-wave` (verificado en `gitops/apps/**`, no un valor estimado):
+Actual order by `argocd.argoproj.io/sync-wave` (verified in `gitops/apps/**`, not an estimated value):
 
 ```
 root-app (gitops/root-app.yaml)
@@ -519,32 +519,32 @@ root-app (gitops/root-app.yaml)
               └── Wave 9: flow, portfolio
 ```
 
-### Dependencias implicitas
+### Implicit dependencies
 
 ```
-OpenEBS ───────────────────────► PVCs del cluster (Prometheus, Grafana, SonarQube, Alertmanager)
+OpenEBS ───────────────────────► Cluster PVCs (Prometheus, Grafana, SonarQube, Alertmanager)
 
-cert-manager (letsencrypt-prod-cloudflare-dns01) ──► wildcard-internal-online-tls ──► listener HTTPS de main
-                                                └──► wildcard-home-tls (emitido, no referenciado — ver §3.1 TLS)
+cert-manager (letsencrypt-prod-cloudflare-dns01) ──► wildcard-internal-online-tls ──► main's HTTPS listener
+                                                └──► wildcard-home-tls (issued, not referenced — see §3.1 TLS)
 
-1Password (vault Homelab) ──► ExternalSecrets sync ──► todos los secrets
+1Password (Homelab vault) ──► ExternalSecrets sync ──► all secrets
 
-LXC postgresql (externo, §5) ──► SonarQube (base sonarqube), Flow API (base homelab)
-LXC qdrant (externo, §5) ──────► OpenMemory
-LXC mongodb / redis (externos) ─► Flow API (URLs desde 1Password, item apps/flow)
+postgresql LXC (external, §5) ──► SonarQube (sonarqube database), Flow API (homelab database)
+qdrant LXC (external, §5) ──────► OpenMemory
+mongodb / redis LXCs (external) ─► Flow API (URLs from 1Password, item apps/flow)
 
-private-dns ──► los hostnames *.internal de los LXC resuelven para los consumers del cluster
+private-dns ──► the LXCs' *.internal hostnames resolve for cluster consumers
 ```
 
 ---
 
-## 10. Almacenamiento y Recursos
+## 10. Storage and Resources
 
-### Volumenes persistentes (estimado)
+### Persistent volumes (estimated)
 
-Las bases de datos ya no consumen PVCs del cluster — viven en los LXC de Proxmox (§5), con disco en `local-lvm` del host de Proxmox.
+Databases no longer consume cluster PVCs — they live on the Proxmox LXCs (§5), with disk on the Proxmox host's `local-lvm`.
 
-| Componente | Tamanio | StorageClass |
+| Component | Size | StorageClass |
 |-----------|---------|-------------|
 | Prometheus | 20Gi | openebs-zfs |
 | Grafana | 5Gi | openebs-zfs |
@@ -552,22 +552,22 @@ Las bases de datos ya no consumen PVCs del cluster — viven en los LXC de Proxm
 | SonarQube | 10Gi | openebs-zfs |
 | **Total** | **~37Gi** | |
 
-### Requerimiento minimo de la VM
+### Minimum VM requirement
 
-- **CPU**: 4 cores (default de este repo: 8 vCPU, `var.vcpu`)
+- **CPU**: 4 cores (this repo's default: 8 vCPU, `var.vcpu`)
 - **RAM**: 8 GB (default: 16 GB, `var.memory_mib`)
-- **Disco**: 2 discos — instalacion de Talos (default: 120 GB, `var.disk_size_gb`, `virtio0`) + dedicado al zpool de OpenEBS ZFS (default: 100 GB, `var.zfs_disk_size_gb`, `virtio1`, sin formatear)
-- **OS**: Talos Linux (ISO generado por el Image Factory, descargado por `proxmox_download_file.talos_iso`)
+- **Disk**: 2 disks — Talos installation (default: 120 GB, `var.disk_size_gb`, `virtio0`) + dedicated to the OpenEBS ZFS zpool (default: 100 GB, `var.zfs_disk_size_gb`, `virtio1`, unformatted)
+- **OS**: Talos Linux (ISO generated by the Image Factory, downloaded by `proxmox_download_file.talos_iso`)
 
-El **host** (Proxmox VE) necesita margen adicional sobre estos numeros para el hipervisor + overhead de la VM.
+The **host** (Proxmox VE) needs additional headroom on top of these numbers for the hypervisor + VM overhead.
 
 ---
 
-## 11. Flujo de Instalacion Inicial
+## 11. Initial Installation Flow
 
-### Fase 0 — Preflight (Ansible)
+### Phase 0 — Preflight (Ansible)
 
-Valida que las credenciales en `secrets/homelab.env` no esten vacias/invalidas antes de gastar tiempo aprovisionando infraestructura.
+Validates that the credentials in `secrets/homelab.env` aren't empty/invalid before spending time provisioning infrastructure.
 
 ```bash
 set -a; source secrets/homelab.env; set +a
@@ -575,9 +575,9 @@ cd ansible
 ansible-playbook preflight.yaml
 ```
 
-### Fase 1 — VM Talos en Proxmox (`terraform/infra`)
+### Phase 1 — Talos VM on Proxmox (`terraform/infra`)
 
-Terraform descarga el ISO de Talos (Image Factory), crea la VM en Proxmox con dos discos, aplica la machine config (incluye el particionado declarativo del disco de ZFS), bootstrapea el cluster y genera `terraform/infra/generated/{kubeconfig,talosconfig}`. En la misma etapa aprovisiona los cuatro LXC de datos (§5, `terraform/infra/lxc.tf`).
+Terraform downloads the Talos ISO (Image Factory), creates the VM in Proxmox with two disks, applies the machine config (includes the declarative partitioning of the ZFS disk), bootstraps the cluster, and generates `terraform/infra/generated/{kubeconfig,talosconfig}`. In the same stage it provisions the four data LXCs (§5, `terraform/infra/lxc.tf`).
 
 ```bash
 cd terraform/infra
@@ -586,9 +586,9 @@ terraform apply
 kubectl --kubeconfig generated/kubeconfig get nodes
 ```
 
-### Fase 2 — Bootstrap de Kubernetes (`terraform/cluster`)
+### Phase 2 — Kubernetes Bootstrap (`terraform/cluster`)
 
-Crea los namespaces, instala Cilium y ArgoCD (`helm_release`) y el Job que crea el zpool de OpenEBS ZFS, en orden via `depends_on`.
+Creates the namespaces, installs Cilium and ArgoCD (`helm_release`), and the Job that creates the OpenEBS ZFS zpool, in order via `depends_on`.
 
 ```bash
 cd ../cluster
@@ -596,19 +596,19 @@ terraform init -backend-config=backend.hcl
 terraform apply
 ```
 
-### Fase 3 — Activar GitOps
+### Phase 3 — Activate GitOps
 
 ```bash
 kubectl apply -f gitops/root-app.yaml
 ```
 
-Seguir progreso:
+Follow progress:
 
 ```bash
 kubectl -n argocd get applications -w
 ```
 
-### Fase 4 — Cargar los secretos reales (manual, no corre en CI)
+### Phase 4 — Load the real secrets (manual, doesn't run in CI)
 
 ```bash
 cp secrets/homelab.env.example secrets/homelab.env && $EDITOR secrets/homelab.env
@@ -620,7 +620,7 @@ export SOPS_AGE_KEY_FILE=~/.sops-keys/homelab.key.txt
 
 ## Troubleshooting
 
-**Apps en Unknown — cluster secret:**
+**Apps in Unknown — cluster secret:**
 ```bash
 CA_DATA=$(kubectl get configmap kube-root-ca.crt -n kube-system -o jsonpath='{.data.ca\.crt}' | base64 -w0)
 kubectl apply -f - <<EOF
@@ -644,18 +644,18 @@ EOF
 kubectl get clustersecretstore onepassword -o wide
 kubectl describe clustersecretstore onepassword
 ```
-Causas típicas: falta el Secret `onepassword-service-account-token` en `secret-management`, el token expiró, o perdió acceso al vault "Homelab".
+Typical causes: the `onepassword-service-account-token` Secret is missing in `secret-management`, the token expired, or it lost access to the "Homelab" vault.
 
-**Volumen OpenEBS no provisiona (Pending):**
+**OpenEBS volume not provisioning (Pending):**
 ```bash
 kubectl get zfsnode -n openebs
 kubectl -n openebs logs -l app=openebs-zfs-controller -c openebs-zfs-plugin
 
-# Talos no tiene shell ni herramientas de ZFS en el host: se inspecciona
-# desde un pod privilegiado con /dev montado (mismo patron que
-# kubernetes_job_v1.openebs_zpool_create en terraform/cluster/storage.tf) -
-# las syscalls/ioctls de ZFS son a nivel de kernel, compartidas por todos
-# los containers del nodo, sin necesidad de chroot al host.
+# Talos has no shell or ZFS tools on the host: inspect it from a privileged
+# pod with /dev mounted (same pattern as
+# kubernetes_job_v1.openebs_zpool_create in terraform/cluster/storage.tf) -
+# ZFS syscalls/ioctls are kernel-level, shared by all containers on the
+# node, without needing to chroot into the host.
 kubectl debug node/talos -it --image=alpine:3.20 -- \
   sh -c "apk add --no-cache zfs >/dev/null && zpool status zfspv-pool"
 ```

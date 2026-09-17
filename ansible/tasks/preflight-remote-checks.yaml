@@ -2,7 +2,7 @@
 # Confirms the PAT actually works against the real repo, not just that it has
 # a value, before terraform apply runs.
 
-- name: Verificar que el PAT de GitHub tiene acceso al repo de ArgoCD
+- name: Verify the GitHub PAT has access to the ArgoCD repo
   ansible.builtin.uri:
     url: "https://api.github.com/repos/{{ argocd_repo_url | regex_replace('^https://github.com/', '') }}"
     method: GET

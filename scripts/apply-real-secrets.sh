@@ -18,14 +18,14 @@ get() {
 set_field() {
   local file="$1" path="$2" value="$3"
   if [ -z "$value" ]; then
-    echo "skip  $file $path (vacio)"
+    echo "skip  $file $path (empty)"
     return
   fi
   sops set "$file" "$path" "$(printf '%s' "$value" | jq -Rs .)"
   echo "set   $file $path"
 }
 
-# --- ansible/data-services.env (dotenv, se re-encripta completo) ---
+# --- ansible/data-services.env (dotenv, fully re-encrypted) ---
 PG_USER="$(get POSTGRESQL_APP_USERNAME)"
 PG_PASS="$(get POSTGRESQL_APP_PASSWORD)"
 MONGO_PASS="$(get MONGODB_APP_PASSWORD)"
@@ -47,7 +47,7 @@ EOF
   sops encrypt -i ansible/data-services.env
   echo "set   ansible/data-services.env (7 keys)"
 else
-  echo "skip  ansible/data-services.env (nada para cargar)"
+  echo "skip  ansible/data-services.env (nothing to load)"
 fi
 
 # --- workloads/sonarqube/secrets.sops.yaml ---
@@ -72,7 +72,7 @@ if [ -n "$GHCR_USER" ] && [ -n "$GHCR_PAT" ]; then
   set_field platform/devtools/openmemory/secrets.sops.yaml \
     '["spec"]["secretTemplates"][1]["stringData"][".dockerconfigjson"]' "$DOCKERCFG"
 else
-  echo "skip  platform/devtools/openmemory/secrets.sops.yaml ghcr-pull-secret (GHCR_USERNAME/GHCR_PAT vacios)"
+  echo "skip  platform/devtools/openmemory/secrets.sops.yaml ghcr-pull-secret (GHCR_USERNAME/GHCR_PAT empty)"
 fi
 
 # --- platform/networking/cloudflared/token.sops.yaml ---
@@ -102,8 +102,8 @@ set_field workloads/flow/secrets.sops.yaml \
   '["spec"]["secretTemplates"][0]["stringData"]["redis-url"]' "$(get FLOW_REDIS_URL)"
 
 echo
-echo "Listo. Revisa 'git diff --stat' y commitea los archivos que cambiaron."
-echo "IMPORTANTE: postgresql y mongodb solo aplican POSTGRES_PASSWORD/MONGO_INITDB_ROOT_PASSWORD"
-echo "la primera vez que arrancan sobre un volumen vacio. Si ya corrieron antes con un valor"
-echo "distinto, cambiar el secret NO les cambia la password real - hay que hacerlo a mano"
-echo "(ALTER USER/ALTER ROLE) o borrar /srv/postgresql y /srv/mongodb en la LXC para reinicializar."
+echo "Done. Review 'git diff --stat' and commit the files that changed."
+echo "IMPORTANT: postgresql and mongodb only apply POSTGRES_PASSWORD/MONGO_INITDB_ROOT_PASSWORD"
+echo "the first time they start on an empty volume. If they already ran before with a"
+echo "different value, changing the secret does NOT change their real password - it has to be"
+echo "done by hand (ALTER USER/ALTER ROLE) or by deleting /srv/postgresql and /srv/mongodb on the LXC to reinitialize."

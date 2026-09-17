@@ -1,62 +1,62 @@
-# Tareas Pendientes del Homelab
+# Homelab Pending Tasks
 
-Este documento lista las tareas planificadas para mejorar la automatizacion y el mantenimiento del cluster.
+This document lists the tasks planned to improve cluster automation and maintenance.
 
 ---
 
-## 1. Integrar Renovate para Actualizaciones Automaticas
+## 1. Integrate Renovate for Automatic Updates
 
-**Motivacion:** Actualmente las versiones de charts Helm e imagenes Docker estan fijadas manualmente. Cuando sale una nueva version (ej. SonarQube), hay que detectarlo y actualizar el `targetRevision` a mano.
+**Motivation:** Currently Helm chart and Docker image versions are pinned manually. When a new version comes out (e.g. SonarQube), it has to be detected and the `targetRevision` updated by hand.
 
-**Tareas:**
+**Tasks:**
 
-- [ ] Instalar/configurar Renovate (GitHub App o self-hosted) para escanear el repositorio.
-- [ ] Crear `renovate.json` en la raiz del repo con reglas para:
-  - Detectar nuevas versiones de charts de Helm (ej. `sonarqube`, `argocd`, etc.).
-  - Detectar nuevas versiones de imagenes Docker definidas en values de Helm.
-  - Agrupar updates de tipo `patch` y `minor` para reducir ruido.
-  - Separar updates `major` en PRs individuales por riesgo.
-- [ ] Verificar que Renovate detecte correctamente las imagenes actuales (ej. `sonarqube:26.3.0.120487-community`).
-- [ ] Documentar en `docs/OPERATIONS.md` como aprobar/rechazar PRs de Renovate.
+- [ ] Install/configure Renovate (GitHub App or self-hosted) to scan the repository.
+- [ ] Create `renovate.json` at the repo root with rules to:
+  - Detect new versions of Helm charts (e.g. `sonarqube`, `argocd`, etc.).
+  - Detect new versions of Docker images defined in Helm values.
+  - Group `patch` and `minor` updates to reduce noise.
+  - Separate `major` updates into individual PRs due to risk.
+- [ ] Verify that Renovate correctly detects the current images (e.g. `sonarqube:26.3.0.120487-community`).
+- [ ] Document in `docs/OPERATIONS.md` how to approve/reject Renovate PRs.
 
-**Archivos afectados:**
-- `renovate.json` (nuevo)
+**Affected files:**
+- `renovate.json` (new)
 - `docs/OPERATIONS.md`
 
 ---
 
-## 2. Formalizar y Documentar Conventional Commits
+## 2. Formalize and Document Conventional Commits
 
-**Motivacion:** El repositorio ya usa Conventional Commits de facto (`feat(sonarqube):`, `fix(networking):`, `refactor(observability):`), pero no esta documentado ni hay validacion automatica.
+**Motivation:** The repository already uses Conventional Commits de facto (`feat(sonarqube):`, `fix(networking):`, `refactor(observability):`), but it is not documented and there is no automatic validation.
 
-**Tareas:**
+**Tasks:**
 
-- [ ] Documentar la convencion de commits en `docs/CONTRIBUTING.md` o similar:
-  - Tipos permitidos: `feat`, `fix`, `docs`, `refactor`, `chore`, `ci`, `test`, `perf`.
-  - Formato: `tipo(alcance): descripcion`.
-  - Alcances comunes: `sonarqube`, `networking`, `storage`, `observability`, `ansible`, `bootstrap`, `security`.
-- [ ] (Opcional) Agregar validacion de mensajes de commit en CI (pre-commit hook o GitHub Action) con herramientas como `commitlint`.
-- [ ] Revisar el historial reciente para identificar inconsistencias y corregir si es necesario.
+- [ ] Document the commit convention in `docs/CONTRIBUTING.md` or similar:
+  - Allowed types: `feat`, `fix`, `docs`, `refactor`, `chore`, `ci`, `test`, `perf`.
+  - Format: `type(scope): description`.
+  - Common scopes: `sonarqube`, `networking`, `storage`, `observability`, `ansible`, `bootstrap`, `security`.
+- [ ] (Optional) Add commit message validation in CI (pre-commit hook or GitHub Action) with tools like `commitlint`.
+- [ ] Review recent history to identify inconsistencies and fix them if needed.
 
-**Archivos afectados:**
-- `docs/CONTRIBUTING.md` (nuevo)
-- `.github/workflows/commitlint.yaml` (opcional)
-
----
-
-## 3. Migrar ArgoCD de polling a webhook de GitHub — REVERTIDO (ADR-019)
-
-**Motivacion:** El polling original tenia un intervalo de 180s. Un webhook de GitHub entrega notificaciones en segundos tras cada push, eliminando la latencia innecesaria.
-
-**Estado real:** Se implemento (`webhook_secret` en 1Password, `platform/argocd/webhook-externalsecret.yaml` lo sincronizaba a `argocd-secret`) y funciono por un tiempo, pero dependia del `ClusterSecretStore` de 1Password, que quedo permanentemente en `rate limit exceeded` (ver ADR-018/019). Se revirtio por completo el 2026-09-16: se elimino el webhook (repo de GitHub y manifiestos), el `ClusterSecretStore` `onepassword`, y `timeout.reconciliation` volvio a `180s` como unico mecanismo de sync. Ver ADR-019 en `docs/DECISIONS.md` para el detalle y el plan si se quiere reimplementar mas adelante con un secret que no dependa de un backend externo con rate limit.
-
-**Incidente relacionado:** El 2026-05-13 el webhook (version original) se rompio silenciosamente y el cluster estuvo sin sincronizar hasta el 2026-09-07 sin que nadie lo notara, porque en ese momento `timeout.reconciliation` estaba en `0s` (sin red de seguridad). Ver el comentario en `bootstrap/argocd/values.yaml` y `docs/DECISIONS.md` para el detalle — sigue siendo la razon por la que `timeout.reconciliation` nunca debe volver a `0s`.
+**Affected files:**
+- `docs/CONTRIBUTING.md` (new)
+- `.github/workflows/commitlint.yaml` (optional)
 
 ---
 
-## Notas
+## 3. Migrate ArgoCD from polling to a GitHub webhook — REVERTED (ADR-019)
 
-- Prioridad alta: Renovate, ya que reduce el trabajo manual de mantenimiento.
-- Prioridad media: Documentar Conventional Commits, para estandarizar contribuciones.
-- Prioridad media: Migrar ArgoCD a webhook para sync inmediato tras push.
-- Fecha de creacion: 2026-05-11
+**Motivation:** The original polling had a 180s interval. A GitHub webhook delivers notifications within seconds of each push, eliminating unnecessary latency.
+
+**Actual status:** It was implemented (`webhook_secret` in 1Password, `platform/argocd/webhook-externalsecret.yaml` synced it to `argocd-secret`) and worked for a while, but it depended on 1Password's `ClusterSecretStore`, which got permanently stuck in `rate limit exceeded` (see ADR-018/019). It was fully reverted on 2026-09-16: the webhook was removed (GitHub repo and manifests), the `onepassword` `ClusterSecretStore`, and `timeout.reconciliation` went back to `180s` as the sole sync mechanism. See ADR-019 in `docs/DECISIONS.md` for details and the plan if it is to be reimplemented later with a secret that doesn't depend on a rate-limited external backend.
+
+**Related incident:** On 2026-05-13 the webhook (original version) broke silently and the cluster went unsynced until 2026-09-07 without anyone noticing, because at that time `timeout.reconciliation` was set to `0s` (no safety net). See the comment in `bootstrap/argocd/values.yaml` and `docs/DECISIONS.md` for details — this remains the reason why `timeout.reconciliation` must never be set back to `0s`.
+
+---
+
+## Notes
+
+- High priority: Renovate, since it reduces manual maintenance work.
+- Medium priority: Document Conventional Commits, to standardize contributions.
+- Medium priority: Migrate ArgoCD to webhook for immediate sync after push.
+- Creation date: 2026-05-11
