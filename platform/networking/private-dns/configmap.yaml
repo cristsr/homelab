@@ -19,6 +19,13 @@ data:
             192.168.80.240 agentgateway.internal.cristianpuenguenan.online
             192.168.80.240 mcp.internal.cristianpuenguenan.online
             192.168.80.240 openmemory-api.internal.cristianpuenguenan.online
+            192.168.80.240 sonarr.internal.cristianpuenguenan.online
+            192.168.80.240 radarr.internal.cristianpuenguenan.online
+            192.168.80.240 prowlarr.internal.cristianpuenguenan.online
+            192.168.80.240 qbittorrent.internal.cristianpuenguenan.online
+            192.168.80.240 bazarr.internal.cristianpuenguenan.online
+            192.168.80.240 jellyfin.internal.cristianpuenguenan.online
+            192.168.80.240 overseerr.internal.cristianpuenguenan.online
             192.168.80.31 postgres.internal.cristianpuenguenan.online
             192.168.80.32 mongodb.internal.cristianpuenguenan.online
             192.168.80.33 qdrant.internal.cristianpuenguenan.online
