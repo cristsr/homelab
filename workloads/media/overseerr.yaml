@@ -15,17 +15,14 @@ spec:
     spec:
       containers:
         - name: overseerr
-          image: sctx/overseerr:1.35.0
+          # Overseerr is Plex-only at onboarding and never supported Jellyfin;
+          # Jellyseerr is its fork built for Jellyfin, same UI and config shape.
+          image: fallenbagel/jellyseerr:2.6.0
           ports:
             - containerPort: 5055
-          # The image carries its own config directory inside /app, which no
-          # volume backs; this points the app at the claim instead.
-          env:
-            - name: CONFIG_DIRECTORY
-              value: /config
           volumeMounts:
             - name: config
-              mountPath: /config
+              mountPath: /app/config
           resources:
             requests:
               cpu: 25m
