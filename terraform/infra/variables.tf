@@ -63,6 +63,12 @@ variable "zfs_disk_size_gb" {
   default     = 100
 }
 
+variable "media_disk_size_gb" {
+  description = "Dedicated disk size (vdc) for the media library's OpenEBS ZFS LocalPV zpool (GB)"
+  type        = number
+  default     = 1024
+}
+
 variable "proxmox_datastore_id" {
   description = "Proxmox datastore where the disks and downloaded ISO live"
   type        = string
