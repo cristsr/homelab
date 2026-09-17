@@ -1,0 +1,71 @@
+#!/bin/sh
+#
+# commit-msg -- enforces Conventional Commits and English, repo-wide.
+#
+# Install once per clone (core.hooksPath is local config, it does not clone):
+#   git config core.hooksPath .githooks
+#
+# Bypass the language check, for the rare message that must quote Spanish:
+#   SKIP_LANG_CHECK=1 git commit ...
+#
+set -u
+
+msg_file="${1:-}"
+[ -n "$msg_file" ] && [ -f "$msg_file" ] || exit 0
+
+TYPES='feat|fix|chore|docs|refactor|test|ci|build|perf|style|revert|rename'
+
+# The subject is the first non-comment, non-blank line.
+subject=$(sed '/^#/d' "$msg_file" | sed -n '/[^[:space:]]/{p;q;}')
+[ -n "$subject" ] || exit 0
+
+# Let git be git: merges, reverts and autosquash markers.
+case "$subject" in
+  Merge*|Revert*|fixup!*|squash!*|amend!*) exit 0 ;;
+esac
+
+red=''; bold=''; reset=''
+if [ -t 2 ]; then
+  red=$(printf '\033[31m'); bold=$(printf '\033[1m'); reset=$(printf '\033[0m')
+fi
+
+reject() {
+  printf '%s\n' "${red}${bold}commit-msg: rejected${reset}" >&2
+  printf '%s\n' "$1" >&2
+  printf '\n  subject: %s\n\n' "$subject" >&2
+  exit 1
+}
+
+# --- Conventional Commits ----------------------------------------------------
+if ! printf '%s' "$subject" | grep -Eq "^($TYPES)(\([a-z0-9._/-]+\))?!?: .*[^[:space:]]"; then
+  reject "The subject must follow Conventional Commits:
+
+    <type>(<scope>): <description>
+
+  Allowed types: $(printf '%s' "$TYPES" | tr '|' ' ')
+
+  The scope is optional, the description is mandatory. Examples:
+
+    feat(networking): pin LB IPs per-Service
+    fix: PodSecurity labels for the tetragon namespace
+    chore(deps): bump cilium to 1.20.1"
+fi
+
+# --- English only ------------------------------------------------------------
+# Two signals: accented characters, and a list of Spanish words that have no
+# English homograph (ambiguous ones like "no"/"con"/"la" are deliberately
+# absent -- "no-op" and "LA" would trip them).
+if [ "${SKIP_LANG_CHECK:-0}" != "1" ]; then
+  es_words='el|los|las|del|para|desde|mover|migrar|agregar|corregir|reemplazar|quitar|sacar|fijar|esperar|actualizar|acotar|permitir|resolver|renombrar|importar|confirmar|desactivar|forzar|crear|eliminar|cambiar|arreglar|servidor|nodo|fuente|credenciales|servicios|configuracion|fuera|dentro|hasta|tambien|segun|falta|sobra'
+
+  if printf '%s' "$subject" | grep -Eq '[áéíóúüñ¿¡]' ||
+     printf '%s' "$subject" | grep -Eqi "(^|[^a-zA-Z])($es_words)([^a-zA-Z]|$)"; then
+    reject "Commit messages are written in English in this repo.
+
+  Rewrite the subject in English. If the message genuinely must be Spanish:
+
+    SKIP_LANG_CHECK=1 git commit ..."
+  fi
+fi
+
+exit 0

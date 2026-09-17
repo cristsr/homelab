@@ -1,0 +1,6 @@
+# Shell scripts and git hooks are executed by the shell, so they must keep LF
+# endings. Without this, core.autocrlf=true (Windows) checks them out with CRLF
+# and the shebang breaks: "bad interpreter: /bin/sh^M".
+.githooks/*     text eol=lf
+*.sh            text eol=lf
+.gitattributes  text eol=lf

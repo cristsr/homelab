@@ -121,8 +121,8 @@ All documentation is located in the [`docs/`](./docs/) folder:
 > Requires Proxmox VE running on the hypervisor and access to its API.
 
 ```bash
-# 1. Clone repo
-git clone git@github.com:cristsr/homelab.git && cd homelab
+# 1. Clone repo and install the git hooks (validates commit messages)
+git clone git@github.com:cristsr/homelab.git && cd homelab && ./scripts/install-git-hooks.sh
 
 # 2. Configure secrets (infra + apps, a single file, never committed)
 cp secrets/homelab.env.example secrets/homelab.env

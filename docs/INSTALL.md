@@ -90,7 +90,12 @@ ansible --version
 ```bash
 git clone git@github.com:cristsr/homelab.git
 cd homelab
+
+# Install the git hooks (once per clone, idempotent)
+./scripts/install-git-hooks.sh
 ```
+
+`core.hooksPath` lives in `.git/config`, which is not cloned, so the installer has to be run on each machine. Without it the `commit-msg` hook never runs and commit messages are not validated.
 
 ---
 
