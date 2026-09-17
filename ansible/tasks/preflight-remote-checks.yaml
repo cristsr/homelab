@@ -1,12 +1,6 @@
 ---
-# Un token vacio ya fue descartado por preflight-secrets.yaml; esto valida
-# que el PAT efectivamente funciona contra el repo real, no solo que tiene
-# forma de token. Corre en localhost, antes de terraform apply, asi que un
-# PAT revocado se detecta en segundos en vez de a mitad del bootstrap del
-# cluster.
-#
-# Los tokens de Cloudflare/cloudflared/1Password ya no se validan aca - CI
-# no los consume (solo Terraform: argocd_github_pat).
+# Confirms the PAT actually works against the real repo, not just that it has
+# a value, before terraform apply runs.
 
 - name: Verificar que el PAT de GitHub tiene acceso al repo de ArgoCD
   ansible.builtin.uri:

@@ -1,10 +1,6 @@
-# Levanta los cuatro motores de datos (PostgreSQL, MongoDB, Qdrant, Redis)
-# como contenedores Podman gestionados por systemd (Quadlet), con
-# auto-update via `podman-auto-update.timer`. Las credenciales nunca se
-# hardcodean aca: se leen del mismo `secrets/homelab.env` que ya exporta
-# `ansible/preflight.yaml` (`set -a; source secrets/homelab.env; set +a`),
-# asi cada motor termina usando las mismas credenciales que los
-# ExternalSecret de Kubernetes ya referencian.
+# Provisions the four data-service engines as systemd-managed Podman
+# containers (Quadlet). Credentials are always read from the environment,
+# never hardcoded.
 ---
 - name: Provision data-service engines via Podman Quadlet
   hosts: data_lxcs

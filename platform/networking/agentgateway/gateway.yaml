@@ -11,13 +11,9 @@ spec:
       group: agentgateway.dev
       kind: AgentgatewayParameters
   listeners:
-    # HTTP plano a proposito: el controller de Agent Gateway (v1.1.0) ignora
-    # silenciosamente los listeners HTTPS (no crea el listener en status ni
-    # el puerto en el Service) — ver ADR-012. Este listener ya no se expone
-    # con IP externa (Service ClusterIP, agentgateway.yaml): el unico que lo
-    # alcanza es el proxy interno de `main`, que termina TLS con la CA
-    # interna y reenvia para aca (platform/networking/cilium-gateway/
-    # httproute-agentgateway-proxy.yaml).
+    # Plain HTTP on purpose: the Agent Gateway controller silently ignores
+    # HTTPS listeners. Only the internal `main` proxy reaches this listener,
+    # after terminating TLS itself.
     - name: http
       protocol: HTTP
       port: 80

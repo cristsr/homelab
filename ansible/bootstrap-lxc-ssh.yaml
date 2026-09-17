@@ -1,8 +1,6 @@
-# Provisions SSH access to the data LXCs from the Proxmox host, via
-# `pct exec` - the only path available, since Proxmox has no cloud-init for
-# LXC (cicustom is QEMU-only) and Terraform manages no key/user for these
-# containers (see ADR-016). Never touches terraform/infra/lxc.tf or any other
-# Terraform file.
+# Provisions SSH access to the data LXCs from the Proxmox host via `pct exec` -
+# Proxmox has no cloud-init for LXC, and Terraform manages no key/user for
+# these containers.
 ---
 - name: Bootstrap SSH access to the data LXCs
   hosts: data_lxcs

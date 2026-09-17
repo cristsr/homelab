@@ -1,9 +1,6 @@
-# Este null_resource ejecuta el script de adopcion de secretos de Cilium
-# de manera local antes de cada upgrade/sync del chart, garantizando la idempotencia
-# del Helm release cuando Cilium ha modificado anotaciones del GatewayClass y RoleBindings.
+# Re-adopts the Cilium Gateway resources before each chart upgrade.
 resource "null_resource" "adopt_cilium_gateway_secrets" {
   triggers = {
-    # El trigger siempre cambia para que se ejecute en cada apply (simulando un hook presync).
     timestamp = timestamp()
   }
 

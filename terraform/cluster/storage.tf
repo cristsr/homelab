@@ -5,7 +5,6 @@ resource "kubernetes_job_v1" "openebs_zpool_create" {
   }
 
   spec {
-    # Limpiar el job después de que termine exitosamente (opcional, util para que no ensucie)
     ttl_seconds_after_finished = 3600
     backoff_limit              = 3
 
@@ -16,7 +15,7 @@ resource "kubernetes_job_v1" "openebs_zpool_create" {
       spec {
         restart_policy = "OnFailure"
 
-        # Correr unicamente en el nodo que actua de controlplane/storage (Talos)
+        # Runs only on the control-plane node, which also acts as storage.
         node_selector = {
           "node-role.kubernetes.io/control-plane" = ""
         }
@@ -35,13 +34,8 @@ resource "kubernetes_job_v1" "openebs_zpool_create" {
             privileged = true
           }
 
-          # Talos no tiene shell/binarios de userspace en el host (por diseno -
-          # nsenter+chroot al host falla con "can't execute 'sh'"), asi que las
-          # herramientas de ZFS corren DENTRO del contenedor contra el device
-          # del host, montando solo /dev (no todo el host root). El kernel
-          # module zfs ya esta cargado por Talos (kernel.modules en talos.tf) -
-          # las syscalls/ioctls de ZFS son a nivel de kernel, compartido por
-          # todos los containers del nodo, sin importar el namespace.
+          # Talos has no shell or userspace binaries on the host, so ZFS
+          # tooling runs inside this container instead, mounting only /dev.
           volume_mount {
             name       = "dev"
             mount_path = "/dev"
@@ -54,14 +48,10 @@ resource "kubernetes_job_v1" "openebs_zpool_create" {
             set -e
             apk add --no-cache zfs util-linux >/dev/null
 
-            # La particion la crea Talos de forma declarativa (RawVolumeConfig
-            # "openebs-zfs" en terraform/infra/talos.tf) con partition label
-            # r-openebs-zfs. Talos no corre udev, asi que /dev/disk/by-partlabel/
-            # no existe - se resuelve el device real con blkid (confirmado:
-            # PARTLABEL=r-openebs-zfs -> /dev/vdb1 en este cluster).
+            # Talos doesn't run udev, so /dev/disk/by-partlabel/ doesn't
+            # exist; resolve the real device with blkid instead.
             ZFS_DEVICE=$(blkid -o device -t PARTLABEL=r-openebs-zfs)
 
-            # Comprobar si el zpool ya existe
             if ! zpool list zfspv-pool; then
               echo "Zpool no existe. Creando en $ZFS_DEVICE..."
               zpool create -f \
@@ -88,7 +78,6 @@ resource "kubernetes_job_v1" "openebs_zpool_create" {
     }
   }
 
-  # Nos aseguramos de que el namespace y la red básica (Cilium) existan
   depends_on = [
     helm_release.cilium,
     kubernetes_namespace_v1.namespaces

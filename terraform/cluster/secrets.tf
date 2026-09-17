@@ -14,8 +14,8 @@ resource "kubernetes_secret_v1" "github_repo_creds" {
     }
   }
 
-  # El provider base64-codifica los valores de `data` automaticamente
-  # (equivalente a `stringData` en un manifest crudo).
+  # The provider base64-encodes `data` values automatically, equivalent to
+  # `stringData` in a raw manifest.
   data = {
     type     = "git"
     url      = "https://github.com/${var.argocd_github_username}"

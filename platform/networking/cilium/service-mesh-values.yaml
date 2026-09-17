@@ -5,24 +5,15 @@ authentication:
       enabled: true
       install:
         enabled: true
-        # El chart crea cilium-spire sin ningun label de PodSecurity -
-        # baseline (el default del cluster) bloquea el DaemonSet
-        # spire-agent (hostNetwork, hostPID, hostPath) y el StatefulSet
-        # spire-server (hostPath). existingNamespace:true saca al chart de
-        # la gestion del Namespace para que namespace.yaml (mismo
-        # directorio, ver gitops/apps/platform/networking/cilium-service-mesh.yaml)
-        # pueda ponerle los labels que hacen falta.
+        # Lets namespace.yaml manage the Namespace and its PodSecurity labels
+        # instead of the chart, since spire-agent/spire-server need privileged access.
         existingNamespace: true
         server:
           dataStorage:
             enabled: true
-          # El volumen persistente ya tiene datastore.sqlite3/keys.json
-          # creados por root:root (modo 640). La imagen que trae Cilium
-          # 1.20 (ghcr.io/spiffe/spire-server:1.15.2) corre como un UID
-          # no-root por defecto, sin securityContext explicito del chart -
-          # rompe con "attempt to write a readonly database" contra los
-          # archivos existentes. Forzar root restaura el propietario que
-          # ya tienen esos archivos en el volumen.
+          # The persistent volume's files are already owned by root:root, but
+          # the chart's image runs as a non-root UID by default and fails to
+          # write to them. Forcing root restores the existing ownership.
           securityContext:
             runAsUser: 0
             runAsGroup: 0

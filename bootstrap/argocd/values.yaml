@@ -1,9 +1,7 @@
 global:
   domain: argocd.cristianpuenguenan.online
-  # Cluster de un solo nodo: el control-plane tambien corre workloads, sin
-  # esto el hook redis-secret-init (y el resto de componentes) se quedan
-  # Pending para siempre por el taint NoSchedule del nodo (mismo problema
-  # que ya resuelve el toleration de storage.tf).
+  # Single-node cluster: without this, the control-plane's NoSchedule taint
+  # leaves every pod Pending.
   tolerations:
     - key: node-role.kubernetes.io/control-plane
       operator: Exists
@@ -16,14 +14,9 @@ server:
     - --insecure
 
 repoServer:
-  # Sin esto quedaba en QoS BestEffort (sin requests/limits) - el primer
-  # candidato a que el nodo lo mate bajo presion de memoria, sin el
-  # OOMKilled prolijo de un pod con limits (Reason: Unknown, exit 255 en
-  # su lugar). Como el cache de git vive en un emptyDir atado al Pod (no
-  # al contenedor), un restart de contenedor por un kill asi NO lo limpia
-  # - el index corrupto sobrevive restarts hasta que se borra el Pod entero.
-  # Ver docs/DECISIONS.md (incidente del repo-server con "index file
-  # smaller than expected", 2026-09-15).
+  # Without limits, a memory-pressure kill gives exit 255 instead of a clean
+  # OOMKilled, and the git index cached in the emptyDir can end up corrupted
+  # across container restarts.
   resources:
     requests:
       cpu: 100m
@@ -36,13 +29,8 @@ configs:
   params:
     server.insecure: "true"
   cm:
-    # Sin webhook de GitHub (ver ADR-019 en docs/DECISIONS.md - se retiro
-    # junto con el ClusterSecretStore de 1Password): el polling es el
-    # unico mecanismo de sync, no un fallback. 180s es el intervalo
-    # original de antes del webhook (docs/TODO.md #3). En 0s (sin
-    # polling) un webhook roto deja de sincronizar TODO silenciosamente,
-    # como paso el 2026-05-13 al 2026-09-07 sin que nadie lo notara (ver
-    # docs/DECISIONS.md) - nunca lo dejes en 0s de nuevo.
+    # No webhook is configured, so polling is the only sync mechanism. Never
+    # set this to 0s - that silently disables sync entirely.
     timeout.reconciliation: 180s
     application.resourceTrackingMethod: annotation
   rbac:

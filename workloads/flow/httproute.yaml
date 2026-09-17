@@ -10,7 +10,7 @@ spec:
   hostnames:
     - api.cristianpuenguenan.online
   rules:
-    # APIs internas /flow
+    # Internal /flow APIs
     - matches:
         - path:
             type: PathPrefix
@@ -18,7 +18,7 @@ spec:
       backendRefs:
         - name: flow
           port: 80
-    # Webhooks públicos /webhooks
+    # Public /webhooks
     - matches:
         - path:
             type: PathPrefix
