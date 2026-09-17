@@ -1,0 +1,14 @@
+# El admission del cluster aplica PodSecurity baseline por defecto en
+# namespaces sin labels (ver platform/storage/openebs/namespace.yaml para
+# el mismo patron). El DaemonSet de tetragon necesita hostNetwork,
+# hostPath (cilium-run, bpf-maps, host-proc) y su propio contenedor
+# privileged para leer eventos de eBPF - baseline lo bloquea por completo,
+# dejando el DaemonSet en FailedCreate eterno.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tetragon
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged

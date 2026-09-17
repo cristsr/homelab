@@ -21,6 +21,11 @@ spec:
     - repoURL: https://github.com/cristsr/homelab
       targetRevision: HEAD
       ref: values
+    - repoURL: https://github.com/cristsr/homelab
+      targetRevision: HEAD
+      path: platform/observability
+      directory:
+        include: "namespace.yaml"
   destination:
     server: https://kubernetes.default.svc
     namespace: observability
