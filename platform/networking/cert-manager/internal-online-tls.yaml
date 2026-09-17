@@ -1,11 +1,6 @@
-# Wildcard real (Let's Encrypt, mismo ClusterIssuer que wildcard-home-tls)
-# para las rutas privadas, en un subdominio de un dominio que ya es
-# nuestro - reemplaza la CA propia de internal-tls.yaml (ver
-# docs/DECISIONS.md, actualizacion de ADR-012). El DNS-01 no exige que
-# `*.internal.cristianpuenguenan.online` resuelva publicamente: nunca se
-# publica un registro A, asi que sigue sin ser alcanzable fuera del
-# tailnet, igual que `.internal` hoy - pero el certificado lo confia
-# cualquier navegador sin instalar nada.
+# Real Let's Encrypt wildcard for private routes, trusted by any browser.
+# DNS-01 doesn't require the subdomain to resolve publicly, so it stays
+# unreachable outside the tailnet even though the certificate is real.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -19,5 +14,5 @@ spec:
   dnsNames:
     - "internal.cristianpuenguenan.online"
     - "*.internal.cristianpuenguenan.online"
-  duration: 2160h     # 90 dias
-  renewBefore: 360h   # Renueva 15 dias antes
+  duration: 2160h     # 90 days
+  renewBefore: 360h   # renews 15 days before expiry

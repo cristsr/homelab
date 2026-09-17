@@ -5,10 +5,8 @@ gateway:
   controller:
     replicas: 1
     service:
-      # ClusterIP a proposito: TLS lo termina `main` (Cilium) y reenvia
-      # en HTTP plano hacia este Service - ver ADR-012 (actualizacion) en
-      # docs/DECISIONS.md. El controller de Agent Gateway tampoco soporta
-      # HTTPS, asi que no tiene sentido exponerlo con IP externa propia.
+      # ClusterIP on purpose: the `main` Gateway terminates TLS and forwards
+      # plain HTTP; the Agent Gateway controller doesn't support HTTPS itself.
       type: ClusterIP
 
 metrics:

@@ -51,10 +51,9 @@ resource "proxmox_virtual_environment_container" "data_service" {
   vm_id        = each.value.vmid
   unprivileged = true
 
-  # Cada motor corre como contenedor Podman dentro de la LXC (ver
-  # ansible/data-services.yaml). Sin nesting+fuse, una LXC unprivileged no
-  # puede montar el overlayfs de Podman via fuse-overlayfs ("fuse: device
-  # not found") y el servicio queda en restart-loop.
+  # Each engine runs as a Podman container inside the LXC. Without
+  # nesting+fuse, an unprivileged LXC can't mount Podman's overlayfs and the
+  # service ends up in a restart loop.
   features {
     nesting = true
     fuse    = true

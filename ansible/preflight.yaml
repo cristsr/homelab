@@ -1,28 +1,14 @@
 ---
-# Corre antes que cualquier otro playbook (y antes de `terraform apply` en
-# CI): valida SOLO las credenciales que Terraform/ArgoCD consumen en este
-# pipeline - no todo lo que eventualmente vive en secrets/homelab.env. Los
-# secretos reales de la app viven cifrados en el repo (SOPS + age, ver
-# ADR-018/019 en docs/DECISIONS.md), nunca en 1Password ni en CI mas alla
-# de las credenciales de data-services.env. Si algo falta o es invalido,
-# falla aqui en segundos en vez de a mitad del bootstrap del cluster.
-#
-# Las credenciales ya no viven en un vars file del repo (ver
-# secrets/homelab.env.example) - localmente, exporta ese archivo antes de
-# correr esto (`set -a; source secrets/homelab.env; set +a`); en CI vienen
-# como GitHub Actions secrets/vars inyectados como env vars del step (ver
-# .github/workflows/deploy.yml y docs/CI_CD_HYPERVISOR_SETUP.md).
+# Runs before any other playbook: validates the credentials Terraform/ArgoCD
+# need for this pipeline, so a missing or invalid one fails fast instead of
+# mid-bootstrap.
 - name: Preflight - validar credenciales antes de aprovisionar infraestructura
   hosts: localhost
   connection: local
   gather_facts: false
 
+  # default(x, true) also covers an empty string, not just an undefined var.
   vars:
-    # `lookup('env', ...)` devuelve '' (no Undefined) cuando la env var no
-    # esta seteada - el filtro `default()` solo pisa valores Undefined, asi
-    # que hace falta el segundo argumento `true` para que tambien cubra el
-    # string vacio. Sin el, un ARGOCD_REPO_URL no seteado en CI quedaba en
-    # "" en vez de caer al default.
     argocd_repo_url: "{{ lookup('env', 'ARGOCD_REPO_URL') | default('https://github.com/cristsr/homelab', true) }}"
     argocd_github_pat: "{{ lookup('env', 'ARGOCD_GITHUB_PAT') }}"
 

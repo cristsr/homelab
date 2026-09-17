@@ -3,13 +3,9 @@ kubeProxyReplacement: "true"
 k8sServiceHost: "127.0.0.1"
 k8sServicePort: "6443"
 
-# Talos monta cgroupv2/bpffs por su cuenta - no dejar que Cilium intente
-# volver a montarlos. Y Talos no permite a los workloads cargar modulos de
-# kernel, asi que SYS_MODULE se saca de las capabilities por defecto del
-# chart (que si lo incluyen) - sin esto el init container clean-cilium-state
-# falla con "unable to apply caps: operation not permitted" (confirmado en
-# un deploy real). Valores segun la guia oficial de Talos:
-# https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
+# Talos already mounts cgroupv2/bpffs itself, so Cilium must not remount
+# them. SYS_MODULE is dropped from the default capabilities because Talos
+# doesn't allow workloads to load kernel modules.
 cgroup:
   autoMount:
     enabled: false
@@ -48,10 +44,8 @@ ipv4NativeRoutingCIDR: "10.244.0.0/16"
 gatewayAPI:
   enabled: true
 
-# Asigna IPs LAN reales a los Services LoadBalancer de los Gateways (ver
-# platform/networking/cilium-gateway/lb-ippool.yaml y
-# l2-announcement-policy.yaml) - sin esto quedan en <pending> para siempre,
-# sin ningun controlador externo (MetalLB) que los resuelva.
+# Assigns real LAN IPs to LoadBalancer Services; without it they stay
+# <pending> forever, since there's no external controller like MetalLB.
 l2announcements:
   enabled: true
 
@@ -59,10 +53,8 @@ hubble:
   enabled: true
   relay:
     enabled: true
-    # A diferencia del agent, hubble-relay/ui no heredan tolerations por
-    # defecto del chart - se quedan Pending para siempre en este cluster de
-    # un solo nodo (mismo taint NoSchedule del control-plane, ver
-    # bootstrap/argocd/values.yaml).
+    # hubble-relay/ui don't inherit tolerations from the chart by default,
+    # so they'd stay Pending on this single-node cluster without this.
     tolerations:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists

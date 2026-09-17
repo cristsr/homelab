@@ -33,8 +33,8 @@ grafana:
     existingSecret: grafana-admin-secret
     userKey: GF_SECURITY_ADMIN_USER
     passwordKey: GF_SECURITY_ADMIN_PASSWORD
-  # Grafana no relee el secret de admin en caliente - no depender solo del
-  # autoReloadAll global de Reloader (gitops/apps/platform/secret-management/reloader.yaml).
+  # Grafana doesn't hot-reload the admin secret on its own; Reloader restarts
+  # the pod when it changes.
   deploymentAnnotations:
     reloader.stakater.com/auto: "true"
   sidecar:

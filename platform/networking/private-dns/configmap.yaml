@@ -1,11 +1,6 @@
-# Registros A estaticos solo para las rutas privadas del cluster - las de
-# HTTP entran por `main` (192.168.80.240), incluidas las de Agent Gateway,
-# que se reenvian puertas adentro (ver docs/DECISIONS.md ADR-011 y ADR-012).
-# Los servicios de datos resuelven directo a los LXC de Proxmox
-# (ver docs/DECISIONS.md ADR-016).
-# portfolio/api no entran acá - son publicas, resuelven via el DNS real de
-# Cloudflare. `fallthrough` + `forward` evitan que esto se convierta en un
-# agujero negro si algo lo usa como DNS primario por error.
+# Static A records for the cluster's private routes only; public services
+# resolve via Cloudflare instead. `fallthrough` + `forward` keep this from
+# becoming a black hole if it's ever used as a primary DNS server by mistake.
 apiVersion: v1
 kind: ConfigMap
 metadata:

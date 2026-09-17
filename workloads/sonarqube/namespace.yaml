@@ -1,10 +1,5 @@
-# El admission del cluster aplica PodSecurity baseline por defecto en
-# namespaces sin labels (ver platform/storage/openebs/namespace.yaml
-# para el mismo patron), y el init container `init-sysctl` del chart de
-# SonarQube necesita `securityContext.privileged: true` para subir
-# `vm.max_map_count` (requisito de Elasticsearch, el motor de busqueda
-# embebido). Sin este label el StatefulSet queda en FailedCreate eterno:
-# "violates PodSecurity baseline:latest".
+# The `init-sysctl` init container needs privileged access to raise
+# vm.max_map_count, required by the bundled Elasticsearch.
 apiVersion: v1
 kind: Namespace
 metadata:

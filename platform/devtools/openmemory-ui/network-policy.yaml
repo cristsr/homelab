@@ -8,9 +8,8 @@ spec:
     matchLabels:
       app: openmemory-ui
   ingress:
-    # openmemory.internal... se enruta directo por el Gateway `main` de
-    # Cilium - proxy embebido en el cilium-agent (hostNetwork), llega como
-    # trafico host-originado.
+    # Traffic arrives via the Cilium Gateway's embedded proxy, which runs on
+    # the host network - it looks like host-originated traffic, not pod traffic.
     - fromEntities:
         - host
       toPorts:

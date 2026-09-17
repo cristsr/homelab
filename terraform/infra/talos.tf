@@ -18,8 +18,7 @@ data "talos_client_configuration" "this" {
 resource "talos_machine_configuration_apply" "this" {
   client_configuration        = talos_machine_secrets.this.client_configuration
   machine_configuration_input = data.talos_machine_configuration.this.machine_configuration
-  # Se aplica contra la IP DHCP de modo mantenimiento (local.maintenance_ip),
-  # no la estatica final: el nodo todavia no la tiene en este punto.
+  # Maintenance-mode DHCP IP: the node doesn't have its final static IP yet.
   node = local.maintenance_ip
 
   config_patches = [
@@ -48,9 +47,7 @@ resource "talos_machine_configuration_apply" "this" {
         }
       }
       cluster = {
-        # Single-node: sin esta clave Talos deja el taint por defecto
-        # node-role.kubernetes.io/control-plane en el unico nodo y ningun
-        # workload de las apps se programa (todo queda Pending).
+        # Single-node cluster: without this the control-plane taint leaves everything Pending.
         allowSchedulingOnControlPlanes = true
         network = {
           cni = {
@@ -62,26 +59,18 @@ resource "talos_machine_configuration_apply" "this" {
         }
       }
     }),
-    # Talos >= 1.12 gestiona el hostname via este documento dedicado, no via
-    # machine.network.hostname (legacy) - mezclar ambos, o incluso solo
-    # declarar el legacy, choca con el controller de hostname ya activo por
-    # defecto ("static hostname is already set in v1alpha1 config").
-    # El data source emite HostnameConfig con auto: stable y el strategic
-    # merge patch no elimina claves, solo las sobrescribe: hay que pisar
-    # auto con "off", unico valor que la validacion permite junto a hostname.
+    # Talos manages the hostname via this dedicated document, not the legacy
+    # machine.network.hostname field. `auto` must stay "off": the strategic
+    # merge patch only overwrites keys, it never removes them.
     yamlencode({
       apiVersion = "v1alpha1"
       kind       = "HostnameConfig"
       auto       = "off"
       hostname   = var.vm_name
     }),
-    # Particiona el disco dedicado a ZFS (virtio1, ver proxmox.tf) sin
-    # formatearlo - "!system_disk" matchea el unico disco que no es el de
-    # instalacion de Talos (virtio0/vda). El partition label resultante
-    # (r-openebs-zfs) lo consume storage.tf via /dev/disk/by-partlabel/.
-    # A diferencia de UserVolumeConfig, Talos exige minSize o maxSize
-    # explicito para RawVolumeConfig (rechaza el patch si falta) - maxSize
-    # igual al tamano real del disco dedicado para que ocupe el disco entero.
+    # Partitions the dedicated ZFS disk without formatting it, matching any
+    # disk that isn't the Talos install disk. The resulting partition label
+    # is what storage.tf looks up to create the zpool.
     yamlencode({
       apiVersion = "v1alpha1"
       kind       = "RawVolumeConfig"

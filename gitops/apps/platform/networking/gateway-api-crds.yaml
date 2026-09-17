@@ -11,15 +11,8 @@ spec:
   project: homelab
   source:
     repoURL: https://github.com/kubernetes-sigs/gateway-api
-    # Cilium 1.20 (ver bootstrap/cilium/values.yaml y platform/networking/cilium/service-mesh-values.yaml)
-    # requiere Gateway API v1.6.1 como minimo - ya no depende de TLSRoute
-    # en v1alpha2 (servido por el canal standard en v1), a diferencia de
-    # Cilium 1.19.x (cilium/cilium#38420, #44920, #45139).
-    # Canal `experimental` (superset de `standard`, mismos CRDs base sin
-    # cambios) en vez de `standard`: Agent Gateway (agentgateway.dev)
-    # espera el CRD TCPRoute para su informer y sin el se queda
-    # esperando en loop infinito, crasheando el pod (readiness nunca
-    # pasa) - ver docs/DECISIONS.md.
+    # Uses the `experimental` channel, not `standard`: Agent Gateway needs the
+    # TCPRoute CRD and crash-loops waiting for it otherwise.
     targetRevision: v1.6.1
     path: config/crd/experimental
   destination:

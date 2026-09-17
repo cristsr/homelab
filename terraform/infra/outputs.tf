@@ -13,9 +13,8 @@ output "talosconfig_path" {
   value       = abspath(local_file.talosconfig.filename)
 }
 
-# Permite reconstruir el kubeconfig desde el state remoto (terraform output
-# -raw kubeconfig_raw) sin re-aplicar infra - lo usa terraform-plan.yml para
-# poder planear terraform/cluster contra el cluster real.
+# Lets the kubeconfig be reconstructed from remote state without re-applying
+# infra, so CI can plan terraform/cluster against the real cluster.
 output "kubeconfig_raw" {
   description = "Contenido del kubeconfig"
   value       = talos_cluster_kubeconfig.this.kubeconfig_raw

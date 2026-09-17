@@ -41,8 +41,7 @@ resource "proxmox_virtual_environment_vm" "talos_node" {
     size         = var.disk_size_gb
   }
 
-  # Disco dedicado al zpool de OpenEBS ZFS LocalPV, separado del disco de
-  # instalacion a proposito.
+  # Dedicated disk for the OpenEBS ZFS LocalPV pool, kept separate from the install disk.
   disk {
     interface    = "virtio1"
     datastore_id = var.proxmox_datastore_id
@@ -56,10 +55,7 @@ resource "proxmox_virtual_environment_vm" "talos_node" {
 
   boot_order = ["virtio0", "ide3"]
 
-  # MAC fija (no autogenerada por Proxmox) para poder reservarle una IP por
-  # DHCP en el router - asi el boot en modo mantenimiento ya cae en
-  # var.vm_static_ip en vez de una IP random del pool, y la ruta de
-  # Tailscale del hipervisor se puede acotar a hosts /32 en vez de todo el /24.
+  # Fixed MAC so a static IP can be reserved via DHCP for the maintenance-mode boot.
   network_device {
     bridge      = var.network_bridge
     model       = "virtio"
@@ -71,8 +67,8 @@ resource "proxmox_virtual_environment_vm" "talos_node" {
   }
 }
 
-# IP en modo mantenimiento (via DHCP, antes de aplicar el machine config).
-# Descarta "lo" y las interfaces virtuales de Talos sin IPv4.
+# Maintenance-mode IP (via DHCP, before the machine config is applied),
+# skipping "lo" and any interfaces without an IPv4 address.
 locals {
   maintenance_ip = [
     for idx, ips in proxmox_virtual_environment_vm.talos_node.ipv4_addresses :

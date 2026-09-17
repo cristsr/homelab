@@ -1,20 +1,10 @@
-# Values del chart zfs-localpv 2.11.1 (https://openebs.github.io/zfs-localpv).
-# Claves verificadas contra el values.yaml real del chart, no adivinadas.
-#
-# A diferencia de k0s (que usaba /var/lib/k0s/kubelet, un path no estandar),
-# Talos monta el kubelet en el path estandar /var/lib/kubelet - coincide con
-# el default del chart, asi que no hace falta overridear zfsNode.kubeletDir.
-#
-# El chart no expone serviceMonitor (a diferencia de lvm-localpv) - sin
-# metricas de Prometheus por ahora.
+# Values for the zfs-localpv chart. Talos mounts the kubelet at the chart's
+# default path, so zfsNode.kubeletDir doesn't need overriding.
 
-# Sin telemetria hacia OpenEBS/Mayadata en un homelab.
 analytics:
   enabled: false
 
-# Talos tiene el rootfs inmutable y /home no existe: el default del chart
-# (/home/keys, directorio de llaves de encripcion ZFS) hace fallar el node
-# plugin con "mkdir /home: read-only file system" (CreateContainerError).
-# /var es el unico path writable persistente en Talos.
+# Talos has an immutable rootfs and no /home, so the chart's default key
+# directory fails to create. /var is the only writable persistent path.
 zfsNode:
   encrKeysDir: "/var/openebs/keys"

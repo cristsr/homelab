@@ -1,9 +1,5 @@
-# El admission del cluster aplica PodSecurity baseline por defecto en
-# namespaces sin labels (ver platform/storage/openebs/namespace.yaml para
-# el mismo patron). El DaemonSet prometheus-prometheus-node-exporter
-# necesita hostNetwork, hostPID, hostPath (proc/sys/root) y hostPort para
-# leer metricas del host - baseline lo bloquea, dejando el DaemonSet en
-# FailedCreate eterno.
+# node-exporter's DaemonSet needs hostNetwork/hostPID/hostPath/hostPort to
+# read metrics from the host, which requires privileged PodSecurity.
 apiVersion: v1
 kind: Namespace
 metadata:
