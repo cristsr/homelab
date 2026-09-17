@@ -1,29 +1,29 @@
-# Guia de Instalacion
+# Installation Guide
 
-> El nodo Talos Linux corre como una VM sobre Proxmox VE, provisionada con Terraform en dos etapas (`terraform/infra`, `terraform/cluster`).
-> Ni Terraform ni Ansible corren en el hipervisor (ver [ADR-009](DECISIONS.md#adr-009-cicd-con-github-actions-hosted--tailscale--cloudflare-r2)): hablan con la API REST de Proxmox y la API de Talos (mTLS) en remoto — desde tu equipo de control o, de forma automatica, desde GitHub Actions via Tailscale. Esta guia documenta el flujo **manual**; para el automatico ver [`.github/workflows/`](../.github/workflows/), ADR-009 y [CI_CD_HYPERVISOR_SETUP.md](CI_CD_HYPERVISOR_SETUP.md).
+> The Talos Linux node runs as a VM on Proxmox VE, provisioned with Terraform in two stages (`terraform/infra`, `terraform/cluster`).
+> Neither Terraform nor Ansible run on the hypervisor (see [ADR-009](DECISIONS.md#adr-009-cicd-with-github-actions-hosted--tailscale--cloudflare-r2)): they talk to the Proxmox REST API and the Talos API (mTLS) remotely — from your control machine or, automatically, from GitHub Actions via Tailscale. This guide documents the **manual** flow; for the automatic one see [`.github/workflows/`](../.github/workflows/), ADR-009, and [CI_CD_HYPERVISOR_SETUP.md](CI_CD_HYPERVISOR_SETUP.md).
 
 ---
 
-## Tabla de Contenidos
+## Table of Contents
 
-0. [Preflight de credenciales](#0-preflight-de-credenciales)
-1. [Requisitos Previos](#1-requisitos-previos)
-2. [Preparar el Equipo de Control](#2-preparar-el-equipo-de-control)
-3. [Configurar Secretos](#3-configurar-secretos)
-4. [Aprovisionar la VM Talos (`terraform/infra`)](#4-aprovisionar-la-vm-talos-terraforminfra)
-5. [Bootstrap de Kubernetes (`terraform/cluster`)](#5-bootstrap-de-kubernetes-terraformcluster)
-6. [Activar GitOps](#6-activar-gitops)
-7. [Cargar los secretos reales (SOPS + age)](#7-cargar-los-secretos-reales-sops--age)
-8. [Verificar y Acceder](#8-verificar-y-acceder)
+0. [Credentials preflight](#0-credentials-preflight)
+1. [Prerequisites](#1-prerequisites)
+2. [Prepare the Control Machine](#2-prepare-the-control-machine)
+3. [Configure Secrets](#3-configure-secrets)
+4. [Provision the Talos VM (`terraform/infra`)](#4-provision-the-talos-vm-terraforminfra)
+5. [Kubernetes Bootstrap (`terraform/cluster`)](#5-kubernetes-bootstrap-terraformcluster)
+6. [Activate GitOps](#6-activate-gitops)
+7. [Load the real secrets (SOPS + age)](#7-load-the-real-secrets-sops--age)
+8. [Verify and Access](#8-verify-and-access)
 9. [DNS](#9-dns)
 10. [Troubleshooting](#10-troubleshooting)
 
 ---
 
-## 0. Preflight de credenciales
+## 0. Credentials preflight
 
-Antes de tocar Terraform, valida que las credenciales existen y no estan vacias — falla en segundos en vez de a mitad del aprovisionamiento. Las credenciales se exportan desde `secrets/homelab.env` (ver seccion 3):
+Before touching Terraform, validate that the credentials exist and aren't empty — fail in seconds instead of halfway through provisioning. Credentials are exported from `secrets/homelab.env` (see section 3):
 
 ```bash
 set -a; source secrets/homelab.env; set +a
@@ -33,44 +33,44 @@ ansible-playbook preflight.yaml
 
 ---
 
-## 1. Requisitos Previos
+## 1. Prerequisites
 
-### Hardware minimo de la VM (definido en `terraform/infra/variables.tf`)
+### Minimum VM hardware (defined in `terraform/infra/variables.tf`)
 
-| Recurso | Minimo | Default de este repo |
+| Resource | Minimum | This repo's default |
 |---------|--------|-----------------------|
 | CPU | 4 cores | 8 vCPU (`var.vcpu`) |
 | RAM | 8 GB | 16 GB (`var.memory_mib`) |
-| Disco instalacion | 100 GB | 120 GB (`var.disk_size_gb`) |
-| Disco ZFS dedicado | - | 100 GB (`var.zfs_disk_size_gb`) |
-| Red | IP estatica en la LAN | `var.vm_static_ip`, bridge `vmbr0` |
+| Installation disk | 100 GB | 120 GB (`var.disk_size_gb`) |
+| Dedicated ZFS disk | - | 100 GB (`var.zfs_disk_size_gb`) |
+| Network | Static IP on the LAN | `var.vm_static_ip`, bridge `vmbr0` |
 
 ### Software
 
-- **Hipervisor**: Proxmox VE, con la API accesible (`:8006`) y un API token dedicado (ver [CI_CD_HYPERVISOR_SETUP.md §2](CI_CD_HYPERVISOR_SETUP.md)).
-- **Equipo de control**: Terraform (`>= 1.10.0`) y Ansible. Ninguno de los dos se instala en el hipervisor ni en la VM.
-- La VM no requiere preparacion manual: Talos es inmutable, la configuracion completa la aplica Terraform via API.
+- **Hypervisor**: Proxmox VE, with the API reachable (`:8006`) and a dedicated API token (see [CI_CD_HYPERVISOR_SETUP.md §2](CI_CD_HYPERVISOR_SETUP.md)).
+- **Control machine**: Terraform (`>= 1.10.0`) and Ansible. Neither is installed on the hypervisor or on the VM.
+- The VM needs no manual preparation: Talos is immutable, Terraform applies the full configuration via API.
 
-### Cuentas y tokens externos necesarios
+### Required external accounts and tokens
 
-Antes de comenzar, asegurate de tener a mano los siguientes valores:
+Before starting, make sure you have the following values on hand:
 
-| Token/Cuenta | Descripcion | Como obtenerlo |
+| Token/Account | Description | How to get it |
 |--------------|-------------|----------------|
-| **API Token de Proxmox** | `usuario@realm!tokenid=uuid` para que Terraform cree la VM | Proxmox UI → Datacenter → Permissions → API Tokens (ver CI_CD_HYPERVISOR_SETUP.md §2) |
-| **Schematic ID de Talos** | ID generado en https://factory.talos.dev con las extensiones `qemu-guest-agent`, `tailscale`, `zfs` | Image Factory — ver default en `terraform/infra/variables.tf` |
-| **GitHub PAT** | Personal Access Token con permisos `repo` para que ArgoCD acceda al repositorio privado | GitHub Settings → Developer settings → Personal access tokens |
-| **Cloudflare API Token** | Token con permisos `Zone:Edit` y `Zone:Read` para el dominio (cert-manager DNS-01) | Cloudflare Dashboard → My Profile → API Tokens |
-| **Cloudflared Tunnel Token** | Token del tunel de Cloudflare | `cloudflared tunnel create <nombre>` o desde Zero Trust Dashboard |
+| **Proxmox API Token** | `user@realm!tokenid=uuid` so Terraform can create the VM | Proxmox UI → Datacenter → Permissions → API Tokens (see CI_CD_HYPERVISOR_SETUP.md §2) |
+| **Talos Schematic ID** | ID generated at https://factory.talos.dev with the `qemu-guest-agent`, `tailscale`, `zfs` extensions | Image Factory — see the default in `terraform/infra/variables.tf` |
+| **GitHub PAT** | Personal Access Token with `repo` permissions so ArgoCD can access the private repository | GitHub Settings → Developer settings → Personal access tokens |
+| **Cloudflare API Token** | Token with `Zone:Edit` and `Zone:Read` permissions for the domain (cert-manager DNS-01) | Cloudflare Dashboard → My Profile → API Tokens |
+| **Cloudflared Tunnel Token** | Cloudflare tunnel token | `cloudflared tunnel create <name>` or from the Zero Trust Dashboard |
 
 ---
 
-## 2. Preparar el Equipo de Control
+## 2. Prepare the Control Machine
 
-### 2.1 Instalar dependencias
+### 2.1 Install dependencies
 
 ```bash
-# Terraform (repo oficial de HashiCorp)
+# Terraform (official HashiCorp repo)
 sudo dnf install -y dnf-plugins-core
 sudo dnf config-manager addrepo --from-repofile=https://rpm.releases.hashicorp.com/fedora/hashicorp.repo
 sudo dnf install -y terraform git pipx curl
@@ -78,14 +78,14 @@ pipx install --include-deps ansible && pipx ensurepath
 source ~/.bashrc
 ```
 
-Verificar instalacion:
+Verify installation:
 
 ```bash
 terraform version
 ansible --version
 ```
 
-### 2.2 Clonar repositorio
+### 2.2 Clone the repository
 
 ```bash
 git clone git@github.com:cristsr/homelab.git
@@ -94,20 +94,20 @@ cd homelab
 
 ---
 
-## 3. Configurar Secretos
+## 3. Configure Secrets
 
-Todas las credenciales (infra + apps) viven en un unico archivo plano, **nunca commiteado** (`secrets/homelab.env` esta en `.gitignore`):
+All credentials (infra + apps) live in a single plaintext file, **never committed** (`secrets/homelab.env` is in `.gitignore`):
 
 ```bash
 cp secrets/homelab.env.example secrets/homelab.env
 $EDITOR secrets/homelab.env
 ```
 
-Completa al menos los campos de la seccion `# --- Infra (obligatorios) ---` (`ARGOCD_GITHUB_PAT`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TUNNEL_TOKEN`, `GHCR_PAT`) y `# --- Databases ---`. El resto de los campos (Monitoring, SonarQube, DevTools) tambien viven en este mismo archivo, pero se aplican al repo (cifrados) en la seccion 7, no se usan directo de aca.
+Fill in at least the fields in the `# --- Infra (required) ---` section (`ARGOCD_GITHUB_PAT`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TUNNEL_TOKEN`, `GHCR_PAT`) and `# --- Databases ---`. The rest of the fields (Monitoring, SonarQube, DevTools) also live in this same file, but are applied to the repo (encrypted) in section 7 — they're not used directly from here.
 
-> Este archivo ya solo lo consumen `ansible/preflight.yaml` (campos de Infra) y `ansible/data-services.yaml` (campos de Databases, al levantar los motores en sus LXC). La IP fija del Gateway/DNS interno ya no se configura por variable — se edita directo en `platform/networking/cilium-gateway/gateway.yaml` y `platform/networking/private-dns/` si hace falta cambiarla.
+> This file is now only consumed by `ansible/preflight.yaml` (Infra fields) and `ansible/data-services.yaml` (Databases fields, when bringing up the engines on their LXCs). The Gateway/internal DNS fixed IP is no longer configured via variable — it's edited directly in `platform/networking/cilium-gateway/gateway.yaml` and `platform/networking/private-dns/` if it needs to change.
 
-### 3.1 Correr el preflight
+### 3.1 Run the preflight
 
 ```bash
 set -a; source secrets/homelab.env; set +a
@@ -117,9 +117,9 @@ ansible-playbook preflight.yaml
 
 ---
 
-## 4. Aprovisionar la VM Talos (`terraform/infra`)
+## 4. Provision the Talos VM (`terraform/infra`)
 
-### 4.1 Configurar variables
+### 4.1 Configure variables
 
 ```bash
 cd terraform/infra
@@ -127,11 +127,11 @@ cp terraform.tfvars.example terraform.tfvars
 cp backend.hcl.example backend.hcl
 ```
 
-Edita `terraform.tfvars`: `proxmox_endpoint`, `proxmox_api_token`, `talos_schematic_id`, `vm_static_ip`, `vm_gateway`. Ajusta memoria/vcpu/discos si hace falta (defaults: 16GB RAM, 8 vCPU, 120GB + 100GB disco).
+Edit `terraform.tfvars`: `proxmox_endpoint`, `proxmox_api_token`, `talos_schematic_id`, `vm_static_ip`, `vm_gateway`. Adjust memory/vcpu/disks if needed (defaults: 16GB RAM, 8 vCPU, 120GB + 100GB disk).
 
-Edita `backend.hcl` con el Account ID de tu cuenta Cloudflare (bucket R2 `homelab-tfstate` que guarda el state remoto — ver ADR-009).
+Edit `backend.hcl` with your Cloudflare account's Account ID (R2 bucket `homelab-tfstate` that holds the remote state — see ADR-009).
 
-### 4.2 Aplicar
+### 4.2 Apply
 
 ```bash
 terraform init -backend-config=backend.hcl
@@ -139,13 +139,13 @@ terraform plan
 terraform apply
 ```
 
-Esto:
-- Descarga el ISO de Talos generado por el Image Factory (`talos_schematic_id`), una sola vez.
-- Crea la VM en Proxmox con dos discos (instalacion + dedicado a ZFS) e IP estatica en la LAN real (bridge `vmbr0`).
-- Aplica la machine config de Talos (particiona el disco de ZFS, configura la red) y bootstrapea el cluster.
-- Genera `terraform/infra/generated/kubeconfig` y `generated/talosconfig`.
+This:
+- Downloads the Talos ISO generated by the Image Factory (`talos_schematic_id`), once.
+- Creates the VM in Proxmox with two disks (installation + dedicated to ZFS) and a static IP on the real LAN (bridge `vmbr0`).
+- Applies the Talos machine config (partitions the ZFS disk, configures the network) and bootstraps the cluster.
+- Generates `terraform/infra/generated/kubeconfig` and `generated/talosconfig`.
 
-Verificar que el nodo esta listo:
+Verify the node is ready:
 
 ```bash
 export KUBECONFIG=terraform/infra/generated/kubeconfig
@@ -154,9 +154,9 @@ kubectl get nodes
 
 ---
 
-## 5. Bootstrap de Kubernetes (`terraform/cluster`)
+## 5. Kubernetes Bootstrap (`terraform/cluster`)
 
-### 5.1 Configurar variables
+### 5.1 Configure variables
 
 ```bash
 cd ../cluster
@@ -164,30 +164,30 @@ cp terraform.tfvars.example terraform.tfvars
 cp backend.hcl.example backend.hcl
 ```
 
-Edita `terraform.tfvars`: `kubeconfig_path` (apunta a `../infra/generated/kubeconfig`), `argocd_github_pat`.
+Edit `terraform.tfvars`: `kubeconfig_path` (points to `../infra/generated/kubeconfig`), `argocd_github_pat`.
 
-### 5.2 Aplicar
+### 5.2 Apply
 
 ```bash
 terraform init -backend-config=backend.hcl
 terraform apply
 ```
 
-Esto crea, en orden (via `depends_on`):
-- **Namespaces base** (`terraform/cluster/namespaces.tf`).
-- **Cilium** (`helm_release`, con el hook de idempotencia `bootstrap/adopt-cilium-gateway-secrets.sh`).
+This creates, in order (via `depends_on`):
+- **Base namespaces** (`terraform/cluster/namespaces.tf`).
+- **Cilium** (`helm_release`, with the idempotency hook `bootstrap/adopt-cilium-gateway-secrets.sh`).
 - **ArgoCD** (`helm_release`).
-- **Secrets iniciales**: `github-repo-creds`, `in-cluster-secret` (`terraform/cluster/secrets.tf`).
-- **Job de OpenEBS ZFS**: crea el zpool `zfspv-pool` sobre el disco dedicado (`terraform/cluster/storage.tf`).
+- **Initial secrets**: `github-repo-creds`, `in-cluster-secret` (`terraform/cluster/secrets.tf`).
+- **OpenEBS ZFS Job**: creates the `zfspv-pool` zpool on the dedicated disk (`terraform/cluster/storage.tf`).
 
-Verificar:
+Verify:
 
 ```bash
 kubectl -n kube-system rollout status daemonset/cilium
 kubectl -n argocd get pods
 ```
 
-Obtener contrasena inicial de ArgoCD:
+Get ArgoCD's initial password:
 
 ```bash
 kubectl -n argocd get secret argocd-initial-admin-secret \
@@ -196,15 +196,15 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 
 ---
 
-## 6. Activar GitOps
+## 6. Activate GitOps
 
 ```bash
 kubectl apply -f gitops/root-app.yaml
 ```
 
-A partir de aqui ArgoCD sincroniza el cluster con el repositorio Git siguiendo el orden de sync-waves (ver `docs/ARCHITECTURE.md` §9).
+From here on ArgoCD syncs the cluster with the Git repository following the sync-wave order (see `docs/ARCHITECTURE.md` §9).
 
-Seguir progreso:
+Follow progress:
 
 ```bash
 kubectl -n argocd get applications -w
@@ -212,76 +212,76 @@ kubectl -n argocd get applications -w
 
 ---
 
-## 7. Cargar los secretos reales (SOPS + age)
+## 7. Load the real secrets (SOPS + age)
 
-> **Cuando hacerlo**: Despues de que GitOps active el cluster. **Este paso es siempre manual** — no corre en CI a proposito (mismo criterio que ADR-015). Hasta que lo hagas, las Applications que dependen de estos secretos (cloudflared, las bases de datos, SonarQube, OpenMemory) van a quedar con placeholders `admin` inservibles (`Progressing`/`Degraded`/`CrashLoopBackOff`/`ImagePullBackOff` segun el caso). Es esperado, no un fallo del pipeline.
+> **When to do this**: After GitOps activates the cluster. **This step is always manual** — it deliberately doesn't run in CI (same rationale as ADR-015). Until you do it, the Applications that depend on these secrets (cloudflared, the databases, SonarQube, OpenMemory) will be stuck with unusable `admin` placeholders (`Progressing`/`Degraded`/`CrashLoopBackOff`/`ImagePullBackOff` depending on the case). This is expected, not a pipeline failure.
 
-Los secretos reales viven cifrados en el repo (`*.sops.yaml` + `ansible/data-services.env`, ver ADR-018/019 en [DECISIONS.md](DECISIONS.md)) — no hay backend externo, solo la clave privada de `age` montada en `sops-secrets-operator` (namespace `sops`).
+The real secrets live encrypted in the repo (`*.sops.yaml` + `ansible/data-services.env`, see ADR-018/019 in [DECISIONS.md](DECISIONS.md)) — there's no external backend, only the `age` private key mounted in `sops-secrets-operator` (namespace `sops`).
 
-### 7.1 Completar los valores
+### 7.1 Fill in the values
 
-1. Copiá `secrets/homelab.env.example` a `secrets/homelab.env` (gitignored, nunca se commitea).
-2. Completá cada valor (tokens de Cloudflare, PAT de GHCR, passwords de las bases de datos, etc. — cada campo del archivo documenta para qué se usa).
+1. Copy `secrets/homelab.env.example` to `secrets/homelab.env` (gitignored, never committed).
+2. Fill in each value (Cloudflare tokens, GHCR PAT, database passwords, etc. — each field in the file documents what it's used for).
 
-### 7.2 Aplicar los valores a los archivos cifrados
+### 7.2 Apply the values to the encrypted files
 
 ```bash
-export SOPS_AGE_KEY_FILE=~/.sops-keys/homelab.key.txt   # o donde tengas la clave privada de age
+export SOPS_AGE_KEY_FILE=~/.sops-keys/homelab.key.txt   # or wherever you keep the age private key
 ./scripts/apply-real-secrets.sh secrets/homelab.env
 ```
 
-El script usa `sops set` para parchear cada campo cifrado en su `*.sops.yaml` (sin tocar el resto del archivo) y re-encripta `ansible/data-services.env` completo. Cualquier campo vacío en `secrets/homelab.env` se omite — el valor cifrado existente queda intacto. Revisá `git diff --stat`, y commiteá/empujá los archivos que cambiaron para que ArgoCD (los `SopsSecret`) y CI (`data-services.env`, vía `sops exec-env`) recojan los valores nuevos.
+The script uses `sops set` to patch each encrypted field in its `*.sops.yaml` (without touching the rest of the file) and re-encrypts the entire `ansible/data-services.env`. Any empty field in `secrets/homelab.env` is skipped — the existing encrypted value stays intact. Review `git diff --stat`, and commit/push the files that changed so ArgoCD (the `SopsSecret`s) and CI (`data-services.env`, via `sops exec-env`) pick up the new values.
 
-Podés volver a correr el script cuando quieras rotar un valor — es idempotente.
+You can re-run the script whenever you want to rotate a value — it's idempotent.
 
 ---
 
-## 8. Verificar y Acceder
+## 8. Verify and Access
 
-### 8.1 Verificar estado del cluster
+### 8.1 Verify cluster status
 
 ```bash
 kubectl -n argocd get applications
 kubectl get pods -A
 ```
 
-### 8.2 Endpoints de acceso
+### 8.2 Access endpoints
 
-| URL | Servicio | Credenciales |
+| URL | Service | Credentials |
 |-----|----------|--------------|
-| `https://argocd.cristianpuenguenan.online` | Argo CD | admin / (contrasena inicial del paso 5.2) |
-| `https://grafana.cristianpuenguenan.online` | Grafana | admin / (configurada en secrets/homelab.env, ver §7) |
+| `https://argocd.cristianpuenguenan.online` | Argo CD | admin / (initial password from step 5.2) |
+| `https://grafana.cristianpuenguenan.online` | Grafana | admin / (configured in secrets/homelab.env, see §7) |
 | `https://agentgateway.cristianpuenguenan.online` | Agent Gateway | admin / admin |
-| `https://headlamp.cristianpuenguenan.online` | Headlamp | Token de servicio |
-| `https://hubble.cristianpuenguenan.online` | Hubble | Sin auth |
-| `https://sonarqube.cristianpuenguenan.online` | SonarQube | admin / (configurada en secrets/homelab.env, ver §7) |
-| `https://openmemory.cristianpuenguenan.online` | OpenMemory | Sin auth |
+| `https://headlamp.cristianpuenguenan.online` | Headlamp | Service token |
+| `https://hubble.cristianpuenguenan.online` | Hubble | No auth |
+| `https://sonarqube.cristianpuenguenan.online` | SonarQube | admin / (configured in secrets/homelab.env, see §7) |
+| `https://openmemory.cristianpuenguenan.online` | OpenMemory | No auth |
 
-Token para Headlamp:
+Token for Headlamp:
 
 ```bash
 kubectl create token headlamp -n observability
 ```
 
-### 8.3 Acceso LAN y Tailscale
+### 8.3 LAN and Tailscale access
 
-La VM tiene IP real en la LAN (bridge `vmbr0` de Proxmox) — los Gateway (`cilium-gateway-main` en `192.168.80.240`, `private-dns` en `192.168.80.253`) son alcanzables directo desde cualquier dispositivo de la LAN, sin ningun port-forward. Para acceder desde fuera de la LAN fisica, usa Tailscale: el hipervisor advierte rutas `/32` acotadas a esas IPs (ver [CI_CD_HYPERVISOR_SETUP.md §1](CI_CD_HYPERVISOR_SETUP.md)), no el `/24` completo.
+The VM has a real IP on the LAN (Proxmox bridge `vmbr0`) — the Gateways (`cilium-gateway-main` at `192.168.80.240`, `private-dns` at `192.168.80.253`) are reachable directly from any device on the LAN, no port-forward needed. To access from outside the physical LAN, use Tailscale: the hypervisor advertises `/32` routes scoped to those IPs (see [CI_CD_HYPERVISOR_SETUP.md §1](CI_CD_HYPERVISOR_SETUP.md)), not the full `/24`.
 
 ```bash
 curl -kI https://192.168.80.240 -H "Host: argocd.internal.cristianpuenguenan.online"
 ```
 
-Cloudflare Tunnel (acceso WAN, rutas públicas) no depende de la LAN ni de Tailscale — es una conexión saliente desde dentro del cluster.
+Cloudflare Tunnel (WAN access, public routes) doesn't depend on the LAN or Tailscale — it's an outbound connection from inside the cluster.
 
 ---
 
 ## 9. DNS
 
-Las rutas **públicas** (`portfolio`, `api`) no requieren registros A manuales: se configuran como *Public Hostnames* en el dashboard de Cloudflare Zero Trust, apuntando al tunel de `cloudflared` — gestionado fuera de Git.
+**Public** routes (`portfolio`, `api`) don't require manual A records: they're configured as *Public Hostnames* in the Cloudflare Zero Trust dashboard, pointing to the `cloudflared` tunnel — managed outside Git.
 
-Las rutas **privadas** (`*.internal.cristianpuenguenan.online`) resuelven vía `private-dns` (CoreDNS in-cluster, IP fija `192.168.80.253`), no vía Cloudflare. Para que tu equipo las resuelva automáticamente, configura Tailscale Split DNS (Admin console → DNS → Nameservers → Split DNS) apuntando el dominio `internal.cristianpuenguenan.online` a `192.168.80.253`.
+**Private** routes (`*.internal.cristianpuenguenan.online`) resolve via `private-dns` (in-cluster CoreDNS, fixed IP `192.168.80.253`), not via Cloudflare. For your machine to resolve them automatically, configure Tailscale Split DNS (Admin console → DNS → Nameservers → Split DNS) pointing the `internal.cristianpuenguenan.online` domain to `192.168.80.253`.
 
-Verificar certificado (ambos wildcards, público y privado, los emite el mismo `ClusterIssuer` DNS-01):
+Verify the certificate (both wildcards, public and private, are issued by the same DNS-01 `ClusterIssuer`):
 
 ```bash
 kubectl get certificate -n networking
@@ -291,16 +291,16 @@ kubectl get certificate -n networking
 
 ## 10. Troubleshooting
 
-### Apps en estado Unknown
+### Apps in Unknown state
 
-Terraform ya crea automaticamente el `in-cluster-secret` para ArgoCD (`terraform/cluster/secrets.tf`). Si por algun motivo las aplicaciones quedan en estado `Unknown`, verifica que el secret existe y reinicia el controller:
+Terraform already creates the `in-cluster-secret` for ArgoCD automatically (`terraform/cluster/secrets.tf`). If for some reason applications end up in `Unknown` state, verify the secret exists and restart the controller:
 
 ```bash
 kubectl -n argocd get secrets -l argocd.argoproj.io/secret-type=cluster
 kubectl delete pod -n argocd argocd-application-controller-0
 ```
 
-Si el secret no existe, recrealo manualmente:
+If the secret doesn't exist, recreate it manually:
 
 ```bash
 CA_DATA=$(kubectl get configmap kube-root-ca.crt -n kube-system -o jsonpath='{.data.ca\.crt}' | base64 -w0)
@@ -321,19 +321,19 @@ data:
 EOF
 ```
 
-### SopsSecret no sincroniza
+### SopsSecret not syncing
 
 ```bash
 kubectl get sopssecrets -A
-kubectl describe sopssecret <nombre> -n <namespace>
+kubectl describe sopssecret <name> -n <namespace>
 kubectl -n sops logs deployment/sops-secrets-operator --tail=50
 ```
 
-Causas típicas: la clave privada de `age` montada en el operador no coincide con la que cifró el archivo (`age1...` en `.sops.yaml` vs la clave real), o el `Secret` destino ya existía owneado por otro controlador sin `spec.enforceOwnership: true` en el `SopsSecret` (error `Child secret is not owned by controller`).
+Typical causes: the `age` private key mounted in the operator doesn't match the one that encrypted the file (`age1...` in `.sops.yaml` vs the real key), or the destination `Secret` already existed owned by another controller without `spec.enforceOwnership: true` on the `SopsSecret` (`Child secret is not owned by controller` error).
 
-### Volumen OpenEBS no provisiona
+### OpenEBS volume not provisioning
 
-Talos no tiene shell: no hay `vgs`/`lvs` que correr por SSH. Se inspecciona desde un pod privilegiado (ver `docs/ARCHITECTURE.md`, Troubleshooting):
+Talos has no shell: there's no `vgs`/`lvs` to run over SSH. Inspect it from a privileged pod (see `docs/ARCHITECTURE.md`, Troubleshooting):
 
 ```bash
 kubectl get zfsnode -n openebs
@@ -342,20 +342,20 @@ kubectl debug node/talos -it --image=alpine:3.20 -- \
   sh -c "apk add --no-cache zfs >/dev/null && zpool status zfspv-pool"
 ```
 
-### Actualizar Talos
+### Updating Talos
 
-Talos se actualiza reemplazando la imagen completa del nodo, no con un gestor de paquetes:
+Talos is updated by replacing the node's entire image, not with a package manager:
 
 ```bash
 talosctl --talosconfig terraform/infra/generated/talosconfig upgrade \
   --nodes <vm_static_ip> --image factory.talos.dev/installer/<schematic_id>:<version>
 ```
 
-Como es un cluster de un solo nodo, el upgrade reinicia el nodo y el cluster completo queda caido durante el proceso — hacelo en una ventana de mantenimiento elegida.
+Since this is a single-node cluster, the upgrade reboots the node and the entire cluster goes down during the process — do it in a chosen maintenance window.
 
-### Reinstalar desde cero
+### Reinstalling from scratch
 
-Para destruir y recrear solo el bootstrap de Kubernetes (mantener la VM):
+To destroy and recreate only the Kubernetes bootstrap (keeping the VM):
 
 ```bash
 cd terraform/cluster
@@ -363,7 +363,7 @@ terraform destroy
 terraform apply
 ```
 
-Para destruir también la VM y recrearla desde cero:
+To also destroy the VM and recreate it from scratch:
 
 ```bash
 cd terraform/infra
@@ -373,44 +373,44 @@ terraform apply
 
 ---
 
-## Resumen de comandos
+## Command summary
 
 ```bash
-# 0. Clonar repo, preparar equipo de control
+# 0. Clone repo, prepare the control machine
 git clone git@github.com:cristsr/homelab.git && cd homelab
 sudo dnf install -y dnf-plugins-core git pipx curl
 sudo dnf config-manager addrepo --from-repofile=https://rpm.releases.hashicorp.com/fedora/hashicorp.repo
 sudo dnf install -y terraform
 pipx install --include-deps ansible && pipx ensurepath
 
-# 1. Configurar secretos y preflight
+# 1. Configure secrets and preflight
 cp secrets/homelab.env.example secrets/homelab.env
-# (editar secrets/homelab.env con los valores de infra)
+# (edit secrets/homelab.env with the infra values)
 set -a; source secrets/homelab.env; set +a
 cd ansible
 ansible-playbook preflight.yaml
 cd ..
 
-# 2. Aprovisionar la VM Talos en Proxmox
+# 2. Provision the Talos VM on Proxmox
 cd ../terraform/infra
-cp terraform.tfvars.example terraform.tfvars   # completar proxmox_*/talos_schematic_id/vm_*
+cp terraform.tfvars.example terraform.tfvars   # fill in proxmox_*/talos_schematic_id/vm_*
 terraform init -backend-config=backend.hcl && terraform apply
 
-# 3. Bootstrap de Kubernetes (Cilium, ArgoCD, ZFS)
+# 3. Kubernetes bootstrap (Cilium, ArgoCD, ZFS)
 cd ../cluster
 cp terraform.tfvars.example terraform.tfvars
 terraform init -backend-config=backend.hcl && terraform apply
 
-# 4. Activar GitOps
+# 4. Activate GitOps
 cd ../..
 kubectl apply -f gitops/root-app.yaml
 
-# 5. Cargar los secretos reales (manual siempre - ver seccion 7 arriba)
+# 5. Load the real secrets (always manual - see section 7 above)
 cp secrets/homelab.env.example secrets/homelab.env && $EDITOR secrets/homelab.env
 export SOPS_AGE_KEY_FILE=~/.sops-keys/homelab.key.txt
 ./scripts/apply-real-secrets.sh secrets/homelab.env
 
-# 6. Verificar
+# 6. Verify
 kubectl -n argocd get applications
 kubectl get pods -A
 ```

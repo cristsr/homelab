@@ -53,16 +53,16 @@ resource "kubernetes_job_v1" "openebs_zpool_create" {
             ZFS_DEVICE=$(blkid -o device -t PARTLABEL=r-openebs-zfs)
 
             if ! zpool list zfspv-pool; then
-              echo "Zpool no existe. Creando en $ZFS_DEVICE..."
+              echo "Zpool does not exist. Creating on $ZFS_DEVICE..."
               zpool create -f \
                 -o ashift=12 \
                 -O mountpoint=/var/openebs/zfspv-pool \
                 -O compression=zstd \
                 -O atime=off \
                 zfspv-pool "$ZFS_DEVICE"
-              echo "Zpool creado exitosamente."
+              echo "Zpool created successfully."
             else
-              echo "Zpool zfspv-pool ya existe. Omitiendo creación."
+              echo "Zpool zfspv-pool already exists. Skipping creation."
             fi
             EOT
           ]

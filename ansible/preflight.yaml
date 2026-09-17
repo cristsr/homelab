@@ -2,7 +2,7 @@
 # Runs before any other playbook: validates the credentials Terraform/ArgoCD
 # need for this pipeline, so a missing or invalid one fails fast instead of
 # mid-bootstrap.
-- name: Preflight - validar credenciales antes de aprovisionar infraestructura
+- name: Preflight - validate credentials before provisioning infrastructure
   hosts: localhost
   connection: local
   gather_facts: false
