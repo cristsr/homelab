@@ -124,6 +124,9 @@
           community.mysql.mysql_user:
             name: "{{ kimai_db_username }}"
             password: "{{ kimai_db_password }}"
+            # host defaults to localhost, but Kimai connects over the network
+            # from a pod, not from this LXC itself.
+            host: "%"
             priv: "kimai.*:ALL"
             login_user: root
             login_password: "{{ mysql_app_password }}"
