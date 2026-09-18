@@ -116,3 +116,54 @@ spec:
     - backendRefs:
         - name: overseerr
           port: 5055
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: heimdall
+  namespace: media
+spec:
+  parentRefs:
+    - name: main
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - heimdall.internal.cristianpuenguenan.online
+  rules:
+    - backendRefs:
+        - name: heimdall
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: lidarr
+  namespace: media
+spec:
+  parentRefs:
+    - name: main
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - lidarr.internal.cristianpuenguenan.online
+  rules:
+    - backendRefs:
+        - name: lidarr
+          port: 8686
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: chaptarr
+  namespace: media
+spec:
+  parentRefs:
+    - name: main
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - chaptarr.internal.cristianpuenguenan.online
+  rules:
+    - backendRefs:
+        - name: chaptarr
+          port: 8789

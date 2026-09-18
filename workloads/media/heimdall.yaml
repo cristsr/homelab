@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: heimdall
+  namespace: media
+spec:
+  replicas: 1
+  # RollingUpdate would create the new pod before the old one releases its
+  # ReadWriteOnce volumes, leaving it stuck FailedMount. Recreate tears the
+  # old pod down first.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: heimdall
+  template:
+    metadata:
+      labels:
+        app: heimdall
+    spec:
+      # linuxserver.io images run as uid/gid 911 ("abc").
+      securityContext:
+        fsGroup: 911
+      containers:
+        - name: heimdall
+          image: linuxserver/heimdall:v2.8.3-ls364
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          resources:
+            requests:
+              cpu: 10m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: heimdall-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: heimdall
+  namespace: media
+spec:
+  selector:
+    app: heimdall
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP

@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chaptarr
+  namespace: media
+spec:
+  replicas: 1
+  # RollingUpdate would create the new pod before the old one releases its
+  # ReadWriteOnce volumes, leaving it stuck FailedMount. Recreate tears the
+  # old pod down first.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: chaptarr
+  template:
+    metadata:
+      labels:
+        app: chaptarr
+    spec:
+      # Chaptarr runs as uid 1000 by default (not a linuxserver.io "abc" base
+      # image), same as Seerr on this same claim type.
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: chaptarr
+          # Readarr was retired upstream (2026-06-27); Chaptarr is the
+          # maintained community fork. No official linuxserver.io image and
+          # no semver tags published yet, only :latest.
+          image: chaptarr/chaptarr:latest
+          ports:
+            - containerPort: 8789
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            # Same mount path as the rest of the stack: an import is a move or
+            # a hardlink, never a copy across volumes.
+            - name: library
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: chaptarr-config
+        - name: library
+          persistentVolumeClaim:
+            claimName: media-library
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chaptarr
+  namespace: media
+spec:
+  selector:
+    app: chaptarr
+  ports:
+    - port: 8789
+      targetPort: 8789
+  type: ClusterIP
