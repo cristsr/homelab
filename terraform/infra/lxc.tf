@@ -33,6 +33,13 @@ locals {
       cores      = 1
       disk_gb    = 5
     }
+    mysql = {
+      vmid       = 125
+      ip         = "192.168.80.35"
+      memory_mib = 1024
+      cores      = 1
+      disk_gb    = 15
+    }
   }
 }
 

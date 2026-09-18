@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kimai
+  namespace: finances
+spec:
+  replicas: 1
+  # RollingUpdate would create the new pod before the old one releases its
+  # ReadWriteOnce volume, leaving it stuck FailedMount. Recreate tears the
+  # old pod down first.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: kimai
+  template:
+    metadata:
+      labels:
+        app: kimai
+    spec:
+      # linuxserver.io images run as uid/gid 911 ("abc").
+      securityContext:
+        fsGroup: 911
+      containers:
+        - name: kimai
+          image: lscr.io/linuxserver/kimai:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: TRUSTED_HOSTS
+              value: kimai.internal.cristianpuenguenan.online
+            - name: APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: kimai-app-secret
+                  key: app-secret
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: kimai-app-secret
+                  key: database-url
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: kimai-config
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kimai-config
+  namespace: finances
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: openebs-zfs-retain
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kimai
+  namespace: finances
+spec:
+  selector:
+    app: kimai
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP
