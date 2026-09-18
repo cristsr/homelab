@@ -1,0 +1,6 @@
+# Single control-plane node: no HA replicas needed.
+replicas: 1
+args:
+  # Talos issues kubelet's cert for the node's own DNS name; metrics-server
+  # connects by IP by default and the mismatch fails TLS verification.
+  - --kubelet-insecure-tls
