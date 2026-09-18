@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: firefly
+  namespace: finances
+spec:
+  replicas: 1
+  # RollingUpdate would create the new pod before the old one releases its
+  # ReadWriteOnce volume, leaving it stuck FailedMount. Recreate tears the
+  # old pod down first.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: firefly
+  template:
+    metadata:
+      labels:
+        app: firefly
+    spec:
+      securityContext:
+        fsGroup: 33
+      containers:
+        - name: firefly
+          image: fireflyiii/core:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: firefly-app-secret
+                  key: app-key
+            - name: APP_URL
+              value: https://firefly.internal.cristianpuenguenan.online
+            - name: TRUSTED_PROXIES
+              value: "**"
+            - name: DB_CONNECTION
+              value: pgsql
+            - name: DB_HOST
+              value: "192.168.80.31"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_DATABASE
+              value: firefly
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: firefly-app-secret
+                  key: db-username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: firefly-app-secret
+                  key: db-password
+          volumeMounts:
+            - name: uploads
+              mountPath: /var/www/html/storage/upload
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: firefly-uploads
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: firefly-uploads
+  namespace: finances
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: openebs-zfs-retain
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: firefly
+  namespace: finances
+spec:
+  selector:
+    app: firefly
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP

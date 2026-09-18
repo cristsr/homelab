@@ -1,0 +1,16 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: firefly
+  namespace: finances
+spec:
+  parentRefs:
+    - name: main
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - firefly.internal.cristianpuenguenan.online
+  rules:
+    - backendRefs:
+        - name: firefly
+          port: 80
