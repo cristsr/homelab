@@ -15,6 +15,10 @@
     mysql_app_password: "{{ lookup('env', 'MYSQL_APP_PASSWORD') }}"
     kimai_db_username: "{{ lookup('env', 'KIMAI_DB_USERNAME') }}"
     kimai_db_password: "{{ lookup('env', 'KIMAI_DB_PASSWORD') }}"
+    firefly_db_username: "{{ lookup('env', 'FIREFLY_DB_USERNAME') }}"
+    firefly_db_password: "{{ lookup('env', 'FIREFLY_DB_PASSWORD') }}"
+    n8n_db_username: "{{ lookup('env', 'N8N_DB_USERNAME') }}"
+    n8n_db_password: "{{ lookup('env', 'N8N_DB_PASSWORD') }}"
 
   tasks:
     - name: Fail loudly if any engine credential is missing
@@ -34,6 +38,10 @@
         - mysql_app_password
         - kimai_db_username
         - kimai_db_password
+        - firefly_db_username
+        - firefly_db_password
+        - n8n_db_username
+        - n8n_db_password
       delegate_to: localhost
       run_once: true
 
@@ -63,7 +71,7 @@
         state: started
         enabled: true
 
-    - name: Provision the sonarqube database on the shared PostgreSQL instance
+    - name: Provision the sonarqube, n8n and firefly databases on the shared PostgreSQL instance
       when: inventory_hostname == 'postgresql'
       no_log: true
       block:
@@ -92,6 +100,40 @@
           community.postgresql.postgresql_db:
             name: sonarqube
             owner: "{{ sonarqube_db_username }}"
+            login_user: "{{ postgresql_app_username }}"
+            login_password: "{{ postgresql_app_password }}"
+            login_host: localhost
+
+        - name: Create the n8n role
+          community.postgresql.postgresql_user:
+            name: "{{ n8n_db_username }}"
+            password: "{{ n8n_db_password }}"
+            db: postgres
+            login_user: "{{ postgresql_app_username }}"
+            login_password: "{{ postgresql_app_password }}"
+            login_host: localhost
+
+        - name: Create the n8n database owned by that role
+          community.postgresql.postgresql_db:
+            name: n8n
+            owner: "{{ n8n_db_username }}"
+            login_user: "{{ postgresql_app_username }}"
+            login_password: "{{ postgresql_app_password }}"
+            login_host: localhost
+
+        - name: Create the firefly role
+          community.postgresql.postgresql_user:
+            name: "{{ firefly_db_username }}"
+            password: "{{ firefly_db_password }}"
+            db: postgres
+            login_user: "{{ postgresql_app_username }}"
+            login_password: "{{ postgresql_app_password }}"
+            login_host: localhost
+
+        - name: Create the firefly database owned by that role
+          community.postgresql.postgresql_db:
+            name: firefly
+            owner: "{{ firefly_db_username }}"
             login_user: "{{ postgresql_app_username }}"
             login_password: "{{ postgresql_app_password }}"
             login_host: localhost
