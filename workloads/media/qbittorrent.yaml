@@ -23,32 +23,13 @@ spec:
       securityContext:
         fsGroup: 911
       containers:
-        # Owns the pod's network namespace, which qBittorrent joins: a dropped
-        # tunnel leaves the client with no route out instead of the cluster's
-        # own address. Its firewall admits the WebUI port, so the Service still
-        # reaches it through the tunnel.
-        - name: gluetun
-          image: qmcgaw/gluetun:v3.41.3
-          envFrom:
-            - secretRef:
-                name: qbittorrent-vpn
-          env:
-            - name: FIREWALL_INPUT_PORTS
-              value: "8080"
-          ports:
-            - containerPort: 8080
-          securityContext:
-            capabilities:
-              add: ["NET_ADMIN"]
-          resources:
-            requests:
-              cpu: 25m
-              memory: 64Mi
-            limits:
-              cpu: 250m
-              memory: 256Mi
+        # gluetun VPN sidecar temporarily removed: no active VPN subscription.
+        # Traffic goes out on the cluster's own address until one is picked
+        # back up (needs WireGuard + port forwarding, see ProtonVPN/AirVPN).
         - name: qbittorrent
           image: linuxserver/qbittorrent:5.2.3_v2.0.14-ls476
+          ports:
+            - containerPort: 8080
           volumeMounts:
             - name: config
               mountPath: /config
