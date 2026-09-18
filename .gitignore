@@ -23,3 +23,5 @@ terraform/backend.hcl
 terraform/.terraform/
 
 work
+
+token.txt

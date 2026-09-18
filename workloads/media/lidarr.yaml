@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lidarr
+  namespace: media
+spec:
+  replicas: 1
+  # RollingUpdate would create the new pod before the old one releases its
+  # ReadWriteOnce volumes, leaving it stuck FailedMount. Recreate tears the
+  # old pod down first.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: lidarr
+  template:
+    metadata:
+      labels:
+        app: lidarr
+    spec:
+      # linuxserver.io images run as uid/gid 911 ("abc"); the shared library
+      # volume isn't auto-chowned like /config, so grant group write via fsGroup.
+      securityContext:
+        fsGroup: 911
+      containers:
+        - name: lidarr
+          image: linuxserver/lidarr:3.1.0.4875-ls21
+          ports:
+            - containerPort: 8686
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            # Same mount path as the rest of the stack: an import is a move or
+            # a hardlink, never a copy across volumes.
+            - name: library
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: lidarr-config
+        - name: library
+          persistentVolumeClaim:
+            claimName: media-library
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lidarr
+  namespace: media
+spec:
+  selector:
+    app: lidarr
+  ports:
+    - port: 8686
+      targetPort: 8686
+  type: ClusterIP
