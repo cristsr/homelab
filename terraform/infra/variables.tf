@@ -48,7 +48,7 @@ variable "memory_mib" {
 variable "vcpu" {
   description = "VM vCPUs"
   type        = number
-  default     = 8
+  default     = 12
 }
 
 variable "disk_size_gb" {
