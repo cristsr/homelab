@@ -33,8 +33,15 @@ REDIS_PASS="$(get REDIS_PASSWORD)"
 QDRANT_KEY="$(get QDRANT_API_KEY)"
 SQ_DB_USER="$(get SONARQUBE_DB_USERNAME)"
 SQ_DB_PASS="$(get SONARQUBE_DB_PASSWORD)"
+MYSQL_PASS="$(get MYSQL_APP_PASSWORD)"
+KIMAI_DB_USER="$(get KIMAI_DB_USERNAME)"
+KIMAI_DB_PASS="$(get KIMAI_DB_PASSWORD)"
+FIREFLY_DB_USER="$(get FIREFLY_DB_USERNAME)"
+FIREFLY_DB_PASS="$(get FIREFLY_DB_PASSWORD)"
+N8N_DB_USER="$(get N8N_DB_USERNAME)"
+N8N_DB_PASS="$(get N8N_DB_PASSWORD)"
 
-if [ -n "$PG_USER$PG_PASS$MONGO_PASS$REDIS_PASS$QDRANT_KEY$SQ_DB_USER$SQ_DB_PASS" ]; then
+if [ -n "$PG_USER$PG_PASS$MONGO_PASS$REDIS_PASS$QDRANT_KEY$SQ_DB_USER$SQ_DB_PASS$MYSQL_PASS$KIMAI_DB_USER$KIMAI_DB_PASS$FIREFLY_DB_USER$FIREFLY_DB_PASS$N8N_DB_USER$N8N_DB_PASS" ]; then
   cat > ansible/data-services.env <<EOF
 POSTGRESQL_APP_USERNAME=$PG_USER
 POSTGRESQL_APP_PASSWORD=$PG_PASS
@@ -43,9 +50,16 @@ REDIS_PASSWORD=$REDIS_PASS
 QDRANT_API_KEY=$QDRANT_KEY
 SONARQUBE_DB_USERNAME=$SQ_DB_USER
 SONARQUBE_DB_PASSWORD=$SQ_DB_PASS
+MYSQL_APP_PASSWORD=$MYSQL_PASS
+KIMAI_DB_USERNAME=$KIMAI_DB_USER
+KIMAI_DB_PASSWORD=$KIMAI_DB_PASS
+FIREFLY_DB_USERNAME=$FIREFLY_DB_USER
+FIREFLY_DB_PASSWORD=$FIREFLY_DB_PASS
+N8N_DB_USERNAME=$N8N_DB_USER
+N8N_DB_PASSWORD=$N8N_DB_PASS
 EOF
   sops encrypt -i ansible/data-services.env
-  echo "set   ansible/data-services.env (7 keys)"
+  echo "set   ansible/data-services.env (14 keys)"
 else
   echo "skip  ansible/data-services.env (nothing to load)"
 fi
@@ -93,13 +107,21 @@ set_field platform/observability/secrets/grafana-admin.sops.yaml \
 # sync by overriding github-repo-creds with placeholders. Do not recreate it -
 # a second repo-creds secret belongs in Terraform, not SOPS.
 
-# --- workloads/flow/secrets.sops.yaml (optional, `flow` is currently an unused stub) ---
+# --- workloads/finances/firefly-secrets.sops.yaml ---
+set_field workloads/finances/firefly-secrets.sops.yaml \
+  '["spec"]["secretTemplates"][0]["stringData"]["app-key"]' "$(get FIREFLY_APP_KEY)"
+set_field workloads/finances/firefly-secrets.sops.yaml \
+  '["spec"]["secretTemplates"][0]["stringData"]["db-username"]' "$FIREFLY_DB_USER"
+set_field workloads/finances/firefly-secrets.sops.yaml \
+  '["spec"]["secretTemplates"][0]["stringData"]["db-password"]' "$FIREFLY_DB_PASS"
+
+# --- workloads/flow/secrets.sops.yaml (n8n) ---
 set_field workloads/flow/secrets.sops.yaml \
-  '["spec"]["secretTemplates"][0]["stringData"]["database-url"]' "$(get FLOW_DATABASE_URL)"
+  '["spec"]["secretTemplates"][0]["stringData"]["encryption-key"]' "$(get N8N_ENCRYPTION_KEY)"
 set_field workloads/flow/secrets.sops.yaml \
-  '["spec"]["secretTemplates"][0]["stringData"]["mongodb-url"]' "$(get FLOW_MONGODB_URL)"
+  '["spec"]["secretTemplates"][0]["stringData"]["db-username"]' "$N8N_DB_USER"
 set_field workloads/flow/secrets.sops.yaml \
-  '["spec"]["secretTemplates"][0]["stringData"]["redis-url"]' "$(get FLOW_REDIS_URL)"
+  '["spec"]["secretTemplates"][0]["stringData"]["db-password"]' "$N8N_DB_PASS"
 
 echo
 echo "Done. Review 'git diff --stat' and commit the files that changed."
