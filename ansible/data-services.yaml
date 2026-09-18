@@ -12,6 +12,9 @@
     qdrant_api_key: "{{ lookup('env', 'QDRANT_API_KEY') }}"
     sonarqube_db_username: "{{ lookup('env', 'SONARQUBE_DB_USERNAME') }}"
     sonarqube_db_password: "{{ lookup('env', 'SONARQUBE_DB_PASSWORD') }}"
+    mysql_app_password: "{{ lookup('env', 'MYSQL_APP_PASSWORD') }}"
+    kimai_db_username: "{{ lookup('env', 'KIMAI_DB_USERNAME') }}"
+    kimai_db_password: "{{ lookup('env', 'KIMAI_DB_PASSWORD') }}"
 
   tasks:
     - name: Fail loudly if any engine credential is missing
@@ -28,6 +31,9 @@
         - qdrant_api_key
         - sonarqube_db_username
         - sonarqube_db_password
+        - mysql_app_password
+        - kimai_db_username
+        - kimai_db_password
       delegate_to: localhost
       run_once: true
 
@@ -89,4 +95,36 @@
             login_user: "{{ postgresql_app_username }}"
             login_password: "{{ postgresql_app_password }}"
             login_host: localhost
-            maintenance_db: postgres
+
+    - name: Provision the kimai database on the shared MySQL instance
+      when: inventory_hostname == 'mysql'
+      no_log: true
+      block:
+        - name: Install PyMySQL, required by the community.mysql modules below
+          ansible.builtin.apt:
+            name: python3-pymysql
+            state: present
+
+        - name: Wait for MySQL to accept connections
+          ansible.builtin.wait_for:
+            port: 3306
+            host: localhost
+            delay: 2
+            timeout: 30
+
+        - name: Create the kimai database
+          community.mysql.mysql_db:
+            name: kimai
+            state: present
+            login_user: root
+            login_password: "{{ mysql_app_password }}"
+            login_host: localhost
+
+        - name: Create the kimai user, scoped to its own database
+          community.mysql.mysql_user:
+            name: "{{ kimai_db_username }}"
+            password: "{{ kimai_db_password }}"
+            priv: "kimai.*:ALL"
+            login_user: root
+            login_password: "{{ mysql_app_password }}"
+            login_host: localhost

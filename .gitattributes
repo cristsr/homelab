@@ -4,3 +4,6 @@
 .githooks/*     text eol=lf
 *.sh            text eol=lf
 .gitattributes  text eol=lf
+# sops parses this dotenv's own `sops_lastmodified` timestamp; a CRLF-checked-out
+# copy on Windows leaves a trailing \r that fails that parse.
+ansible/data-services.env text eol=lf

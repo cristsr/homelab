@@ -1,0 +1,16 @@
+[Unit]
+Description=MySQL data engine
+
+[Container]
+Image=docker.io/library/mariadb:11
+Volume=/srv/mysql:/var/lib/mysql:U,Z
+Network=host
+AutoUpdate=registry
+Environment=MARIADB_ROOT_PASSWORD={{ mysql_app_password }}
+Environment=MARIADB_DATABASE=homelab
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target podman-auto-update.timer

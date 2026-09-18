@@ -25,5 +25,8 @@ all:
         redis:
           ansible_host: 192.168.80.34
           pct_vmid: 124
+        mysql:
+          ansible_host: 192.168.80.35
+          pct_vmid: 125
       vars:
         ansible_user: root
