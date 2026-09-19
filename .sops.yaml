@@ -4,5 +4,7 @@ creation_rules:
     age: age1j206e2wxxjux4ruxwgknp2cthc9uz3ag3hdcly2j8gdjunzm4s7s67h82m
   # Plain dotenv consumed via `sops exec-env`; no encrypted_regex because a
   # dotenv file has no nested structure to encrypt selectively.
-  - path_regex: ^ansible/data-services\.env$
+  # Matched loosely on purpose: sops resolves the path before matching it, so
+  # the anchored '^ansible/...' form never matches a relative path on Windows.
+  - path_regex: '(^|[\\/])ansible[\\/]data-services\.env$'
     age: age1j206e2wxxjux4ruxwgknp2cthc9uz3ag3hdcly2j8gdjunzm4s7s67h82m
