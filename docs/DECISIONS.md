@@ -753,3 +753,31 @@ While loading real credentials and reviewing why `sonarqube-sonarqube-0` kept fa
 
 - If a data LXC's IP ever changes, it has to be updated in two places: `ansible/inventory.yaml` and the in-cluster consumer's manifest (`sonarqube.yaml`, openmemory's `deployment.yaml`) — `private-dns` is no longer the single source of truth for those IPs.
 - Any new workload that needs to connect to a data LXC from inside the cluster must use the direct IP from day one, not the `*.internal` hostname (that pattern is only for admin HTTPRoutes served by the Gateway, not for a pod's outbound connections).
+
+---
+
+## ADR-021: The media library disk moves off `local-lvm` onto its own physical disk
+
+**Status**: Accepted
+**Date**: 2026-09-19
+
+### Context
+
+The Talos VM's three main disks (OS, OpenEBS ZFS config pool, media library) all lived thin-provisioned on Proxmox's `local-lvm` (a single ~140GB LVM-thin pool on the host's boot SSD). The media library disk alone was declared at `1024GiB` — combined with the other thin volumes, the pool's virtual overcommit (~1.4TB provisioned on ~140GB physical) depended entirely on real usage staying low. It didn't: normal media downloads plus `discard=ignore` on the virtio disks (freed guest-side blocks were never returned to the host) drove `local-lvm` to `0` bytes available. QEMU's response to a full backing pool is `io-error` on the disk and a full VM pause (`qmpstatus: io-error`, `cpu: 0`) until manually resumed — this repeated several times over one session, each one taking down the whole node (CNI/kubelet/API server all freeze with the VM), which looked from outside like random network flakiness.
+
+Two SMART-tested spare disks were evaluated as a fix: a Toshiba HDWD110 (1TB, real wear present — reallocated sectors, pending sectors, 9 mechanical start failures — but no interface errors, acceptable for re-downloadable media) and a Seagate ST1000DM010 (failed to even complete SMART identification after 33 SATA link resets across a hotplug, a reseat, a real power-cycle, and a full server reboot — discarded as defective hardware, unrelated to the connection).
+
+### Decision
+
+- The Toshiba disk is wiped (it carried an old NTFS "Games" partition, confirmed no longer needed) and added to Proxmox as its own volume group (`media-vg`, plain LVM — no thin-provisioning, so it can't silently overcommit like `local-lvm` did) with a single `920GiB` LV.
+- The media library's ZFS pool (`media-pool`) is migrated live with `zpool add` (new disk as a second vdev) followed by `zpool remove` on the old vdev (ZFS's online device-removal evacuates the ~51GB of real data onto the new disk automatically) — zero data-loss, zero Kubernetes-level changes, the pool keeps its name and the PVC/PV binding never notices.
+- The old `virtio2` disk (on `local-lvm`) is detached and deleted once empty, freeing that space back to `local-lvm` for the OS/ZFS-config/DB-LXC disks that still share it.
+- `discard=on` is set on all three of the VM's Proxmox-managed disks (previously `ignore`) so guest-side deletes actually return space to whichever host pool backs them, going forward.
+- Terraform (`proxmox.tf`, `variables.tf`) is updated to match: `virtio2`'s `datastore_id` becomes a new `media_datastore_id` variable (`media-vg`) instead of `proxmox_datastore_id`, and `media_disk_size_gb` drops from `1024` to `920` (the real physical capacity — this disk is never meant to be thin-provisioned again). `media-vg` itself (the `pvesm add lvm` that created it) is a manual, one-time Proxmox-host step, not Terraform-managed — same pattern as other day-0 hypervisor bootstrap steps in `docs/CI_CD_HYPERVISOR_SETUP.md`.
+
+### Consequences
+
+- The media library no longer shares a failure domain with the OS/ZFS-config/DB disks: it can fill up on its own without freezing the rest of the VM (Proxmox will still pause the VM if `media-vg` itself fills, since it's still an unprotected single disk with no autoextend — just no longer able to starve the other three by proxy).
+- `local-lvm` went from `0` bytes free (incident state) to ~80GB free just from releasing the old media disk — meaningful headroom for the OS/config/DB disks, none of which are individually oversized.
+- The Toshiba disk carries real, monitored wear (`Current_Pending_Sector`, `Number of Mechanical Start Failures` — see `work/hardware-reports/` for the full SMART data, gitignored/not committed) — it's approved for media only, never for anything transactional. If those counters keep climbing, the disk needs replacing before it fails outright.
+- `local-lvm` still has no `thin_pool_autoextend_threshold` protection and is still overcommitted relative to physical capacity (OS 120G + ZFS-config 100G declared on ~140GB real, plus 5 DB LXC disks) — lower risk than before (nothing on it is anywhere near 1TB anymore), but not eliminated. Not addressed in this change.

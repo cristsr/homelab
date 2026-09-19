@@ -64,15 +64,21 @@ variable "zfs_disk_size_gb" {
 }
 
 variable "media_disk_size_gb" {
-  description = "Dedicated disk size (vdc) for the media library's OpenEBS ZFS LocalPV zpool (GB)"
+  description = "Dedicated disk size (vdc) for the media library's OpenEBS ZFS LocalPV zpool (GB). Sized to the physical media_datastore_id disk, not thin-provisioned like local-lvm - keep this at or below that disk's real capacity."
   type        = number
-  default     = 1024
+  default     = 920
 }
 
 variable "proxmox_datastore_id" {
-  description = "Proxmox datastore where the disks and downloaded ISO live"
+  description = "Proxmox datastore where the OS/ZFS-config disks and downloaded ISO live"
   type        = string
   default     = "local-lvm"
+}
+
+variable "media_datastore_id" {
+  description = "Proxmox datastore for the media library disk - a dedicated physical disk (plain LVM, no thin-provisioning) kept separate from local-lvm so a full media library can't freeze the OS/config/DB disks"
+  type        = string
+  default     = "media-vg"
 }
 
 variable "network_bridge" {

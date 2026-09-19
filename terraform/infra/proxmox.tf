@@ -39,6 +39,8 @@ resource "proxmox_virtual_environment_vm" "talos_node" {
     interface    = "virtio0"
     datastore_id = var.proxmox_datastore_id
     size         = var.disk_size_gb
+    discard      = "on"
+    cache        = "none"
   }
 
   # Dedicated disk for the OpenEBS ZFS LocalPV pool, kept separate from the install disk.
@@ -46,14 +48,23 @@ resource "proxmox_virtual_environment_vm" "talos_node" {
     interface    = "virtio1"
     datastore_id = var.proxmox_datastore_id
     size         = var.zfs_disk_size_gb
+    discard      = "on"
+    cache        = "none"
   }
 
-  # Dedicated disk for the media library's ZFS LocalPV pool, kept separate from
-  # the install disk and the OpenEBS pool disk.
+  # Media library's ZFS LocalPV pool. Lives on its own physical disk
+  # (media_datastore_id, plain LVM - no thin-provisioning) instead of local-lvm:
+  # that pool is shared with the OS/ZFS-config disks and the DB LXCs, and a media
+  # library growing past what was thin-provisioned once froze the whole VM
+  # (Proxmox pauses on ENOSPC). See docs/DECISIONS.md for the incident.
   disk {
     interface    = "virtio2"
-    datastore_id = var.proxmox_datastore_id
+    datastore_id = var.media_datastore_id
     size         = var.media_disk_size_gb
+    discard      = "on"
+    cache        = "none"
+    backup       = false
+    replicate    = false
   }
 
   cdrom {
