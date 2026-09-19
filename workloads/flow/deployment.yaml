@@ -58,7 +58,10 @@ spec:
               memory: 256Mi
             limits:
               cpu: 500m
-              memory: 512Mi
+              # n8n's first-run schema migration exhausts V8's default heap, which
+              # sizes itself from this limit; below 1Gi it dies with an OOM before
+              # the database is usable.
+              memory: 1Gi
 ---
 apiVersion: v1
 kind: Service
