@@ -18,16 +18,24 @@ spec:
       labels:
         app: chaptarr
     spec:
-      # Chaptarr runs as uid 1000 by default (not a linuxserver.io "abc" base
-      # image), same as Seerr on this same claim type.
+      # fsGroup re-groups the whole media-library volume every time this pod
+      # starts, so it has to match the group the rest of the stack uses (911);
+      # any other value strips write access from radarr/sonarr/jellyfin.
       securityContext:
-        fsGroup: 1000
+        fsGroup: 911
       containers:
         - name: chaptarr
           # Readarr was retired upstream (2026-06-27); Chaptarr is the
           # maintained community fork. No official linuxserver.io image and
           # no semver tags published yet, only :latest.
           image: chaptarr/chaptarr:latest
+          # The image drops to "abc" (99:100 unless told otherwise), which can't
+          # write the library; run it as the same uid/gid as the other arrs.
+          env:
+            - name: PUID
+              value: "911"
+            - name: PGID
+              value: "911"
           ports:
             - containerPort: 8789
           volumeMounts:
