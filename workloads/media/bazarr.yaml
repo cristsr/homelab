@@ -34,13 +34,16 @@ spec:
             # a hardlink, never a copy across volumes.
             - name: library
               mountPath: /data
+          # Idle it needs little, but ffsubsync on a movie spikes past 1Gi (the
+          # pod was OOMKilled syncing several at once). Requests stay low so the
+          # spare capacity isn't reserved; limits only cap the burst.
           resources:
             requests:
               cpu: 50m
               memory: 256Mi
             limits:
-              cpu: 500m
-              memory: 1Gi
+              cpu: "2"
+              memory: 3Gi
       volumes:
         - name: config
           persistentVolumeClaim:
