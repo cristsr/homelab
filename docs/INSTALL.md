@@ -58,7 +58,7 @@ Before starting, make sure you have the following values on hand:
 | Token/Account | Description | How to get it |
 |--------------|-------------|----------------|
 | **Proxmox API Token** | `user@realm!tokenid=uuid` so Terraform can create the VM | Proxmox UI → Datacenter → Permissions → API Tokens (see CI_CD_HYPERVISOR_SETUP.md §2) |
-| **Talos Schematic ID** | ID generated at https://factory.talos.dev with the `qemu-guest-agent`, `tailscale`, `zfs` extensions | Image Factory — see the default in `terraform/infra/variables.tf` |
+| **Talos Schematic ID** | ID generated at https://factory.talos.dev with the `qemu-guest-agent`, `zfs` extensions | Image Factory — see the default in `terraform/infra/variables.tf` |
 | **GitHub PAT** | Personal Access Token with `repo` permissions so ArgoCD can access the private repository | GitHub Settings → Developer settings → Personal access tokens |
 | **Cloudflare API Token** | Token with `Zone:Edit` and `Zone:Read` permissions for the domain (cert-manager DNS-01) | Cloudflare Dashboard → My Profile → API Tokens |
 | **Cloudflared Tunnel Token** | Cloudflare tunnel token | `cloudflared tunnel create <name>` or from the Zero Trust Dashboard |

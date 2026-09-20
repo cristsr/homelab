@@ -127,7 +127,7 @@ homelab/
 
 - Runs on a VM on Proxmox VE, provisioned by Terraform (`terraform/infra/`, see [ADR-014](DECISIONS.md#adr-014-migration-from-k0slibvirtfedora-to-talos-linuxproxmox-ve-and-from-openebs-lvm-to-openebs-zfs-localpv)).
 - Talos is immutable and has no SSH or shell: configuration is 100% declarative via machine config, applied by the Terraform provider `siderolabs/talos` (`terraform/infra/talos.tf`). Ansible no longer provisions the node's operating system.
-- The ISO is generated with the [Image Factory](https://factory.talos.dev) from a schematic with the `qemu-guest-agent`, `tailscale`, and `zfs` extensions (`talos_schematic_id` in `terraform/infra/variables.tf`).
+- The ISO is generated with the [Image Factory](https://factory.talos.dev) from a schematic with the `qemu-guest-agent` and `zfs` extensions (`talos_schematic_id` in `terraform/infra/variables.tf`).
 - kube-proxy is disabled (`cluster.proxy.disabled = true`, replaced by Cilium eBPF); the CNI is also disabled at the Talos level (`cluster.network.cni.name = "none"`) so Cilium installs it.
 - The control-plane runs workloads (single-node cluster): several charts (ArgoCD, the OpenEBS ZFS Job) need explicit `tolerations` for the `node-role.kubernetes.io/control-plane:NoSchedule` taint.
 

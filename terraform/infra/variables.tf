@@ -22,9 +22,9 @@ variable "talos_version" {
 }
 
 variable "talos_schematic_id" {
-  description = "Schematic ID generated at https://factory.talos.dev (extensions: qemu-guest-agent, tailscale, zfs)"
+  description = "Schematic ID generated at https://factory.talos.dev (extensions: qemu-guest-agent, zfs)"
   type        = string
-  default     = "4dc4594391d715ab33e9c2ae96950b98049cc9e7cb24443d0568983914de5b11"
+  default     = "0d4ffb8ade43a79a8960e60a41c6fac75df764f253d572c0204535c1c6d2b828"
 }
 
 variable "vm_id" {

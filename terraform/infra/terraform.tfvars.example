@@ -11,7 +11,7 @@
 # proxmox_datastore_id = "local-lvm"
 # network_bridge   = "vmbr0"
 # talos_version      = "v1.14.0"
-# talos_schematic_id = "4dc4594391d715ab33e9c2ae96950b98049cc9e7cb24443d0568983914de5b11"
+# talos_schematic_id = "0d4ffb8ade43a79a8960e60a41c6fac75df764f253d572c0204535c1c6d2b828"
 # cluster_name       = "talos"
 
 # Contenedores LXC de datos (lxc.tf): valores fijos en el locals
