@@ -138,11 +138,15 @@ resource "kubernetes_job_v1" "openebs_media_zpool_create" {
             set -e
             apk add --no-cache zfs util-linux >/dev/null
 
-            # Talos doesn't run udev, so /dev/disk/by-partlabel/ doesn't
-            # exist; resolve the real device with blkid instead.
-            ZFS_DEVICE=$(blkid -o device -t PARTLABEL=r-openebs-media)
-
-            if ! zpool list media-pool; then
+            if zpool list media-pool >/dev/null 2>&1; then
+              echo "Zpool media-pool already exists. Skipping creation."
+            else
+              # Talos doesn't run udev, so /dev/disk/by-partlabel/ doesn't
+              # exist; resolve the real device with blkid instead. Only
+              # needed on first creation - checked after zpool list so an
+              # already-imported pool (e.g. one migrated to a disk with no
+              # matching partition label, see ADR-021) doesn't fail here.
+              ZFS_DEVICE=$(blkid -o device -t PARTLABEL=r-openebs-media)
               echo "Zpool does not exist. Creating on $ZFS_DEVICE..."
               zpool create -f \
                 -o ashift=12 \
@@ -151,8 +155,6 @@ resource "kubernetes_job_v1" "openebs_media_zpool_create" {
                 -O atime=off \
                 media-pool "$ZFS_DEVICE"
               echo "Zpool created successfully."
-            else
-              echo "Zpool media-pool already exists. Skipping creation."
             fi
             EOT
           ]
