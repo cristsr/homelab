@@ -1,0 +1,57 @@
+# One EnvoyProxy per Gateway, referenced from each Gateway's
+# spec.infrastructure.parametersRef. The proxy Deployment/Service are created
+# in the controller's namespace (envoy-gateway-system), not in `networking`;
+# the fixed Service names below are what everything else refers to.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: main
+  namespace: networking
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        name: envoy-main
+        type: LoadBalancer # the LAN IP comes from lb-ippool.yaml + Gateway spec.addresses
+      envoyDeployment:
+        pod:
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+        container:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: public
+  namespace: networking
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        # Cloudflare's tunnel wildcard points at this name:
+        # envoy-public.envoy-gateway-system.svc.cluster.local:80
+        name: envoy-public
+        type: ClusterIP # only cloudflared consumes it, no LAN IP needed
+      envoyDeployment:
+        pod:
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+        container:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 256Mi

@@ -8,7 +8,12 @@ metadata:
   name: public
   namespace: networking
 spec:
-  gatewayClassName: cilium
+  gatewayClassName: envoy
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: public
   listeners:
     - name: http
       protocol: HTTP

@@ -555,14 +555,14 @@ To add a new private route: add it to the `Corefile` in `platform/networking/pri
 
 ### 11.4 What's public and what isn't (no list to maintain)
 
-Cloudflare doesn't have an entry per route — there's a single wildcard (`*.cristianpuenguenan.online`) pointing to `cilium-gateway-public.networking.svc.cluster.local:80`. What's public is decided by **where the `HTTPRoute` lives** in the code, not a list in the dashboard:
+Cloudflare doesn't have an entry per route — there's a single wildcard (`*.cristianpuenguenan.online`) pointing to `envoy-public.envoy-gateway-system.svc.cluster.local:80`. What's public is decided by **where the `HTTPRoute` lives** in the code, not a list in the dashboard:
 
 - `HTTPRoute` with `parentRefs: [{name: public}]` → reachable from the Internet.
 - `HTTPRoute` with `parentRefs: [{name: main}]` or `[{name: agentgateway-mcp}]` → never reached by the wildcard, only via LAN/Tailscale (§11.1-11.3).
 
 To make a new route public: add its `HTTPRoute` with `parentRefs: [{name: public, namespace: networking}]` (see `workloads/portfolio/httproute.yaml` as an example) — nothing needs to be touched in Cloudflare. To make a currently public one private: change its `parentRefs` to `main` (or `agentgateway-mcp` if it depends on MCP).
 
-At [dash.cloudflare.com](https://dash.cloudflare.com) → Zero Trust → Networks → Tunnels → the homelab's tunnel → Public Hostnames, the only entry to maintain is the wildcard pointing to `cilium-gateway-public` — it's not touched when adding or removing private routes.
+At [dash.cloudflare.com](https://dash.cloudflare.com) → Zero Trust → Networks → Tunnels → the homelab's tunnel → Public Hostnames, the only entry to maintain is the wildcard pointing to `envoy-public` — it's not touched when adding or removing private routes.
 
 ### 11.5 Internal TLS: real certificate, nothing to install
 

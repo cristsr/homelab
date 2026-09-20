@@ -8,10 +8,11 @@ spec:
     matchLabels:
       app: openmemory-ui
   ingress:
-    # Traffic arrives via the Cilium Gateway's embedded proxy, which runs on
-    # the host network - it looks like host-originated traffic, not pod traffic.
-    - fromEntities:
-        - host
+    # Traffic arrives from the Envoy Gateway proxy pods, which run in the
+    # controller's namespace, not in `networking`.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: envoy-gateway-system
       toPorts:
         - ports:
             - port: "3000"

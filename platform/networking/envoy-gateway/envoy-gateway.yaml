@@ -1,0 +1,22 @@
+# Helm values for the `gateway-helm` chart. Lives next to the Gateway manifests
+# but is excluded from `envoy-gateway-config` (see gitops/apps/platform/networking).
+crds:
+  # Two other Applications own the CRDs: `gateway-api-crds` (Gateway API,
+  # shared with Agent Gateway) and `envoy-gateway-crds` (gateway.envoyproxy.io).
+  # Letting the chart install its bundled copy would fight both of them.
+  enabled: false
+
+# Single-node cluster: the only node is the tainted control-plane.
+deployment:
+  pod:
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+
+certgen:
+  job:
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule

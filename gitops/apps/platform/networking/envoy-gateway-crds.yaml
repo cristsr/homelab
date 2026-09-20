@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: envoy-gateway-crds
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: homelab
+  source:
+    repoURL: oci://docker.io/envoyproxy/gateway-crds-helm
+    chart: gateway-crds-helm
+    targetRevision: v1.9.0
+    helm:
+      releaseName: envoy-gateway-crds
+      valuesObject:
+        crds:
+          # Gateway API itself stays with `gateway-api-crds` (it also serves
+          # Agent Gateway); v1.9.0 is built against the same v1.6.1.
+          gatewayAPI:
+            enabled: false
+          envoyGateway:
+            enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: envoy-gateway-system
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - CreateNamespace=true

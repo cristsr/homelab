@@ -362,7 +362,7 @@ Fix: **`platform/argocd/httproute-webhook.yaml`**, a new `HTTPRoute` against the
 
 ## ADR-010: Cilium Gateway API for generic ingress, Agent Gateway only for MCP
 
-**Status**: Accepted — reduces Agent Gateway's scope (see [ADR-002](#adr-002-agent-gateway-as-ingress))
+**Status**: Accepted — reduces Agent Gateway's scope (see [ADR-002](#adr-002-agent-gateway-as-ingress)); the Cilium Gateway API half is superseded by [ADR-023](#adr-023-envoy-gateway-replaces-cilium-gateway-api-for-generic-ingress)
 **Date**: 2026-09-05
 
 ### Context
@@ -802,3 +802,32 @@ The Talos image included the `tailscale` system extension, but no `ExtensionServ
 - `startAllServices` completes in seconds; the 70-minute reboot loop is gone.
 - The node is not a tailnet member. If per-node Tailscale identity is ever needed (multi-node), use the Tailscale Kubernetes operator rather than a Talos extension.
 - Any Talos extension added to the schematic must ship its `ExtensionServiceConfig` in the same change, or the same boot-timeout loop returns.
+
+## ADR-023: Envoy Gateway replaces Cilium Gateway API for generic ingress
+
+**Status**: Accepted — supersedes the "Cilium Gateway API" half of [ADR-010](#adr-010-cilium-gateway-api-for-generic-ingress-agent-gateway-only-for-mcp); Agent Gateway's half stands
+**Date**: 2026-09-20
+
+### Context
+
+Cilium's Gateway API implementation serves `HTTPRoute`s but exposes almost nothing to tune: no rate limiting, no per-Gateway timeouts/retries, no client-IP detection behind Cloudflare, no HTTP/3, no request authorization. The public Gateway is the only internet-facing path and had none of those guards.
+
+### Decision
+
+- **Envoy Gateway v1.9.0** (`gatewayClassName: envoy`) serves the same two Gateways, `main` and `public`, under the same names, so no `HTTPRoute` changed. Agent Gateway keeps the MCP routes; Cilium stays as CNI and L2 announcer.
+- Three Argo CD Applications, chained by sync wave: `envoy-gateway-crds` (2, the `gateway.envoyproxy.io` CRDs only), `envoy-gateway` (3, controller), `envoy-gateway-config` (4, `platform/networking/envoy-gateway/`, replaces `cilium-gateway`). The chart's bundled CRDs are off (`crds.enabled: false`): `gateway-api-crds` keeps owning Gateway API (v1.6.1, the same version Envoy Gateway v1.9.0 is built against, and Agent Gateway needs its experimental channel).
+- Each Gateway has its own `EnvoyProxy` with a **fixed Service name** (`envoy-main`, `envoy-public`), because the Cloudflare wildcard and the LB IP pool select by name. The proxy pods and Services live in `envoy-gateway-system`, not in `networking`.
+- Policies (`platform/networking/envoy-gateway/policies.yaml`): HTTP/3 on `main`; on `public`, client IP taken from `CF-Connecting-IP`, per-client-IP local rate limit (100 req/s), connect-failure-only retries (safe for the `/webhooks` POSTs) and a 30 s request-received timeout.
+
+### Not done, on purpose
+
+- **No `SecurityPolicy` on `main`.** A CIDR allow-list would allow the whole LAN plus the tailnet, i.e. everything that can already reach `192.168.80.240`, so it blocks nothing while adding lock-out risk. What would protect the UIs is OIDC/JWT, which needs an identity provider the cluster doesn't have yet.
+- **No `BackendTLSPolicy`.** No backend speaks TLS today (ArgoCD runs `--insecure`) and Agent Gateway is plain HTTP by design, so `main` still terminates TLS and proxies to it (ADR-012).
+- **`gatewayAPI.enabled` stays `true` in `bootstrap/cilium/values.yaml`.** Turning it off is a Helm upgrade of Cilium and reloads the BPF datapath, which is exactly what took the Cloudflare tunnels down for 37 minutes on 2026-05-12. Do it as its own step once Envoy Gateway is verified, then drop the Cilium parts of `bootstrap/adopt-cilium-gateway-secrets.sh`.
+
+### Consequences
+
+- Cutover is not gradual: `main` and `public` keep their names, and `192.168.80.240` can only belong to one Service, so the switch is a single sync with a short blip on the private UIs and the public site.
+- After the sync, the Cloudflare tunnel wildcard must be re-pointed once from `cilium-gateway-public.networking.svc.cluster.local:80` to `envoy-public.envoy-gateway-system.svc.cluster.local:80` (dashboard, outside Git). Until then the public site is down.
+- `CiliumNetworkPolicy` selectors that trusted the Cilium proxy as `host` must trust the `envoy-gateway-system` namespace instead (done for `openmemory-ui`).
+- One more controller (~2 pods: controller and one proxy per Gateway) on a single node.
