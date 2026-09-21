@@ -3,7 +3,7 @@
 # Ajustar si hace falta; estos son los defaults ya definidos en variables.tf
 # vm_name          = "talos"
 # vm_id            = 100
-# memory_mib       = 16384
+# memory_mib       = 20480
 # vcpu             = 8
 # disk_size_gb     = 120
 # zfs_disk_size_gb = 100
