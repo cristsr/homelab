@@ -23,13 +23,50 @@ spec:
       securityContext:
         fsGroup: 911
       containers:
-        # gluetun VPN sidecar temporarily removed: no active VPN subscription.
-        # Traffic goes out on the cluster's own address until one is picked
-        # back up (needs WireGuard + port forwarding, see ProtonVPN/AirVPN).
-        - name: qbittorrent
-          image: linuxserver/qbittorrent:5.2.3_v2.0.14-ls476
+        # Owns the pod's network namespace, which qBittorrent joins: a dropped
+        # tunnel leaves the client with no route out instead of the cluster's
+        # own address. Its firewall admits the WebUI port, so the Service still
+        # reaches it through the tunnel. Only WIREGUARD_PRIVATE_KEY (and an
+        # optional SERVER_COUNTRIES) comes from the secret; the rest is here.
+        - name: gluetun
+          image: qmcgaw/gluetun:v3.41.3
+          envFrom:
+            - secretRef:
+                name: qbittorrent-vpn
+          env:
+            - name: VPN_SERVICE_PROVIDER
+              value: protonvpn
+            - name: VPN_TYPE
+              value: wireguard
+            - name: VPN_PORT_FORWARDING
+              value: "on"
+            # Only servers that support port forwarding (ProtonVPN P2P).
+            - name: PORT_FORWARD_ONLY
+              value: "on"
+            - name: FIREWALL_INPUT_PORTS
+              value: "8080"
+            # Runs on every forwarded port, so qBittorrent's listening port
+            # follows ProtonVPN's assignment. Needs "Bypass authentication for
+            # clients on localhost" enabled in qBittorrent's WebUI settings.
+            - name: VPN_PORT_FORWARDING_UP_COMMAND
+              value: >-
+                /bin/sh -c 'wget -O- --retry-connrefused --post-data
+                "json={\"listen_port\":{{PORTS}},\"current_network_interface\":\"{{VPN_INTERFACE}}\"}"
+                http://127.0.0.1:8080/api/v2/app/setPreferences'
           ports:
             - containerPort: 8080
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+        - name: qbittorrent
+          image: linuxserver/qbittorrent:5.2.3_v2.0.14-ls476
           volumeMounts:
             - name: config
               mountPath: /config
