@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: cilium-gateway
+  name: envoy-gateway-config
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -12,9 +12,10 @@ spec:
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/networking/cilium-gateway
+    path: platform/networking/envoy-gateway
     directory:
       recurse: true
+      exclude: "envoy-gateway.yaml"
   destination:
     server: https://kubernetes.default.svc
     namespace: networking

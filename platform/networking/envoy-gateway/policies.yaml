@@ -1,0 +1,63 @@
+# --- main (private plane) ---
+# HTTP/3 next to h2/h1 on the same 443; browsers fall back to TCP by themselves
+# when UDP 443 doesn't get through, so this can't lock anyone out.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: main
+  namespace: networking
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: main
+  http3: {}
+---
+# --- public (internet plane, via Cloudflare Tunnel) ---
+# Every request reaches Envoy from a cloudflared pod, so without this the rate
+# limit below would count the whole internet as a single client.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: public
+  namespace: networking
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public
+  clientIPDetection:
+    customHeader:
+      name: CF-Connecting-IP
+  timeout:
+    http:
+      requestReceivedTimeout: 30s
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: public
+  namespace: networking
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public
+  rateLimit:
+    type: Local # per Envoy replica, no Redis; there is a single replica
+    local:
+      rules:
+        - clientSelectors:
+            - sourceCIDR:
+                type: Distinct # one bucket per client IP, not one shared by all
+                value: 0.0.0.0/0
+          limit:
+            requests: 100
+            unit: Second
+  retry:
+    numRetries: 2
+    retryOn:
+      # Only failures where the request never reached the backend, so it's
+      # safe for the non-idempotent /webhooks POSTs.
+      triggers:
+        - connect-failure

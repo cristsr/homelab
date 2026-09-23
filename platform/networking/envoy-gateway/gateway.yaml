@@ -4,7 +4,12 @@ metadata:
   name: main
   namespace: networking
 spec:
-  gatewayClassName: cilium
+  gatewayClassName: envoy
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: main
   addresses:
     - type: IPAddress
       value: 192.168.80.240

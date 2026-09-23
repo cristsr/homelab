@@ -10,7 +10,7 @@ This repository contains the complete configuration to spin up a single-node Kub
 
 - **GitOps**: ArgoCD manages the entire application lifecycle from Git.
 - **Networking**: Cilium as CNI with full kube-proxy replacement via eBPF.
-- **Ingress**: Cilium Gateway API for generic traffic, Agent Gateway retained only for MCP servers (see ADR-010).
+- **Ingress**: Envoy Gateway for generic traffic, Agent Gateway retained only for MCP servers (see ADR-010).
 - **Secrets**: 1Password as the secrets backend, synced with Kubernetes via External Secrets Operator.
 - **Storage**: OpenEBS ZFS LocalPV as local storage (see ADR-013 and ADR-014).
 - **Monitoring**: Prometheus, Grafana and Headlamp.
@@ -30,7 +30,7 @@ The VM is created with **Terraform** (provider `bpg/proxmox` + `siderolabs/talos
 | Kubernetes | Talos Linux (`siderolabs/talos`) | v1.14.0 |
 | CNI | Cilium | 1.20.1 |
 | GitOps | Argo CD | 9.5.13 |
-| Ingress (generic) | Cilium Gateway API | 1.20.1 |
+| Ingress (generic) | Envoy Gateway | v1.9.0 |
 | Ingress (MCP) | Agent Gateway | 1.1.0 |
 | Storage | OpenEBS ZFS LocalPV | 2.11.1 |
 | Secrets | 1Password | - |
