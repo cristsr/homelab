@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  project: homelab
+  sources:
+    - repoURL: oci://codeberg.org/forgejo-contrib
+      chart: forgejo
+      targetRevision: "6.1.0"
+      helm:
+        releaseName: forgejo
+        valueFiles:
+          - $values/platform/devtools/forgejo/forgejo.yaml
+    - repoURL: https://github.com/cristsr/homelab
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: devtools
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
