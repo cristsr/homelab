@@ -41,6 +41,15 @@ spec:
                 secretKeyRef:
                   name: hermes-secrets
                   key: FORGEJO_TOKEN
+            - name: API_SERVER_ENABLED
+              value: "true"
+            - name: API_SERVER_HOST
+              value: "0.0.0.0"
+            - name: API_SERVER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: hermes-secrets
+                  key: API_SERVER_KEY
           volumeMounts:
             - name: data
               mountPath: /opt/data
