@@ -77,7 +77,6 @@ homelab/
 ├── bootstrap/                   # Values/scripts consumed by terraform/cluster/bootstrap.tf
 │   ├── cilium/values.yaml       # Cilium values (includes Talos-specific tweaks)
 │   ├── argocd/values.yaml       # ArgoCD values (GitOps)
-│   └── adopt-cilium-gateway-secrets.sh  # Idempotency hook for the Cilium chart
 │
 ├── gitops/                     # ArgoCD applications (App of Apps)
 │   ├── root-app.yaml           # Root application pointing to gitops/apps/

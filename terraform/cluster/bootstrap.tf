@@ -1,21 +1,3 @@
-# Re-adopts the Cilium Gateway resources before each chart upgrade.
-resource "null_resource" "adopt_cilium_gateway_secrets" {
-  triggers = {
-    timestamp = timestamp()
-  }
-
-  provisioner "local-exec" {
-    command = "bash ${path.module}/../../bootstrap/adopt-cilium-gateway-secrets.sh"
-    environment = {
-      KUBECONFIG = var.kubeconfig_path
-    }
-  }
-
-  depends_on = [
-    kubernetes_namespace_v1.namespaces
-  ]
-}
-
 resource "helm_release" "cilium" {
   name       = "cilium"
   repository = "https://helm.cilium.io"
@@ -31,7 +13,7 @@ resource "helm_release" "cilium" {
   timeout = 300
 
   depends_on = [
-    null_resource.adopt_cilium_gateway_secrets
+    kubernetes_namespace_v1.namespaces
   ]
 }
 

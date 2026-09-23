@@ -823,7 +823,7 @@ Cilium's Gateway API implementation serves `HTTPRoute`s but exposes almost nothi
 
 - **No `SecurityPolicy` on `main`.** A CIDR allow-list would allow the whole LAN plus the tailnet, i.e. everything that can already reach `192.168.80.240`, so it blocks nothing while adding lock-out risk. What would protect the UIs is OIDC/JWT, which needs an identity provider the cluster doesn't have yet.
 - **No `BackendTLSPolicy`.** No backend speaks TLS today (ArgoCD runs `--insecure`) and Agent Gateway is plain HTTP by design, so `main` still terminates TLS and proxies to it (ADR-012).
-- **`gatewayAPI.enabled` stays `true` in `bootstrap/cilium/values.yaml`.** Turning it off is a Helm upgrade of Cilium and reloads the BPF datapath, which is exactly what took the Cloudflare tunnels down for 37 minutes on 2026-05-12. Do it as its own step once Envoy Gateway is verified, then drop the Cilium parts of `bootstrap/adopt-cilium-gateway-secrets.sh`.
+- **`gatewayAPI.enabled` was left `true` at cutover**, then set to `false` in its own change once Envoy Gateway was verified (2026-09-23): turning it off is a Cilium Helm upgrade that reloads the BPF datapath, which is what took the Cloudflare tunnels down for 37 minutes on 2026-05-12. `bootstrap/adopt-cilium-gateway-secrets.sh` and its Terraform hook were dropped with it, since they only re-adopted Gateway API resources.
 
 ### Consequences
 

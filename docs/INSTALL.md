@@ -180,7 +180,7 @@ terraform apply
 
 This creates, in order (via `depends_on`):
 - **Base namespaces** (`terraform/cluster/namespaces.tf`).
-- **Cilium** (`helm_release`, with the idempotency hook `bootstrap/adopt-cilium-gateway-secrets.sh`).
+- **Cilium** (`helm_release`).
 - **ArgoCD** (`helm_release`).
 - **Initial secrets**: `github-repo-creds`, `in-cluster-secret` (`terraform/cluster/secrets.tf`).
 - **OpenEBS ZFS Job**: creates the `zfspv-pool` zpool on the dedicated disk (`terraform/cluster/storage.tf`).
