@@ -110,7 +110,7 @@ $EDITOR secrets/homelab.env
 
 Fill in at least the fields in the `# --- Infra (required) ---` section (`ARGOCD_GITHUB_PAT`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TUNNEL_TOKEN`, `GHCR_PAT`) and `# --- Databases ---`. The rest of the fields (Monitoring, SonarQube, DevTools) also live in this same file, but are applied to the repo (encrypted) in section 7 — they're not used directly from here.
 
-> This file is now only consumed by `ansible/preflight.yaml` (Infra fields) and `ansible/data-services.yaml` (Databases fields, when bringing up the engines on their LXCs). The Gateway/internal DNS fixed IP is no longer configured via variable — it's edited directly in `platform/networking/cilium-gateway/gateway.yaml` and `platform/networking/private-dns/` if it needs to change.
+> This file is now only consumed by `ansible/preflight.yaml` (Infra fields) and `ansible/data-services.yaml` (Databases fields, when bringing up the engines on their LXCs). The Gateway/internal DNS fixed IP is no longer configured via variable — it's edited directly in `platform/networking/envoy-gateway/gateway.yaml` and `platform/networking/private-dns/` if it needs to change.
 
 ### 3.1 Run the preflight
 

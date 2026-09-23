@@ -30,7 +30,7 @@ The VM is created with **Terraform** (provider `bpg/proxmox` + `siderolabs/talos
 | Kubernetes | Talos Linux (`siderolabs/talos`) | v1.14.0 |
 | CNI | Cilium | 1.20.1 |
 | GitOps | Argo CD | 9.5.13 |
-| Ingress (generic) | Envoy Gateway | v1.9.0 |
+| Ingress (generic) | Envoy Gateway | v1.9.1 |
 | Ingress (MCP) | Agent Gateway | 1.1.0 |
 | Storage | OpenEBS ZFS LocalPV | 2.11.1 |
 | Secrets | 1Password | - |
