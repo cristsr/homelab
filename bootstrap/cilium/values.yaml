@@ -41,8 +41,9 @@ routingMode: native
 autoDirectNodeRoutes: true
 ipv4NativeRoutingCIDR: "10.244.0.0/16"
 
+# Ingress is Envoy Gateway (ADR-023); Cilium no longer implements Gateway API.
 gatewayAPI:
-  enabled: true
+  enabled: false
 
 # Assigns real LAN IPs to LoadBalancer Services; without it they stay
 # <pending> forever, since there's no external controller like MetalLB.
