@@ -27,7 +27,7 @@ Single-node homelab built on Talos Linux (a VM on Proxmox VE) with full GitOps. 
 | Hypervisor | Proxmox VE (Terraform provider `bpg/proxmox`) |
 | Kubernetes | Talos Linux v1.14.0 (immutable, no SSH) |
 | CNI / NetworkPolicy | Cilium 1.20.1 (eBPF, kube-proxy replacement) |
-| Ingress / Gateway (generic) | Envoy Gateway v1.9.0 |
+| Ingress / Gateway (generic) | Envoy Gateway v1.9.1 |
 | Ingress / Gateway (MCP) | Agent Gateway 1.1.0 |
 | GitOps | Argo CD 9.5.13 |
 | TLS Certificates | cert-manager: Let's Encrypt (public and private, DNS-01 via Cloudflare) |
