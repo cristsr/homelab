@@ -12,3 +12,11 @@ service:
 
 ingress:
   enabled: false
+
+gitea:
+  config:
+    server:
+      DOMAIN: forgejo.internal.cristianpuenguenan.online
+      ROOT_URL: https://forgejo.internal.cristianpuenguenan.online
+      SSH_DOMAIN: forgejo.internal.cristianpuenguenan.online
+      HTTP_PORT: 3000
