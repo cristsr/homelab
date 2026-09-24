@@ -14,7 +14,7 @@ all:
     data_lxcs:
       hosts:
         postgresql:
-          ansible_host: 192.168.80.31
+          ansible_host: 10.10.20.31
           pct_vmid: 121
         mongodb:
           ansible_host: 10.10.20.32
