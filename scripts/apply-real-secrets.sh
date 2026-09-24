@@ -110,11 +110,11 @@ set_field platform/observability/secrets/grafana-admin.sops.yaml \
 # --- workloads/finances/secrets.sops.yaml (Kimai) ---
 # Kimai takes one connection URL instead of separate user/password keys, so the
 # URL is rebuilt here from the same answers-file values Ansible provisions the
-# MySQL user with. Keep the host/port in step with the mysql LXC's static IP.
+# MySQL user with. The host is the mysql domain, so a move of the LXC changes DNS only.
 if [ -n "$KIMAI_DB_USER" ] && [ -n "$KIMAI_DB_PASS" ]; then
   set_field workloads/finances/secrets.sops.yaml \
     '["spec"]["secretTemplates"][0]["stringData"]["database-url"]' \
-    "mysql://${KIMAI_DB_USER}:${KIMAI_DB_PASS}@192.168.80.35:3306/kimai?charset=utf8mb4"
+    "mysql://${KIMAI_DB_USER}:${KIMAI_DB_PASS}@mysql.internal.cristianpuenguenan.online:3306/kimai?charset=utf8mb4"
 else
   echo "skip  workloads/finances/secrets.sops.yaml database-url (KIMAI_DB_USERNAME/KIMAI_DB_PASSWORD empty)"
 fi

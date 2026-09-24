@@ -19,10 +19,8 @@ jdbcOverwrite:
   enable: false
 
 env:
-  # Direct LXC IP, not the *.internal hostname: the cluster's own DNS can't
-  # resolve it and falls back to a public record that times out.
   - name: SONAR_JDBC_URL
-    value: "jdbc:postgresql://192.168.80.31:5432/sonarqube"
+    value: "jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube"
   - name: SONAR_JDBC_USERNAME
     valueFrom:
       secretKeyRef:
