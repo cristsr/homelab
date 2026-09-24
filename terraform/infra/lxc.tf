@@ -34,9 +34,9 @@ locals {
     }
     redis = {
       vmid       = 124
-      ip         = "192.168.80.34"
-      bridge     = var.network_bridge
-      gateway    = var.vm_gateway
+      ip         = "10.10.20.34"
+      bridge     = var.data_network_bridge
+      gateway    = var.data_gateway
       memory_mib = 512
       cores      = 1
       disk_gb    = 5

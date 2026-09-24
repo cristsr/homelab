@@ -23,7 +23,7 @@ all:
           ansible_host: 10.10.20.33
           pct_vmid: 123
         redis:
-          ansible_host: 192.168.80.34
+          ansible_host: 10.10.20.34
           pct_vmid: 124
         mysql:
           ansible_host: 192.168.80.35
