@@ -24,7 +24,7 @@ operator's) to route ALL of that range through the tunnel, breaking
 direct LAN access to the other devices on the local network.
 
 > If `ansible-playbook data-services.yaml` fails in CI with `Connection
-> timed out` against `192.168.80.31-34`, this is why - the runner doesn't have
+> timed out` against `10.10.20.31-35`, this is why - the runner doesn't have
 > a route advertised/approved to those IPs yet.
 
 The Talos VM has a fixed MAC (`var.vm_mac_address` in
@@ -42,10 +42,10 @@ Steps:
    `var.vm_mac_address` (e.g. `02:00:00:00:00:30`).
 2. On the hypervisor:
    ```bash
-   tailscale set --advertise-routes=192.168.80.20/32,192.168.80.30/32,192.168.80.31/32,192.168.80.32/32,192.168.80.33/32,192.168.80.34/32 --accept-routes
+   tailscale set --advertise-routes=192.168.80.20/32,192.168.80.30/32,192.168.80.240/32,192.168.80.253/32,10.10.20.0/24 --accept-routes
    ```
    (adjust the IPs if `PROXMOX_ENDPOINT`/`VM_STATIC_IP` are different; the
-   last four are the data LXCs, `terraform/infra/lxc.tf`).
+   `10.10.20.0/24` is the isolated data VNet holding the data LXCs, `terraform/infra/sdn.tf`).
 3. In the Tailscale admin console (**Machines → homelab → Edit route
    settings**): disable the old `192.168.80.0/24` route if it was
    approved, and enable the six new `/32` routes. Without this manual step
@@ -58,7 +58,7 @@ Verification from any machine on the tailnet:
 ```bash
 tailscale ping 192.168.80.20   # LAN IP of the hypervisor
 tailscale ping 192.168.80.30   # LAN IP of the Talos VM
-tailscale ping 192.168.80.31   # LAN IP of the PostgreSQL LXC (same for 32/33/34)
+tailscale ping 10.10.20.31      # data VNet IP of the PostgreSQL LXC (same for 32/33/34/35)
 ```
 
 ## 2. Proxmox API token for Terraform
@@ -101,7 +101,7 @@ CI does **not** need `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN`, `ARGOCD_WEBHOO
 `ansible/bootstrap-lxc-ssh.yaml` and `ansible/data-services.yaml` do need
 SSH: the first connects to the Proxmox host and uses `pct exec` to seed the
 CI pubkey into each LXC; the second connects directly to each LXC
-(`192.168.80.31-34`) to install Podman and bring up the engine via Quadlet.
+(`10.10.20.31-35`) to install Podman and bring up the engine via Quadlet.
 
 Steps:
 

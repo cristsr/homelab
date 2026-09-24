@@ -371,16 +371,19 @@ DB:       PostgreSQL on the external LXC (§5): jdbc:postgresql://postgres.inter
 
 ## 5. Databases
 
-Data services **don't run in the cluster**: they live on four Proxmox VE LXCs, created by Terraform (`terraform/infra/lxc.tf`) as base Debian 13 — bridge `vmbr0`, datastore `local-lvm`, static LAN IP. See [ADR-016](DECISIONS.md) for the decision and its trade-offs. Installing the engines inside the LXCs is pending (later provisioning); consumers already point to the hostnames that `private-dns` (§7) resolves, same as the private HTTP routes.
+Data services **don't run in the cluster**: they live on five Proxmox VE LXCs, created by Terraform (`terraform/infra/lxc.tf`) as base Debian 13 — bridge `datanet` (the isolated data VNet, see [ADR-024](DECISIONS.md)), datastore `local-lvm`, static IP. See [ADR-016](DECISIONS.md) for the decision and its trade-offs. Installing the engines inside the LXCs is pending (later provisioning); consumers already point to the hostnames that `private-dns` (§7) resolves, same as the private HTTP routes.
 
-### 5.1 The four LXCs
+### 5.1 The five LXCs
 
 | LXC | vmid | IP | Hostname (`private-dns`) | Engine |
 |-----|------|----|--------------------------|-------|
-| `postgresql` | 121 | `192.168.80.31` | `postgres.internal.cristianpuenguenan.online` | PostgreSQL 17 — `homelab` and `sonarqube` databases |
-| `mongodb` | 122 | `192.168.80.32` | `mongodb.internal.cristianpuenguenan.online` | MongoDB 8.0 |
-| `qdrant` | 123 | `192.168.80.33` | `qdrant.internal.cristianpuenguenan.online` | Qdrant v1.x (REST 6333, gRPC 6334) |
-| `redis` | 124 | `192.168.80.34` | `redis.internal.cristianpuenguenan.online` | Redis 8 (port 6379) |
+| `postgresql` | 121 | `10.10.20.31` | `postgres.internal.cristianpuenguenan.online` | PostgreSQL 17 — `homelab` and `sonarqube` databases |
+| `mongodb` | 122 | `10.10.20.32` | `mongodb.internal.cristianpuenguenan.online` | MongoDB 8.0 |
+| `qdrant` | 123 | `10.10.20.33` | `qdrant.internal.cristianpuenguenan.online` | Qdrant v1.x (REST 6333, gRPC 6334) |
+| `redis` | 124 | `10.10.20.34` | `redis.internal.cristianpuenguenan.online` | Redis 8 (port 6379) |
+| `mysql` | 125 | `10.10.20.35` | `mysql.internal.cristianpuenguenan.online` | MariaDB 11 (port 3306) |
+
+The LXCs sit in the isolated subnet `10.10.20.0/24` (Proxmox SDN zone `data`, VNet `datanet`, gateway `10.10.20.1` held by the hypervisor, no physical NIC). Only Talos (`192.168.80.30`, through a static route via the hypervisor) and Tailscale nodes (the hypervisor is their subnet router) may reach it, and only on the database ports and SSH; the rules live in `ansible/hypervisor-network.yaml`. Every consumer reaches a database by its domain: pods through entries in the `kube-system` CoreDNS (`platform/networking/cluster-dns/`), tailnet nodes through `private-dns`. See [ADR-024](DECISIONS.md) and [data-vnet-cutover.md](data-vnet-cutover.md).
 
 A single multi-database PostgreSQL (`homelab` + `sonarqube`) replaces the two separate instances that used to run in the cluster. There are no longer any database operators or CRDs inside Kubernetes — the LXCs' lifecycle is Terraform's responsibility, and their OS is updated like any Debian box, independent of the cluster. The engines in the table are the target state: the containers are created bare and installing each engine is pending later provisioning (see ADR-016).
 
@@ -447,7 +450,8 @@ Tailscale (devices outside the physical LAN, and the CI runner)
       (see docs/CI_CD_HYPERVISOR_SETUP.md — the full /24 is NOT advertised,
       to avoid forcing all of the operator's LAN traffic through the tunnel)
         ├── 192.168.80.240 (envoy-main)
-        └── 192.168.80.253 (private-dns, via Tailscale Split DNS)
+        ├── 192.168.80.253 (private-dns, via Tailscale Split DNS)
+        └── 10.10.20.0/24 (data VNet: the five database LXCs)
 ```
 
 Which hostname resolves to which Gateway is decided, for public traffic, by the Cloudflare tunnel configuration (Zero Trust → Public Hostnames, managed outside Git); for LAN/Tailscale, `private-dns` (CoreDNS, `platform/networking/private-dns/`) resolves `internal.cristianpuenguenan.online` to the corresponding fixed IP, and the data LXC hostnames (§5) to their LAN IPs — see `docs/OPERATIONS.md` to configure Tailscale Split DNS.

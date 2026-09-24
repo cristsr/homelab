@@ -270,7 +270,7 @@ kubectl create token headlamp -n observability
 
 ### 8.3 LAN and Tailscale access
 
-The VM has a real IP on the LAN (Proxmox bridge `vmbr0`) — the Gateways (`envoy-main` at `192.168.80.240`, `private-dns` at `192.168.80.253`) are reachable directly from any device on the LAN, no port-forward needed. To access from outside the physical LAN, use Tailscale: the hypervisor advertises `/32` routes scoped to those IPs (see [CI_CD_HYPERVISOR_SETUP.md §1](CI_CD_HYPERVISOR_SETUP.md)), not the full `/24`.
+The VM has a real IP on the LAN (Proxmox bridge `vmbr0`) — the Gateways (`envoy-main` at `192.168.80.240`, `private-dns` at `192.168.80.253`) are reachable directly from any device on the LAN, no port-forward needed. To access from outside the physical LAN, use Tailscale: the hypervisor advertises `/32` routes scoped to those IPs, plus the data VNet `10.10.20.0/24` where the database LXCs live (see [CI_CD_HYPERVISOR_SETUP.md §1](CI_CD_HYPERVISOR_SETUP.md)), not the full LAN `/24`.
 
 ```bash
 curl -kI https://192.168.80.240 -H "Host: argocd.internal.cristianpuenguenan.online"
