@@ -1,0 +1,49 @@
+# Database names for pods. The resolver itself is provided by Talos; this file
+# keeps its stock Corefile and adds only a `hosts` block, so every other name
+# in the zone resolves exactly as before. It never forwards the zone to
+# private-dns: a pod must not depend on another pod to reach its database.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns
+  namespace: kube-system
+  annotations:
+    config.k8s.io/owning-inventory: talos-bootstrap-manifests-inventory
+data:
+  Corefile: |
+    .:53 {
+        errors
+        health {
+            lameduck 5s
+        }
+        ready
+        log . {
+            class error
+        }
+        prometheus :9153
+
+        hosts {
+            192.168.80.31 postgres.internal.cristianpuenguenan.online
+            192.168.80.32 mongodb.internal.cristianpuenguenan.online
+            192.168.80.33 qdrant.internal.cristianpuenguenan.online
+            192.168.80.34 redis.internal.cristianpuenguenan.online
+            192.168.80.35 mysql.internal.cristianpuenguenan.online
+            fallthrough
+        }
+
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+            pods insecure
+            fallthrough in-addr.arpa ip6.arpa
+            ttl 30
+        }
+        forward . /etc/resolv.conf {
+           max_concurrent 1000
+        }
+        cache 30 {
+           disable success cluster.local
+           disable denial cluster.local
+        }
+        loop
+        reload
+        loadbalance
+    }
