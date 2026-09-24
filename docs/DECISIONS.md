@@ -736,7 +736,7 @@ The operator decided to remove the dependency on a rate-limited external API for
 
 ## ADR-020: In-cluster workloads cannot use `*.internal.cristianpuenguenan.online` hostnames to connect to the data LXCs
 
-**Status**: Accepted
+**Status**: Accepted. Superseded by ADR-024 for the five database names.
 **Date**: 2026-09-16
 
 ### Context
@@ -831,3 +831,42 @@ Cilium's Gateway API implementation serves `HTTPRoute`s but exposes almost nothi
 - After the sync, the Cloudflare tunnel wildcard must be re-pointed once from `cilium-gateway-public.networking.svc.cluster.local:80` to `envoy-public.envoy-gateway-system.svc.cluster.local:80` (dashboard, outside Git). Until then the public site is down.
 - `CiliumNetworkPolicy` selectors that trusted the Cilium proxy as `host` must trust the `envoy-gateway-system` namespace instead (done for `openmemory-ui`).
 - One more controller (~2 pods: controller and one proxy per Gateway) on a single node.
+
+---
+
+## ADR-024: Data VNet segmentation and database domains for pods
+
+**Status**: Accepted
+**Date**: 2026-09-24
+
+### Context
+
+The five data LXCs (`postgresql`, `mongodb`, `qdrant`, `redis`, `mysql`, not four as ADR-016 says) shared the flat LAN `192.168.80.0/24` with the router, the hypervisor, Talos and every other LAN device. Any device on the LAN could reach the database ports, and ADR-016 accepted that the databases' perimeter was the LAN. The LXCs also shared the bridge and gateway variables with the Talos VM, so they could not be placed elsewhere.
+
+ADR-020 made pods use each database's direct IP because the cluster's own DNS could not resolve `*.internal` names. That was a design choice, not a technical limit, and it tied every consumer to an address that this change makes move.
+
+### Decision
+
+- The five LXCs move to an isolated subnet `10.10.20.0/24`: Proxmox SDN zone `data` (Simple), VNet `datanet`, gateway `10.10.20.1` held by the hypervisor, SNAT on, no physical NIC (`terraform/infra/sdn.tf`). Addresses keep their last octet: `10.10.20.31` to `10.10.20.35`.
+- Talos keeps `192.168.80.30` and gets no second NIC. It reaches the subnet through a static route via the hypervisor `192.168.80.20` (`terraform/infra/talos.tf`).
+- The hypervisor is the router and the firewall. An nftables forward chain accepts established traffic, accepts Talos and `tailscale0` towards the subnet on TCP 22, 5432, 27017, 6333, 6379 and 3306, and drops everything else towards it (`ansible/hypervisor-network.yaml`, run by hand, not by the Deploy workflow). The isolation is enforced by these rules, not by the subnet.
+- Tailscale keeps the hypervisor as the subnet router (ADR-022) and advertises `10.10.20.0/24` in addition to its other routes; the routes for `192.168.80.240` and `192.168.80.253`, missing until now, are advertised in the same command. Every tailnet node, including the CI runner, may reach the subnet.
+- Every consumer reaches a database by its domain. Pods resolve the five names through a `hosts` block added to the `kube-system` CoreDNS Corefile, managed by ArgoCD (`platform/networking/cluster-dns/`, never pruned); tailnet nodes resolve them through `private-dns`. The cluster DNS does not forward the zone to `private-dns`, so no pod depends on another pod to reach its database. An address change touches DNS, Terraform and the Ansible inventory, and no workload manifest.
+- The databases move one at a time, in shutdown windows, each merged as its own pull request after a backup and a clean `terraform plan`, following [data-vnet-cutover.md](data-vnet-cutover.md).
+
+### Alternatives considered
+
+| Alternative | Why not |
+|---|---|
+| A second NIC on Talos in the subnet | More Talos configuration and a second attachment to manage; the route through the hypervisor is enough and keeps one network identity for the node |
+| Forwarding `internal.cristianpuenguenan.online` from the cluster DNS to `private-dns` | A pod would depend on another pod to reach its database, and a cluster restart would start with a cycle |
+| Keeping pods on direct IPs (ADR-020) | Every address change would edit every consumer's manifest |
+| Moving Talos into its own subnet as well | Larger change, needs the Gateway addresses re-homed; left for a second phase |
+
+### Consequences
+
+- A LAN device that is neither Talos nor a tailnet node can no longer reach the databases, including by SSH.
+- The Deploy workflow runs Ansible against the LXCs through Tailscale, so the subnet route must be approved before the first LXC moves.
+- The `kube-system` CoreDNS ConfigMap is owned by Talos (`config.k8s.io/owning-inventory: talos-bootstrap-manifests-inventory`) and may be restored on a reboot or a Kubernetes upgrade. The cutover runbook checks that the entries survive a reboot and defines what to do if they do not.
+- All pods leave Talos with `192.168.80.30`, so the hypervisor firewall cannot tell namespaces apart; per-namespace control needs Cilium network policy.
+- The Proxmox UI (`:8006`) and the Talos API (`:50000`) are still open to the LAN.

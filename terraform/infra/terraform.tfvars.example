@@ -17,10 +17,11 @@
 # Contenedores LXC de datos (lxc.tf): valores fijos en el locals
 # data_services, sin variables propias. Las IPs asignadas tambien salen en
 # `terraform output data_service_ips`.
-#   postgresql  vmid 121  IP 192.168.80.31  1024 MiB  1 core  15 GB
-#   mongodb     vmid 122  IP 192.168.80.32  1024 MiB  1 core  10 GB
-#   qdrant      vmid 123  IP 192.168.80.33  1024 MiB  1 core  10 GB
-#   redis       vmid 124  IP 192.168.80.34   512 MiB  1 core   5 GB
+#   postgresql  vmid 121  IP 10.10.20.31  1024 MiB  1 core  15 GB
+#   mongodb     vmid 122  IP 10.10.20.32  1024 MiB  1 core  10 GB
+#   qdrant      vmid 123  IP 10.10.20.33  1024 MiB  1 core  10 GB
+#   redis       vmid 124  IP 10.10.20.34   512 MiB  1 core   5 GB
+#   mysql       vmid 125  IP 10.10.20.35  1024 MiB  1 core  15 GB
 
 # Obligatorias, sin default a proposito. En CI se inyectan por TF_VAR_*.
 # proxmox_endpoint  = "https://192.168.80.20:8006/"
