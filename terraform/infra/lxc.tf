@@ -8,6 +8,8 @@ locals {
     postgresql = {
       vmid       = 121
       ip         = "192.168.80.31"
+      bridge     = var.network_bridge
+      gateway    = var.vm_gateway
       memory_mib = 1024
       cores      = 1
       disk_gb    = 15
@@ -15,6 +17,8 @@ locals {
     mongodb = {
       vmid       = 122
       ip         = "192.168.80.32"
+      bridge     = var.network_bridge
+      gateway    = var.vm_gateway
       memory_mib = 1024
       cores      = 1
       disk_gb    = 10
@@ -22,6 +26,8 @@ locals {
     qdrant = {
       vmid       = 123
       ip         = "192.168.80.33"
+      bridge     = var.network_bridge
+      gateway    = var.vm_gateway
       memory_mib = 1024
       cores      = 1
       disk_gb    = 10
@@ -29,6 +35,8 @@ locals {
     redis = {
       vmid       = 124
       ip         = "192.168.80.34"
+      bridge     = var.network_bridge
+      gateway    = var.vm_gateway
       memory_mib = 512
       cores      = 1
       disk_gb    = 5
@@ -36,6 +44,8 @@ locals {
     mysql = {
       vmid       = 125
       ip         = "192.168.80.35"
+      bridge     = var.network_bridge
+      gateway    = var.vm_gateway
       memory_mib = 1024
       cores      = 1
       disk_gb    = 15
@@ -89,14 +99,14 @@ resource "proxmox_virtual_environment_container" "data_service" {
     ip_config {
       ipv4 {
         address = "${each.value.ip}/24"
-        gateway = var.vm_gateway
+        gateway = each.value.gateway
       }
     }
   }
 
   network_interface {
     name   = "eth0"
-    bridge = var.network_bridge
+    bridge = each.value.bridge
   }
 
   operating_system {

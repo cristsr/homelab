@@ -34,7 +34,9 @@ resource "talos_machine_configuration_apply" "this" {
               interface = "ens18"
               addresses = ["${var.vm_static_ip}/${var.vm_ip_prefix}"]
               routes = [
-                { network = "0.0.0.0/0", gateway = var.vm_gateway }
+                { network = "0.0.0.0/0", gateway = var.vm_gateway },
+                # Data subnet: reached through the hypervisor, which filters who may cross.
+                { network = var.data_subnet_cidr, gateway = var.hypervisor_lan_ip }
               ]
             }
           ]

@@ -120,3 +120,27 @@ variable "cluster_name" {
   type        = string
   default     = "talos"
 }
+
+variable "data_network_bridge" {
+  description = "Proxmox SDN VNet the data LXCs join once moved off the LAN"
+  type        = string
+  default     = "datanet"
+}
+
+variable "data_gateway" {
+  description = "Gateway of the data subnet, held by the hypervisor"
+  type        = string
+  default     = "10.10.20.1"
+}
+
+variable "data_subnet_cidr" {
+  description = "CIDR of the isolated data subnet"
+  type        = string
+  default     = "10.10.20.0/24"
+}
+
+variable "hypervisor_lan_ip" {
+  description = "LAN address of the hypervisor, the next hop Talos uses to reach the data subnet"
+  type        = string
+  default     = "192.168.80.20"
+}
