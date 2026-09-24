@@ -208,3 +208,24 @@ After the last window closes:
    tailscale status --json | jq '.Self.PrimaryRoutes'
    ```
 2. Merge the documentation and the ADR, and confirm no file outside the historical ADR text still names `192.168.80.31` to `192.168.80.35`.
+
+## Cutover record
+
+Executed on 2026-09-24. Every window used a `vzdump` snapshot backup on the hypervisor's `local` storage, a `terraform plan` that changed the container in place with no destroy, and a squash merge whose Deploy run finished green.
+
+| Window | Backup | Plan | Checks passed |
+|---|---|---|---|
+| qdrant (123) | `vzdump-lxc-123-2026_09_24-01_52_40.tar.zst` | in place, 0 destroy | pod, Tailscale node and hypervisor connect; API key accepted from Talos (200) and from `10.10.20.1` (200), refused without it (401); a LAN LXC is blocked |
+| redis (124) | `vzdump-lxc-124-2026_09_24-01_59_12.tar.zst` | in place, 0 destroy | pod, Tailscale node and hypervisor connect; `AUTH` and `PING` answer `+OK +PONG` from Talos and from `10.10.20.1`; a LAN LXC is blocked |
+| mysql (125) | `vzdump-lxc-125-2026_09_24-02_08_21.tar.zst` | in place, 0 destroy | pod, Tailscale node and hypervisor connect; Kimai restarted and initialised against the new address; a LAN LXC is blocked |
+| mongodb (122) | `vzdump-lxc-122-2026_09_24-02_16_33.tar.zst` | in place, 0 destroy | pod, Tailscale node and hypervisor connect; `ping` authenticated from Talos (`{"ok":1}`); a LAN LXC is blocked |
+| postgres (121) | `vzdump-lxc-121-2026_09_24-02_23_48.tar.zst` | in place, 0 destroy | pod, Tailscale node and hypervisor connect; SonarQube, n8n and Firefly III reconnected after a restart |
+
+Observations worth keeping:
+
+- The Kimai connection string is a SOPS secret and had to name the domain before the mysql window, in its own pull request (`workloads/finances/secrets.sops.yaml`). Rerunning `scripts/apply-real-secrets.sh` is not needed for that.
+- The pull request retarget and the push each start a Terraform Plan run, and the two can collide on the state lock. When the plan log shows `Error acquiring the state lock`, rerun one plan and read that result.
+- A pull request retargeted after its base was squash-merged can show a stale "conflicting" state even when it merges cleanly. Closing and reopening it recomputes the state.
+- A container on the data VNet is not filtered from another container on the same VNet, so the "blocked from the LAN" check has to run from a device that is still on the LAN.
+- The hypervisor was not rebooted to prove that the nftables rules persist; `nftables` is enabled and its configuration includes the rules directory.
+- The Tailscale advertise list now holds `10.10.20.0/24`, `192.168.80.20/32`, `192.168.80.30/32`, `192.168.80.240/32` and `192.168.80.253/32`. The five routes for `192.168.80.31` to `.35` can be deleted in the admin console.
