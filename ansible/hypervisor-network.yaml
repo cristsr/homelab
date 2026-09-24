@@ -1,0 +1,57 @@
+# Turns the hypervisor into the router and firewall of the data subnet. Run by
+# hand after the SDN exists (terraform/infra/sdn.tf); it is deliberately not
+# part of the Deploy workflow, because a firewall change can cut the CI runner's
+# own path to the data LXCs.
+---
+- name: Route and filter traffic into the data subnet
+  hosts: proxmox
+  vars:
+    data_vnet_subnet: 10.10.20.0/24
+    data_vnet_talos_ip: 192.168.80.30
+
+  tasks:
+    - name: Enable IPv4 forwarding
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: "1"
+        sysctl_set: true
+        state: present
+        reload: true
+
+    - name: Install nftables
+      ansible.builtin.apt:
+        name: nftables
+        state: present
+
+    - name: Create the rules directory
+      ansible.builtin.file:
+        path: /etc/nftables.d
+        state: directory
+        mode: "0755"
+
+    - name: Install the forward rules for the data subnet
+      ansible.builtin.template:
+        src: templates/data-vnet.nft.j2
+        dest: /etc/nftables.d/data-vnet.nft
+        mode: "0644"
+        validate: nft -c -f %s
+      notify: Reload nftables
+
+    - name: Load every file in the rules directory at boot
+      ansible.builtin.lineinfile:
+        path: /etc/nftables.conf
+        line: include "/etc/nftables.d/*.nft"
+        insertafter: EOF
+      notify: Reload nftables
+
+    - name: Enable and start nftables
+      ansible.builtin.systemd:
+        name: nftables
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Reload nftables
+      ansible.builtin.systemd:
+        name: nftables
+        state: reloaded

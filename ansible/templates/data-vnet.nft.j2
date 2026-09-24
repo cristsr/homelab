@@ -1,0 +1,18 @@
+# Managed by ansible/hypervisor-network.yaml. Filters what may cross from the
+# LAN and from Tailscale into the data subnet; SNAT for the subnet's own
+# outbound traffic is handled by the Proxmox SDN.
+add table inet data_vnet
+flush table inet data_vnet
+
+table inet data_vnet {
+    chain forward {
+        type filter hook forward priority 0; policy accept;
+
+        ct state established,related accept
+
+        ip saddr {{ data_vnet_talos_ip }} ip daddr {{ data_vnet_subnet }} tcp dport { 22, 5432, 27017, 6333, 6379, 3306 } accept
+        iifname "tailscale0" ip daddr {{ data_vnet_subnet }} tcp dport { 22, 5432, 27017, 6333, 6379, 3306 } accept
+
+        ip daddr {{ data_vnet_subnet }} drop
+    }
+}
