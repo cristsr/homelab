@@ -23,7 +23,7 @@ data:
         prometheus :9153
 
         hosts {
-            192.168.80.31 postgres.internal.cristianpuenguenan.online
+            10.10.20.31 postgres.internal.cristianpuenguenan.online
             10.10.20.32 mongodb.internal.cristianpuenguenan.online
             10.10.20.33 qdrant.internal.cristianpuenguenan.online
             10.10.20.34 redis.internal.cristianpuenguenan.online
