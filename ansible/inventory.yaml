@@ -17,7 +17,7 @@ all:
           ansible_host: 192.168.80.31
           pct_vmid: 121
         mongodb:
-          ansible_host: 192.168.80.32
+          ansible_host: 10.10.20.32
           pct_vmid: 122
         qdrant:
           ansible_host: 10.10.20.33
