@@ -40,7 +40,7 @@ spec:
             - name: DB_CONNECTION
               value: pgsql
             - name: DB_HOST
-              value: "192.168.80.31"
+              value: "postgres.internal.cristianpuenguenan.online"
             - name: DB_PORT
               value: "5432"
             - name: DB_DATABASE

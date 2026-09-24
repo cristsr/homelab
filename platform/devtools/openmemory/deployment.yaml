@@ -39,10 +39,8 @@ spec:
               value: "openai/text-embedding-3-small"
             - name: EMBEDDER_BASE_URL
               value: "https://openrouter.ai/api/v1"
-            # Direct LXC IP, not the *.internal hostname: the cluster's own
-            # DNS can't resolve it.
             - name: QDRANT_HOST
-              value: "192.168.80.33"
+              value: "qdrant.internal.cristianpuenguenan.online"
             - name: QDRANT_PORT
               value: "6333"
             - name: DATABASE_URL
