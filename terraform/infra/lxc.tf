@@ -16,7 +16,7 @@ locals {
     }
     mongodb = {
       vmid       = 122
-      ip         = "10.10.20.32"
+      ip         = "10.10.20.20"
       bridge     = var.data_network_bridge
       gateway    = var.data_gateway
       memory_mib = 1024
