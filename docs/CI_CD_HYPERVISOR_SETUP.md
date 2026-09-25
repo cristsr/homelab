@@ -24,7 +24,7 @@ operator's) to route ALL of that range through the tunnel, breaking
 direct LAN access to the other devices on the local network.
 
 > If `ansible-playbook data-services.yaml` fails in CI with `Connection
-> timed out` against `10.10.20.31-35`, this is why - the runner doesn't have
+> timed out` against `10.10.20.10` to `10.10.20.50`, this is why - the runner doesn't have
 > a route advertised/approved to those IPs yet.
 
 The Talos VM has a fixed MAC (`var.vm_mac_address` in
@@ -65,7 +65,7 @@ Verification from any machine on the tailnet:
 ```bash
 tailscale ping 192.168.80.20   # LAN IP of the hypervisor
 tailscale ping 192.168.80.30   # LAN IP of the Talos VM
-tailscale ping 10.10.20.31      # data VNet IP of the PostgreSQL LXC (same for 32/33/34/35)
+tailscale ping 10.10.20.10      # data VNet IP of the PostgreSQL LXC (same for .20, .30, .40 and .50)
 ```
 
 ## 2. Proxmox API token for Terraform
@@ -108,7 +108,7 @@ CI does **not** need `CLOUDFLARE_API_TOKEN`, `CLOUDFLARED_TOKEN`, `ARGOCD_WEBHOO
 `ansible/bootstrap-lxc-ssh.yaml` and `ansible/data-services.yaml` do need
 SSH: the first connects to the Proxmox host and uses `pct exec` to seed the
 CI pubkey into each LXC; the second connects directly to each LXC
-(`10.10.20.31-35`) to install Podman and bring up the engine via Quadlet.
+(`10.10.20.10` to `10.10.20.50`) to install Podman and bring up the engine via Quadlet.
 
 Steps:
 
