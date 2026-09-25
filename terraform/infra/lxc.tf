@@ -34,7 +34,7 @@ locals {
     }
     redis = {
       vmid       = 124
-      ip         = "10.10.20.34"
+      ip         = "10.10.20.40"
       bridge     = var.data_network_bridge
       gateway    = var.data_gateway
       memory_mib = 512
