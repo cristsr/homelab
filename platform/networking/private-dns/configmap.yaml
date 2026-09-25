@@ -33,7 +33,7 @@ data:
             192.168.80.240 firefly.internal.cristianpuenguenan.online
             192.168.80.240 n8n.internal.cristianpuenguenan.online
             192.168.80.240 forgejo.internal.cristianpuenguenan.online
-            10.10.20.31 postgres.internal.cristianpuenguenan.online
+            10.10.20.10 postgres.internal.cristianpuenguenan.online
             10.10.20.20 mongodb.internal.cristianpuenguenan.online
             10.10.20.30 qdrant.internal.cristianpuenguenan.online
             10.10.20.40 redis.internal.cristianpuenguenan.online
