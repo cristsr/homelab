@@ -26,7 +26,7 @@ all:
           ansible_host: 10.10.20.40
           pct_vmid: 124
         mysql:
-          ansible_host: 10.10.20.35
+          ansible_host: 10.10.20.50
           pct_vmid: 125
       vars:
         ansible_user: root
