@@ -7,7 +7,7 @@ locals {
   data_services = {
     postgresql = {
       vmid       = 121
-      ip         = "10.10.20.31"
+      ip         = "10.10.20.10"
       bridge     = var.data_network_bridge
       gateway    = var.data_gateway
       memory_mib = 1024
