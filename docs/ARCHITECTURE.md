@@ -463,6 +463,19 @@ Which hostname resolves to which Gateway is decided, for public traffic, by the 
 | 80/443 | TCP | 80 = redirect to HTTPS, 443 = TLS on `envoy-main` (direct LAN IP); includes the 3 `agentgateway-mcp` routes, forwarded internally |
 | 53 | UDP/TCP | `private-dns` DNS (direct LAN IP) |
 
+### Control plane access
+
+The Talos node stays at `192.168.80.30` on the LAN and its own ingress firewall protects the control plane ports (see [ADR-025](DECISIONS.md#adr-025-talos-ingress-firewall-for-the-control-plane) and [talos-firewall-cutover.md](talos-firewall-cutover.md)). There is one rule per port and the default ingress action stays accepting:
+
+| Port | Allowed from | Why |
+|---|---|---|
+| TCP 50000 (Talos API) | `192.168.80.20` (hypervisor), `192.168.80.10` (operator's PC) and the node itself | Tailscale clients and the CI runner arrive through the hypervisor's subnet router, masqueraded to `192.168.80.20`; the advertise list keeps `192.168.80.30/32` |
+| TCP 6443 (Kubernetes API) | the same, plus the pod range `10.244.0.0/16` and the service range `10.96.0.0/12` | pods reach the API through the node's address |
+| TCP 10250 (kubelet) | the node itself and the pod range | not reachable from the LAN |
+| TCP 2379-2380 (etcd) | the node itself | not reachable from the LAN |
+
+Other ports of the node, including the Gateway `192.168.80.240` and the private DNS `192.168.80.253`, are not restricted. The isolation is a firewall, not a network boundary: a LAN device that spoofs an allowed address would pass.
+
 ### DNS and subdomains
 
 `portfolio`/`api` resolve via Cloudflare Tunnel (WAN). The rest of the routes have no useful public DNS — they resolve via `private-dns` with Tailscale Split DNS restricted to `internal.cristianpuenguenan.online` (see §11 in `docs/OPERATIONS.md`). The public wildcard `*.cristianpuenguenan.online` technically also matches these subdomains by DNS, but the TLS connection fails at the Cloudflare edge (no Hostname configured there) — there's no real way to reach these routes from outside the tailnet.
