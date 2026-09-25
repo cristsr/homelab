@@ -151,8 +151,8 @@ variable "talos_api_allowed_sources" {
   default     = ["192.168.80.20/32", "192.168.80.10/32"]
 }
 
-variable "lan_cidr" {
-  description = "CIDR of the LAN, allowed to reach the Gateway and the private DNS on the node"
-  type        = string
-  default     = "192.168.80.0/24"
+variable "cluster_internal_sources" {
+  description = "Pod range first, then service range: allowed to reach the node's own address (Kubernetes API, kubelet) through the ingress firewall"
+  type        = list(string)
+  default     = ["10.244.0.0/16", "10.96.0.0/12"]
 }
