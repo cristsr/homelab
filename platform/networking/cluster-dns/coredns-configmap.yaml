@@ -24,7 +24,7 @@ data:
 
         hosts {
             10.10.20.31 postgres.internal.cristianpuenguenan.online
-            10.10.20.32 mongodb.internal.cristianpuenguenan.online
+            10.10.20.20 mongodb.internal.cristianpuenguenan.online
             10.10.20.30 qdrant.internal.cristianpuenguenan.online
             10.10.20.40 redis.internal.cristianpuenguenan.online
             10.10.20.50 mysql.internal.cristianpuenguenan.online
