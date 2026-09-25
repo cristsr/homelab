@@ -115,6 +115,13 @@ resource "talos_machine_configuration_apply" "this" {
       }
       ingress = [{ subnet = var.lan_cidr }]
     }),
+    # Everything not allowed above is dropped. The hypervisor is always among
+    # the allowed sources, so the node stays reachable for a rollback.
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "NetworkDefaultActionConfig"
+      ingress    = "block"
+    }),
     # Talos manages the hostname via this dedicated document, not the legacy
     # machine.network.hostname field. `auto` must stay "off": the strategic
     # merge patch only overwrites keys, it never removes them.
