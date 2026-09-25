@@ -25,7 +25,7 @@ locals {
     }
     qdrant = {
       vmid       = 123
-      ip         = "10.10.20.33"
+      ip         = "10.10.20.30"
       bridge     = var.data_network_bridge
       gateway    = var.data_gateway
       memory_mib = 1024
