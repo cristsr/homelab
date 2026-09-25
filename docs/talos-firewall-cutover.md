@@ -62,17 +62,17 @@ talosctl --nodes 192.168.80.30 apply-config --file ./machineconfig-before-firewa
 
 Gate, after Deploy:
 
-- From a device that is not `192.168.80.10`, not the hypervisor and has no Tailscale route to the node (a phone on Wi-Fi without Tailscale): `nc -vz -w3 192.168.80.30 6443`, `nc -vz -w3 192.168.80.30 50000` and `nc -vz -w3 192.168.80.30 10250` all fail.
+- From an address that is not allowed (a phone on Wi-Fi without Tailscale, or a temporary address on the hypervisor: `ip addr add 192.168.80.99/24 dev vmbr0 label vmbr0:t99`, then `nc -zv -w3 -s 192.168.80.99 192.168.80.30 <port>`, then `ip addr del 192.168.80.99/24 dev vmbr0`): `nc -vz -w3 192.168.80.30 6443`, `nc -vz -w3 192.168.80.30 50000` and `nc -vz -w3 192.168.80.30 10250` all fail, and so do `2379` and `2380`.
 - From the hypervisor and from the PC: `talosctl --nodes 192.168.80.30 health`, `kubectl get nodes,pods -A` and `nc -vz -w3 192.168.80.30 6443` succeed, the node is `Ready` and every pod that was `Running` is `Running`.
 - Data: `kubectl get pv,pvc -A` shows every volume `Bound`, and both ZFS pools are `ONLINE`.
-- Ingress and DNS: from a LAN device, `curl -k -s -o /dev/null -w '%{http_code}' https://192.168.80.240 -H 'Host: argocd.internal.cristianpuenguenan.online'` returns the same status as before, and `dig @192.168.80.253 postgres.internal.cristianpuenguenan.online` answers.
+- Ingress and DNS: from a LAN device, `curl -k -s -o /dev/null -w '%{http_code}' --resolve argocd.internal.cristianpuenguenan.online:443:192.168.80.240 https://argocd.internal.cristianpuenguenan.online/` (the gateway needs the SNI, so a bare `Host` header returns `000`) returns the same status as before, and `dig @192.168.80.253 postgres.internal.cristianpuenguenan.online` answers.
 - Cluster egress and databases: a pod runs `nc -vz -w4 postgres.internal.cristianpuenguenan.online 5432` and pulls an image.
 - Tailscale: a node that accepts routes runs `kubectl get nodes` and `talosctl --nodes 192.168.80.30 version`.
 - CI: re-run the Deploy workflow from the Actions tab; it completes, including the Talos configuration apply.
 
 If a LoadBalancer port stops answering, the firewall is intercepting traffic that Cilium translates; apply the permissive command above first, then investigate.
 
-**Rollback:** from the hypervisor apply the saved configuration with the permissive command above, then revert the pull request; proof: from a LAN device `curl -k -s -o /dev/null -w '%{http_code}' https://192.168.80.240 -H 'Host: argocd.internal.cristianpuenguenan.online'` and `talosctl --nodes 192.168.80.30 version` answer.
+**Rollback:** from the hypervisor apply the saved configuration with the permissive command above, then revert the pull request; proof: from a LAN device `curl -k -s -o /dev/null -w '%{http_code}' --resolve argocd.internal.cristianpuenguenan.online:443:192.168.80.240 https://argocd.internal.cristianpuenguenan.online/` (the gateway needs the SNI, so a bare `Host` header returns `000`) and `talosctl --nodes 192.168.80.30 version` answer.
 
 ## Stage 4: Renumber the database LXCs
 
@@ -139,3 +139,12 @@ Per container:
   1. From the hypervisor, whose address the rules always allow, apply the saved configuration with `talosctl apply-config`.
   2. Only if etcd is damaged, `talosctl bootstrap --recover-from=<snapshot>`.
   3. If the node is unreachable from every address, boot the Talos ISO and apply a permissive configuration.
+
+## Cutover record
+
+Executed on 2026-09-24, from the hypervisor with `talosctl apply-config` because Deploy could not run: the media disk (`sdb`) had dropped, `media-vg` was not found and `terraform plan` of `terraform/infra` failed at the refresh of the VM (`can't get size of '/dev/media-vg/vm-100-disk-0'`). The configuration applied is the saved one plus the same documents the pull requests add, so the Deploy that follows the merges finds nothing to change.
+
+- Stage 1: etcd snapshot (`64184352` bytes, revision `4274082`) and the persisted machine configuration saved on the hypervisor and on the operator's PC; `apply-config --dry-run` of the saved configuration reported no changes. `vzdump` was skipped: the OS and ZFS disks use about 133 GB and the backup storage had 52 GB free.
+- Stage 2: applied without a reboot. `talosctl get nftableschain` lists the `ingress` chain. `tcpdump -ni vmbr0 host 192.168.80.30 and tcp port 6443` while the PC ran `kubectl get nodes` showed the source `192.168.80.20`: Tailscale traffic arrives masqueraded. From the temporary address `192.168.80.99`, `6443` and `50000` timed out and `10250` was still open; from the hypervisor `6443` opened.
+- Stage 3: applied without a reboot. From `192.168.80.99`, `6443`, `50000`, `10250`, `2379` and `2380` timed out. `talosctl health` from the hypervisor and `kubectl get nodes` from the PC passed; the node is `Ready`; the same 66 pods are `Running` (one was replaced by a rollout of `forgejo`); the gateway returns `200`; `dig`/`nslookup` answers over UDP and TCP; a pod reached `postgres.internal.cristianpuenguenan.online:5432` and `https://github.com`.
+- Not run: the Deploy workflow re-run, blocked by the media disk.
