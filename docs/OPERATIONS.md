@@ -145,7 +145,7 @@ If a firewall change locks you out, from the hypervisor apply a permissive confi
 talosctl --nodes 192.168.80.30 apply-config --file ./machineconfig-before-firewall.yaml
 ```
 
-If the node is unreachable from every address, boot the Talos ISO and apply a permissive configuration. The full procedure is in [talos-firewall-cutover.md](talos-firewall-cutover.md).
+If the Talos API is unreachable even from the hypervisor, stop the VM and replace `config.yaml` in the `STATE` partition of its OS disk from the hypervisor, then start it again; if that is not possible either, boot the Talos ISO and apply a permissive configuration. The steps are in [talos-firewall-cutover.md](talos-firewall-cutover.md). Never add a firewall rule over a port that another rule already lists: each rule drops the sources it does not list.
 
 ### Restart a deployment
 
