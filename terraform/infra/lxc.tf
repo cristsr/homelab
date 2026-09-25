@@ -43,7 +43,7 @@ locals {
     }
     mysql = {
       vmid       = 125
-      ip         = "10.10.20.35"
+      ip         = "10.10.20.50"
       bridge     = var.data_network_bridge
       gateway    = var.data_gateway
       memory_mib = 1024
