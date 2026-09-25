@@ -20,7 +20,7 @@ all:
           ansible_host: 10.10.20.32
           pct_vmid: 122
         qdrant:
-          ansible_host: 10.10.20.33
+          ansible_host: 10.10.20.30
           pct_vmid: 123
         redis:
           ansible_host: 10.10.20.34

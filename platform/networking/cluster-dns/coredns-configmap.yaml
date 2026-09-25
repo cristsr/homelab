@@ -25,7 +25,7 @@ data:
         hosts {
             10.10.20.31 postgres.internal.cristianpuenguenan.online
             10.10.20.32 mongodb.internal.cristianpuenguenan.online
-            10.10.20.33 qdrant.internal.cristianpuenguenan.online
+            10.10.20.30 qdrant.internal.cristianpuenguenan.online
             10.10.20.34 redis.internal.cristianpuenguenan.online
             10.10.20.35 mysql.internal.cristianpuenguenan.online
             fallthrough
