@@ -61,6 +61,60 @@ resource "talos_machine_configuration_apply" "this" {
         }
       }
     }),
+    # Ingress firewall allow rules. The default action is set in its own
+    # document; while it is still accepting, these only prepare the block.
+    # Loopback, established connections, ICMP and pod/service traffic are
+    # allowed by Talos itself in block mode.
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "NetworkRuleConfig"
+      name       = "apid-ingress"
+      portSelector = {
+        ports    = [50000]
+        protocol = "tcp"
+      }
+      ingress = [for source in var.talos_api_allowed_sources : { subnet = source }]
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "NetworkRuleConfig"
+      name       = "kubernetes-api-ingress"
+      portSelector = {
+        ports    = [6443]
+        protocol = "tcp"
+      }
+      ingress = [for source in var.talos_api_allowed_sources : { subnet = source }]
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "NetworkRuleConfig"
+      name       = "gateway-ingress"
+      portSelector = {
+        ports    = [80, 443]
+        protocol = "tcp"
+      }
+      ingress = [{ subnet = var.lan_cidr }]
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "NetworkRuleConfig"
+      name       = "dns-tcp-ingress"
+      portSelector = {
+        ports    = [53]
+        protocol = "tcp"
+      }
+      ingress = [{ subnet = var.lan_cidr }]
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "NetworkRuleConfig"
+      name       = "dns-udp-ingress"
+      portSelector = {
+        ports    = [53]
+        protocol = "udp"
+      }
+      ingress = [{ subnet = var.lan_cidr }]
+    }),
     # Talos manages the hostname via this dedicated document, not the legacy
     # machine.network.hostname field. `auto` must stay "off": the strategic
     # merge patch only overwrites keys, it never removes them.

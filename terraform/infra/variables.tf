@@ -144,3 +144,15 @@ variable "hypervisor_lan_ip" {
   type        = string
   default     = "192.168.80.20"
 }
+
+variable "talos_api_allowed_sources" {
+  description = "Addresses allowed to reach the Talos API and the Kubernetes API through the node's ingress firewall: the hypervisor (Tailscale traffic arrives masqueraded as it) and the operator's PC"
+  type        = list(string)
+  default     = ["192.168.80.20/32", "192.168.80.10/32"]
+}
+
+variable "lan_cidr" {
+  description = "CIDR of the LAN, allowed to reach the Gateway and the private DNS on the node"
+  type        = string
+  default     = "192.168.80.0/24"
+}
