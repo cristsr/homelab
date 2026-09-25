@@ -53,6 +53,13 @@ Steps:
    --json` will keep showing only the old routes in `PrimaryRoutes`
    until they're approved here.
 
+Keep `192.168.80.30/32` in the advertise list: it is how a Tailscale client
+or the CI runner reaches the Talos node, whose ingress firewall accepts the
+Talos API and the Kubernetes API only from the hypervisor and the operator's
+PC (see [ADR-025](DECISIONS.md#adr-025-talos-ingress-firewall-for-the-control-plane)).
+Give the PC a DHCP reservation in the router for `192.168.80.10`, the
+address the firewall names.
+
 Verification from any machine on the tailnet:
 
 ```bash

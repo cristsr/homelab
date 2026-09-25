@@ -836,7 +836,7 @@ Cilium's Gateway API implementation serves `HTTPRoute`s but exposes almost nothi
 
 ## ADR-024: Data VNet segmentation and database domains for pods
 
-**Status**: Accepted
+**Status**: Accepted. Amended by ADR-025: the Talos control plane is reachable only from the hypervisor and the operator's PC
 **Date**: 2026-09-24
 
 ### Context
@@ -870,3 +870,38 @@ ADR-020 made pods use each database's direct IP because the cluster's own DNS co
 - The `kube-system` CoreDNS ConfigMap is owned by Talos (`config.k8s.io/owning-inventory: talos-bootstrap-manifests-inventory`) and may be restored on a reboot or a Kubernetes upgrade. The cutover runbook checks that the entries survive a reboot and defines what to do if they do not.
 - All pods leave Talos with `192.168.80.30`, so the hypervisor firewall cannot tell namespaces apart; per-namespace control needs Cilium network policy.
 - The Proxmox UI (`:8006`) and the Talos API (`:50000`) are still open to the LAN.
+
+---
+
+## ADR-025: Talos ingress firewall for the control plane
+
+**Status**: Accepted
+**Date**: 2026-09-24
+
+### Context
+
+After ADR-024 the Talos VM (`192.168.80.30`) was the only cluster component left on the flat LAN, and every LAN device could reach the Talos API (`:50000`), the Kubernetes API (`:6443`), the kubelet and the etcd ports of the only cluster node. ADR-024 listed moving Talos into its own subnet as a second phase. That phase was designed (a subnet `10.10.30.0/24` on the hypervisor, the Gateway and the private DNS forwarded with DNAT) and set aside: the same protection of the control plane is reachable with one machine-configuration change, and without changing the node's address, DNAT, SDN DHCP or a window in which the whole cluster is down.
+
+### Decision
+
+- The node stays at `192.168.80.30` on the LAN. Talos's own ingress firewall sets the default action to `block` (`NetworkDefaultActionConfig` in `terraform/infra/talos.tf`).
+- The Talos API (TCP 50000) and the Kubernetes API (TCP 6443) accept only the hypervisor `192.168.80.20` and the operator's PC `192.168.80.10` (`var.talos_api_allowed_sources`). Tailscale clients and the CI runner reach the node through the hypervisor's subnet router, which masquerades their traffic, so the node sees `192.168.80.20`; the route `192.168.80.30/32` stays in the advertise list.
+- The Gateway (TCP 80 and 443) and the private DNS (port 53, TCP and UDP) are allowed from the LAN `192.168.80.0/24`, because the default action is block. The addresses `192.168.80.240` and `192.168.80.253`, the Cilium pools and the L2 announcement policy do not change.
+- Nothing else is opened: the kubelet (`10250`) and etcd (`2379`, `2380`) are not reachable from the LAN. In block mode Talos itself allows loopback, established connections, rate-limited ICMP and traffic between the pod and service subnets, so pods reach the API without a rule. Cilium runs in native routing, so no VXLAN rule is needed.
+- The rollout has two steps: the allow rules with the default action still accepting, then the block. The hypervisor is always allowed, so a permissive configuration can be applied from it to roll back. See [talos-firewall-cutover.md](talos-firewall-cutover.md).
+- The five database LXCs are renumbered to `10.10.20.10`, `.20`, `.30`, `.40` and `.50` as a later, separate stage, one container per pull request; their domains and vmids do not change.
+
+### Alternatives considered
+
+| Alternative | Why not |
+|---|---|
+| A cluster subnet `10.10.30.0/24` with the Gateway and the private DNS forwarded by DNAT on the hypervisor | The same protection with an address change of the node in place, DNAT, SDN DHCP, new Tailscale routes and a window in which the whole cluster is down; the isolation would be a network boundary instead of a firewall, which a home network does not need |
+| Routed `/32` addresses with proxy ARP instead of DNAT | Needs no translation, but still needs the node moved to another subnet |
+| A second NIC on Talos restricted to the LAN | Keeps the node on the LAN with a second attachment to manage, and the firewall on the first one still has to exist |
+
+### Consequences
+
+- The isolation is enforced by the node's firewall, not by the network: a LAN device that spoofs `192.168.80.20` or `192.168.80.10` would be allowed. The Proxmox UI (`:8006`) is still open to the LAN.
+- The PC's address must be stable; a DHCP reservation for `192.168.80.10` in the router keeps it.
+- A wrong firewall change can lock the operator out. The hypervisor address is allowed from the first step, and the recovery order is in the runbook: apply a permissive configuration from the hypervisor, then, if needed, the Talos ISO.
+- Whether Cilium translates traffic to a LoadBalancer address before it reaches Talos's input chain is not documented; the explicit rules for 80, 443 and 53 cover both cases and the second step of the rollout checks it.

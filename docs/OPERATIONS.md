@@ -135,6 +135,18 @@ kubectl get events -A --sort-by='.lastTimestamp' | tail -20
 | ArgoCD | `kubectl -n argocd port-forward svc/argocd-server 8080:80` |
 | Grafana | `kubectl -n observability port-forward svc/grafana 3000:3000` |
 
+### Reaching the cluster API
+
+The Talos API (`:50000`) and the Kubernetes API (`:6443`) accept only the hypervisor (`192.168.80.20`) and the operator's PC (`192.168.80.10`); see [ADR-025](DECISIONS.md#adr-025-talos-ingress-firewall-for-the-control-plane). From the PC use `kubectl` and `talosctl --nodes 192.168.80.30` directly. From any other device, join Tailscale with route acceptance on: the traffic reaches the node through the hypervisor, so it looks like `192.168.80.20`.
+
+If a firewall change locks you out, from the hypervisor apply a permissive configuration (the saved one from before the change):
+
+```bash
+talosctl --nodes 192.168.80.30 apply-config --file ./machineconfig-before-firewall.yaml
+```
+
+If the node is unreachable from every address, boot the Talos ISO and apply a permissive configuration. The full procedure is in [talos-firewall-cutover.md](talos-firewall-cutover.md).
+
 ### Restart a deployment
 
 ```bash

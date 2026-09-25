@@ -463,6 +463,18 @@ Which hostname resolves to which Gateway is decided, for public traffic, by the 
 | 80/443 | TCP | 80 = redirect to HTTPS, 443 = TLS on `envoy-main` (direct LAN IP); includes the 3 `agentgateway-mcp` routes, forwarded internally |
 | 53 | UDP/TCP | `private-dns` DNS (direct LAN IP) |
 
+### Control plane access
+
+The Talos node stays at `192.168.80.30` on the LAN and its own ingress firewall isolates the control plane (see [ADR-025](DECISIONS.md#adr-025-talos-ingress-firewall-for-the-control-plane) and [talos-firewall-cutover.md](talos-firewall-cutover.md)). The default ingress action is `block`:
+
+| Port | Allowed from | Why |
+|---|---|---|
+| TCP 50000 (Talos API), TCP 6443 (Kubernetes API) | `192.168.80.20` (hypervisor) and `192.168.80.10` (operator's PC) | Tailscale clients and the CI runner arrive through the hypervisor's subnet router, masqueraded to `192.168.80.20`; the advertise list keeps `192.168.80.30/32` |
+| TCP 80 and 443, TCP and UDP 53 | the LAN `192.168.80.0/24` | the Gateway `192.168.80.240` and the private DNS `192.168.80.253` are answered by the node |
+| kubelet (10250), etcd (2379-2380) | nobody outside the node | not reachable from the LAN |
+
+Talos itself allows loopback, established connections, rate-limited ICMP and pod/service traffic in block mode. The isolation is a firewall, not a network boundary: a LAN device that spoofs an allowed address would pass.
+
 ### DNS and subdomains
 
 `portfolio`/`api` resolve via Cloudflare Tunnel (WAN). The rest of the routes have no useful public DNS — they resolve via `private-dns` with Tailscale Split DNS restricted to `internal.cristianpuenguenan.online` (see §11 in `docs/OPERATIONS.md`). The public wildcard `*.cristianpuenguenan.online` technically also matches these subdomains by DNS, but the TLS connection fails at the Cloudflare edge (no Hostname configured there) — there's no real way to reach these routes from outside the tailnet.
