@@ -144,3 +144,15 @@ variable "hypervisor_lan_ip" {
   type        = string
   default     = "192.168.80.20"
 }
+
+variable "talos_api_allowed_sources" {
+  description = "Addresses allowed to reach the Talos API and the Kubernetes API through the node's ingress firewall: the hypervisor (Tailscale traffic arrives masqueraded as it) and the operator's PC"
+  type        = list(string)
+  default     = ["192.168.80.20/32", "192.168.80.10/32"]
+}
+
+variable "cluster_internal_sources" {
+  description = "Pod range first, then service range: allowed to reach the node's own address (Kubernetes API, kubelet) through the ingress firewall"
+  type        = list(string)
+  default     = ["10.244.0.0/16", "10.96.0.0/12"]
+}

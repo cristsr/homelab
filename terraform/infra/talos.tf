@@ -61,6 +61,53 @@ resource "talos_machine_configuration_apply" "this" {
         }
       }
     }),
+    # Ingress firewall for the control plane. Each document protects the ports
+    # it names: traffic to them from any source not listed is dropped, and
+    # everything else keeps flowing (the default action stays accepting).
+    # A port must appear in exactly one document: rules are evaluated in name
+    # order and each one drops what it does not list, so an overlapping rule
+    # would drop the sources another one allows. Pods reach the node's own
+    # address (Kubernetes API, kubelet), so their ranges are listed too.
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "NetworkRuleConfig"
+      name       = "apid-ingress"
+      portSelector = {
+        ports    = [50000]
+        protocol = "tcp"
+      }
+      ingress = [for source in concat(var.talos_api_allowed_sources, ["${var.vm_static_ip}/32"]) : { subnet = source }]
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "NetworkRuleConfig"
+      name       = "kubernetes-api-ingress"
+      portSelector = {
+        ports    = [6443]
+        protocol = "tcp"
+      }
+      ingress = [for source in concat(var.talos_api_allowed_sources, ["${var.vm_static_ip}/32"], var.cluster_internal_sources) : { subnet = source }]
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "NetworkRuleConfig"
+      name       = "kubelet-ingress"
+      portSelector = {
+        ports    = [10250]
+        protocol = "tcp"
+      }
+      ingress = [for source in concat(["${var.vm_static_ip}/32"], [var.cluster_internal_sources[0]]) : { subnet = source }]
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "NetworkRuleConfig"
+      name       = "etcd-ingress"
+      portSelector = {
+        ports    = ["2379-2380"]
+        protocol = "tcp"
+      }
+      ingress = [{ subnet = "${var.vm_static_ip}/32" }]
+    }),
     # Talos manages the hostname via this dedicated document, not the legacy
     # machine.network.hostname field. `auto` must stay "off": the strategic
     # merge patch only overwrites keys, it never removes them.
