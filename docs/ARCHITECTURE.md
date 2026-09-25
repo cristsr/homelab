@@ -377,11 +377,11 @@ Data services **don't run in the cluster**: they live on five Proxmox VE LXCs, c
 
 | LXC | vmid | IP | Hostname (`private-dns`) | Engine |
 |-----|------|----|--------------------------|-------|
-| `postgresql` | 121 | `10.10.20.31` | `postgres.internal.cristianpuenguenan.online` | PostgreSQL 17 — `homelab` and `sonarqube` databases |
-| `mongodb` | 122 | `10.10.20.32` | `mongodb.internal.cristianpuenguenan.online` | MongoDB 8.0 |
-| `qdrant` | 123 | `10.10.20.33` | `qdrant.internal.cristianpuenguenan.online` | Qdrant v1.x (REST 6333, gRPC 6334) |
-| `redis` | 124 | `10.10.20.34` | `redis.internal.cristianpuenguenan.online` | Redis 8 (port 6379) |
-| `mysql` | 125 | `10.10.20.35` | `mysql.internal.cristianpuenguenan.online` | MariaDB 11 (port 3306) |
+| `postgresql` | 121 | `10.10.20.10` | `postgres.internal.cristianpuenguenan.online` | PostgreSQL 17 — `homelab` and `sonarqube` databases |
+| `mongodb` | 122 | `10.10.20.20` | `mongodb.internal.cristianpuenguenan.online` | MongoDB 8.0 |
+| `qdrant` | 123 | `10.10.20.30` | `qdrant.internal.cristianpuenguenan.online` | Qdrant v1.x (REST 6333, gRPC 6334) |
+| `redis` | 124 | `10.10.20.40` | `redis.internal.cristianpuenguenan.online` | Redis 8 (port 6379) |
+| `mysql` | 125 | `10.10.20.50` | `mysql.internal.cristianpuenguenan.online` | MariaDB 11 (port 3306) |
 
 The LXCs sit in the isolated subnet `10.10.20.0/24` (Proxmox SDN zone `data`, VNet `datanet`, gateway `10.10.20.1` held by the hypervisor, no physical NIC). Only Talos (`192.168.80.30`, through a static route via the hypervisor) and Tailscale nodes (the hypervisor is their subnet router) may reach it, and only on the database ports and SSH; the rules live in `ansible/hypervisor-network.yaml`. Every consumer reaches a database by its domain: pods through entries in the `kube-system` CoreDNS (`platform/networking/cluster-dns/`), tailnet nodes through `private-dns`. See [ADR-024](DECISIONS.md) and [data-vnet-cutover.md](data-vnet-cutover.md).
 

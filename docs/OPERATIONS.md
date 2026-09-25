@@ -219,7 +219,7 @@ kubectl apply -f my-externalsecret.yaml
 
 Databases don't run in the cluster: they live on five Proxmox LXCs (see [ADR-016](DECISIONS.md) and `docs/ARCHITECTURE.md` §5). Backups are done over the network, using the hostnames that `private-dns` resolves — from any machine on the tailnet. The LXCs are in the isolated data VNet, so a machine on the plain LAN cannot reach them; moving an LXC between networks follows [data-vnet-cutover.md](data-vnet-cutover.md).
 
-### PostgreSQL backup (LXC `postgresql`, `10.10.20.31`)
+### PostgreSQL backup (LXC `postgresql`, `10.10.20.10`)
 
 Two databases on the same instance (`homelab` and `sonarqube`) — dump them separately:
 
@@ -228,7 +228,7 @@ pg_dump -h postgres.internal.cristianpuenguenan.online -U <user> homelab > homel
 pg_dump -h postgres.internal.cristianpuenguenan.online -U <user> sonarqube > sonarqube.sql
 ```
 
-### MongoDB backup (LXC `mongodb`, `10.10.20.32`)
+### MongoDB backup (LXC `mongodb`, `10.10.20.20`)
 
 ```bash
 mongodump --host mongodb.internal.cristianpuenguenan.online --out ./backup-mongodb
