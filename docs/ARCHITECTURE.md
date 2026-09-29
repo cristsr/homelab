@@ -18,7 +18,7 @@
 
 ## 1. Overview
 
-Single-node homelab built on Talos Linux (a VM on Proxmox VE) with full GitOps. ArgoCD manages all applications from this repository. Ingress is split between two Gateway API implementations: **Envoy Gateway** for generic HTTP traffic (see [ADR-023](DECISIONS.md#adr-023-envoy-gateway-replaces-cilium-gateway-api-for-generic-ingress)) and **Agent Gateway** retained only for MCP server routes (see [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-for-generic-ingress-agent-gateway-only-for-mcp)). Cloudflare Tunnel exposes selected services to the Internet without opening ports on the router. See [ADR-014](DECISIONS.md#adr-014-migration-from-k0slibvirtfedora-to-talos-linuxproxmox-ve-and-from-openebs-lvm-to-openebs-zfs-localpv) for the full context of the migration from k0s/libvirt/Fedora. Data services (PostgreSQL, MongoDB, Qdrant, Redis) run **outside the cluster**, in Proxmox LXCs (see [ADR-016](DECISIONS.md) and §5).
+Single-node homelab built on Talos Linux (a VM on Proxmox VE) with full GitOps. ArgoCD manages all applications from this repository. Ingress is served by **Envoy Gateway** (see [ADR-023](DECISIONS.md#adr-023-envoy-gateway-replaces-cilium-gateway-api-for-generic-ingress)), including the MCP server routes (see [ADR-026](DECISIONS.md#adr-026-agent-gateway-removed-mcp-served-by-envoy-gateway)). Cloudflare Tunnel exposes selected services to the Internet without opening ports on the router. See [ADR-014](DECISIONS.md#adr-014-migration-from-k0slibvirtfedora-to-talos-linuxproxmox-ve-and-from-openebs-lvm-to-openebs-zfs-localpv) for the full context of the migration from k0s/libvirt/Fedora. Data services (PostgreSQL, MongoDB, Qdrant, Redis) run **outside the cluster**, in Proxmox LXCs (see [ADR-016](DECISIONS.md) and §5).
 
 ### Technology stack
 
@@ -28,7 +28,6 @@ Single-node homelab built on Talos Linux (a VM on Proxmox VE) with full GitOps. 
 | Kubernetes | Talos Linux v1.14.0 (immutable, no SSH) |
 | CNI / NetworkPolicy | Cilium 1.20.1 (eBPF, kube-proxy replacement) |
 | Ingress / Gateway (generic) | Envoy Gateway v1.9.1 |
-| Ingress / Gateway (MCP) | Agent Gateway 1.1.0 |
 | GitOps | Argo CD 9.5.13 |
 | TLS Certificates | cert-manager: Let's Encrypt (public and private, DNS-01 via Cloudflare) |
 | Storage | OpenEBS ZFS LocalPV 2.11.1 |
@@ -83,7 +82,7 @@ homelab/
 │   └── apps/
 │       ├── platform/           # Infrastructure ArgoCD Applications
 │       │   ├── argocd/         # Additional ArgoCD configuration
-│       │   ├── networking/     # cert-manager, cloudflared, agentgateway, envoy-gateway
+│       │   ├── networking/     # cert-manager, cloudflared, envoy-gateway
 │       │   ├── storage/        # OpenEBS ZFS LocalPV
 │       │   ├── devtools/       # OpenMemory
 │       │   ├── observability/  # Prometheus, Grafana, Headlamp
@@ -184,7 +183,7 @@ Created by `terraform/cluster/namespaces.tf` (`kubernetes_namespace_v1.namespace
 | `apps` | Flow API, Portfolio |
 | `devtools` | OpenMemory |
 | `openebs` | OpenEBS ZFS LocalPV |
-| `networking` | Envoy Gateway config, Agent Gateway (MCP), cloudflared, cert-manager, private-dns |
+| `networking` | Envoy Gateway config, cloudflared, cert-manager, private-dns |
 | `observability` | Prometheus, Grafana, Alertmanager, Headlamp |
 | `secret-management` | 1Password ClusterSecretStore, External Secrets, Reloader |
 | `tetragon` | Tetragon |
@@ -196,7 +195,7 @@ Created by `terraform/cluster/namespaces.tf` (`kubernetes_namespace_v1.namespace
 
 ### 3.1 Ingress: three Gateway APIs, one per audience
 
-See [ADR-010](DECISIONS.md#adr-010-cilium-gateway-api-for-generic-ingress-agent-gateway-only-for-mcp), ADR-011, ADR-012, and [ADR-023](DECISIONS.md#adr-023-envoy-gateway-replaces-cilium-gateway-api-for-generic-ingress) in [DECISIONS.md](DECISIONS.md). The three `Gateway`s live in the `networking` namespace. `main` terminates TLS on HTTPS:443 with a real Let's Encrypt certificate (see TLS below); its port 80 only redirects to HTTPS. `agentgateway-mcp` serves plain HTTP:80 internally (its controller doesn't support HTTPS listeners, ADR-012) but has no external IP of its own: its 3 routes still come in over HTTPS, via `main` acting as a TLS proxy to its Service. `public` listens on plain HTTP:80 — the internet-facing TLS is terminated by Cloudflare at the tunnel edge. The separation between `public` and `main` isn't by traffic type but by **audience**: `public` is the only Gateway the Cloudflare wildcard points to — what's public is decided by which `HTTPRoute` lives there, not by a separate list.
+See ADR-011, ADR-012, [ADR-023](DECISIONS.md#adr-023-envoy-gateway-replaces-cilium-gateway-api-for-generic-ingress) and [ADR-026](DECISIONS.md#adr-026-agent-gateway-removed-mcp-served-by-envoy-gateway) in [DECISIONS.md](DECISIONS.md). The `Gateway`s live in the `networking` namespace. `main` terminates TLS on HTTPS:443 with a real Let's Encrypt certificate (see TLS below); its port 80 only redirects to HTTPS. `public` listens on plain HTTP:80 — the internet-facing TLS is terminated by Cloudflare at the tunnel edge. The separation between `public` and `main` isn't by traffic type but by **audience**: `public` is the only Gateway the Cloudflare wildcard points to — what's public is decided by which `HTTPRoute` lives there, not by a separate list.
 
 #### 3.1.a Envoy Gateway — public (`public`)
 
@@ -224,15 +223,12 @@ Administration/observability tools — reachable only via LAN/Tailscale, never v
 | `openmemory.internal.cristianpuenguenan.online` | openmemory-ui:3000 | devtools |
 | `sonarqube.internal.cristianpuenguenan.online` | sonarqube-sonarqube:9000 | sonarqube |
 
-#### 3.1.c Agent Gateway (MCP servers only)
+#### 3.1.c MCP routes
 
-**Chart**: `oci://cr.agentgateway.dev/charts/agentgateway` — **`GatewayClass`**: `agentgateway` — **`Gateway`**: `agentgateway-mcp` (`platform/networking/agentgateway/gateway.yaml`) — single `http` listener (80, plain HTTP — the v1.1.0 controller doesn't support HTTPS listeners, see ADR-012) — **Generated Service**: `agentgateway-mcp`, `ClusterIP` (no fixed LAN IP: the only thing that reaches it is `main`'s internal proxy, see TLS below)
-
-Retained solely for routes that leverage real MCP protocol features (multiplexing, virtual MCP) that Cilium doesn't offer; it still does its own routing/rewrite/multiplexing for these `HTTPRoute`s (unchanged):
+The MCP servers are plain `HTTPRoute`s on `main` (`sectionName: https`), each with a `BackendTrafficPolicy` that disables the per-request timeout and raises the idle timeout so SSE / Streamable HTTP streams aren't cut by Envoy's 15s default:
 
 | Subdomain | Backend | Namespace |
 |-----------|---------|-----------|
-| `agentgateway.internal.cristianpuenguenan.online` | agentgateway admin UI | networking |
 | `openmemory-api.internal.cristianpuenguenan.online` | openmemory:8765 (MCP server) | devtools |
 | `mcp.internal.cristianpuenguenan.online` | mcp-sonarqube:3000 (`/sonarqube`) | sonarqube |
 
@@ -240,7 +236,7 @@ Retained solely for routes that leverage real MCP protocol features (multiplexin
 
 Two separate planes, both with real Let's Encrypt certificates — there's no longer a private CA (see ADR-012 update):
 
-- **Private (`*.internal.cristianpuenguenan.online`)**: a subdomain of a domain we already own, certified by the same `ClusterIssuer` (`letsencrypt-prod-cloudflare-dns01`, DNS-01 via Cloudflare) that issues the public wildcard — `wildcard-internal-online-tls`, referenced by `main`'s HTTPS listener. The DNS-01 challenge doesn't require the subdomain to resolve to a real IP: there's no A/AAAA record for `internal.cristianpuenguenan.online`, so it's still unreachable outside the tailnet (although the *public* wildcard `*.cristianpuenguenan.online` does match these routes by DNS since they're subdomains of it — the actual connection still fails at the Cloudflare edge, which rejects TLS for any hostname without its own configured Hostname/certificate there, see ADR-012 update). `main`'s port 80 only responds with 301 → HTTPS. The 3 `agentgateway-mcp` routes are also HTTPS from the client's perspective: its controller still doesn't support HTTPS listeners (ADR-012), so `main` terminates TLS and forwards over plain HTTP, internally within the cluster, to the `agentgateway-mcp` Service (`platform/networking/envoy-gateway/httproute-agentgateway-proxy.yaml`).
+- **Private (`*.internal.cristianpuenguenan.online`)**: a subdomain of a domain we already own, certified by the same `ClusterIssuer` (`letsencrypt-prod-cloudflare-dns01`, DNS-01 via Cloudflare) that issues the public wildcard — `wildcard-internal-online-tls`, referenced by `main`'s HTTPS listener. The DNS-01 challenge doesn't require the subdomain to resolve to a real IP: there's no A/AAAA record for `internal.cristianpuenguenan.online`, so it's still unreachable outside the tailnet (although the *public* wildcard `*.cristianpuenguenan.online` does match these routes by DNS since they're subdomains of it — the actual connection still fails at the Cloudflare edge, which rejects TLS for any hostname without its own configured Hostname/certificate there, see ADR-012 update). `main`'s port 80 only responds with 301 → HTTPS.
 - **Public (`*.cristianpuenguenan.online`)**: internet-facing TLS is terminated by Cloudflare at the tunnel edge; cloudflared speaks HTTP to the `public` Gateway. The `wildcard-home-tls` wildcard issued by cert-manager is still not referenced by any listener in the cluster — it's kept issued for future use, not needed for the current flow.
 
 ### 3.2 cert-manager
@@ -420,16 +416,14 @@ Backups and operational tasks on the databases are documented in `docs/OPERATION
 
 ### Segmented access: public (Cloudflare) vs private (LAN + Tailscale)
 
-See ADR-011 in [DECISIONS.md](DECISIONS.md). Only 2 of the 12 routes are truly public (`portfolio`, `api` `/webhooks`) — the rest (ArgoCD, Grafana, Headlamp, Hubble, SonarQube UI, Agent Gateway admin UI, OpenMemory UI/API, SonarQube MCP) are administration tools, accessible only from the home LAN or the user's tailnet. OpenEBS (Longhorn's replacement, see ADR-013) exposes no web UI — there's no equivalent route to administer.
+See ADR-011 in [DECISIONS.md](DECISIONS.md). Only 2 of the 11 routes are truly public (`portfolio`, `api` `/webhooks`) — the rest (ArgoCD, Grafana, Headlamp, Hubble, SonarQube UI, OpenMemory UI/API, SonarQube MCP) are administration tools, accessible only from the home LAN or the user's tailnet. OpenEBS (Longhorn's replacement, see ADR-013) exposes no web UI — there's no equivalent route to administer.
 
 Each Gateway has a fixed LAN IP, assigned via Cilium L2 Announcements (`CiliumLoadBalancerIPPool` + `CiliumL2AnnouncementPolicy` in `platform/networking/envoy-gateway/`, `spec.addresses` on each `Gateway`):
 
 | Gateway / Service | Fixed IP |
 |---------|---------|
-| `envoy-main` (generic routes, including the 3 Agent Gateway ones via proxy) | `192.168.80.240` |
+| `envoy-main` (generic routes, including the MCP ones) | `192.168.80.240` |
 | `private-dns` (CoreDNS, resolves `internal.cristianpuenguenan.online` for LAN/Tailscale) | `192.168.80.253` |
-
-`agentgateway-mcp` no longer has a fixed LAN IP — it's `ClusterIP`, reachable only via `main`'s internal proxy (see TLS in §3.1).
 
 With the VM on Proxmox's real bridge (`vmbr0`, see [ADR-014](DECISIONS.md#adr-014-migration-from-k0slibvirtfedora-to-talos-linuxproxmox-ve-and-from-openebs-lvm-to-openebs-zfs-localpv)), the Gateway IPs are real LAN addresses — any device on the LAN reaches them directly, without the firewalld port-forward that libvirt's NAT used to require (`ansible/host-network.yaml`, removed).
 
@@ -441,8 +435,7 @@ Internet (only portfolio + api /webhooks)
 
 Homelab's physical LAN — direct access, no port-forward
   ├── 192.168.80.240:443 TLS / :80 redirect (envoy-main,
-  │   including the 3 agentgateway-mcp routes, forwarded internally
-  │   as plain HTTP to its ClusterIP Service)
+  │   including the MCP routes)
   └── 192.168.80.253:53 (private-dns)
 
 Tailscale (devices outside the physical LAN, and the CI runner)
@@ -460,7 +453,7 @@ Which hostname resolves to which Gateway is decided, for public traffic, by the 
 
 | Port | Protocol | Description |
 |--------|-----------|-------------|
-| 80/443 | TCP | 80 = redirect to HTTPS, 443 = TLS on `envoy-main` (direct LAN IP); includes the 3 `agentgateway-mcp` routes, forwarded internally |
+| 80/443 | TCP | 80 = redirect to HTTPS, 443 = TLS on `envoy-main` (direct LAN IP), MCP routes included |
 | 53 | UDP/TCP | `private-dns` DNS (direct LAN IP) |
 
 ### Control plane access
@@ -520,10 +513,10 @@ root-app (gitops/root-app.yaml)
         ├── Wave -1: homelab-project (AppProject)
         ├── platform/
         │     ├── Wave 1: openebs, cert-manager, reloader
-        │     ├── Wave 2: openebs-config, agentgateway-crds, gateway-api-crds, envoy-gateway-crds, cert-manager-config,
+        │     ├── Wave 2: openebs-config, gateway-api-crds, envoy-gateway-crds, cert-manager-config,
         │     │           external-secrets(-config)
-        │     ├── Wave 3: agentgateway, envoy-gateway, cilium-service-mesh, cilium-hubble-pki
-        │     ├── Wave 4: argocd-config, observability/secrets, agentgateway-config, tetragon,
+        │     ├── Wave 3: envoy-gateway, cilium-service-mesh, cilium-hubble-pki
+        │     ├── Wave 4: argocd-config, observability/secrets, tetragon,
         │     │           envoy-gateway-config, private-dns
         │     ├── Wave 5: prometheus, cloudflared, headlamp(-config), hubble-config
         │     ├── Wave 6: grafana-config, service-monitors

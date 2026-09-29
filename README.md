@@ -10,7 +10,7 @@ This repository contains the complete configuration to spin up a single-node Kub
 
 - **GitOps**: ArgoCD manages the entire application lifecycle from Git.
 - **Networking**: Cilium as CNI with full kube-proxy replacement via eBPF.
-- **Ingress**: Envoy Gateway for generic traffic, Agent Gateway retained only for MCP servers (see ADR-010).
+- **Ingress**: Envoy Gateway for all traffic, MCP servers included (see ADR-023, ADR-026).
 - **Secrets**: 1Password as the secrets backend, synced with Kubernetes via External Secrets Operator.
 - **Storage**: OpenEBS ZFS LocalPV as local storage (see ADR-013 and ADR-014).
 - **Monitoring**: Prometheus, Grafana and Headlamp.
@@ -31,7 +31,6 @@ The VM is created with **Terraform** (provider `bpg/proxmox` + `siderolabs/talos
 | CNI | Cilium | 1.20.1 |
 | GitOps | Argo CD | 9.5.13 |
 | Ingress (generic) | Envoy Gateway | v1.9.1 |
-| Ingress (MCP) | Agent Gateway | 1.1.0 |
 | Storage | OpenEBS ZFS LocalPV | 2.11.1 |
 | Secrets | 1Password | - |
 | Secret Sync | External Secrets Operator | - |
@@ -110,7 +109,7 @@ All documentation is located in the [`docs/`](./docs/) folder:
 - **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)**: Detailed description of the architecture, components, networking, security and data flow.
 - **[docs/INSTALL.md](./docs/INSTALL.md)**: Prerequisites, Terraform and `secrets/homelab.env` configuration, cluster installation and GitOps activation.
 - **[docs/OPERATIONS.md](./docs/OPERATIONS.md)**: Day-to-day operations, secrets management, backups, upgrades, troubleshooting and emergency procedures.
-- **[docs/DECISIONS.md](./docs/DECISIONS.md)**: Architecture decision log (ADR): Talos, Proxmox, Agent Gateway, Cilium, OpenEBS, Ansible and CI/CD.
+- **[docs/DECISIONS.md](./docs/DECISIONS.md)**: Architecture decision log (ADR): Talos, Proxmox, Cilium, OpenEBS, Ansible and CI/CD.
 - **[docs/CI_CD_HYPERVISOR_SETUP.md](./docs/CI_CD_HYPERVISOR_SETUP.md)**: Manual hypervisor setup runbook (Tailscale, SSH, sudoers) for CI/CD to work.
 
 ---
@@ -169,7 +168,6 @@ Terraform and Ansible **do not** run on the homeserver: every push to `master` t
 | Grafana | `https://grafana.cristianpuenguenan.online` | Credentials in 1Password |
 | Headlamp | `https://headlamp.cristianpuenguenan.online` | Requires service token |
 | SonarQube | `https://sonarqube.cristianpuenguenan.online` | Credentials in 1Password |
-| Agent Gateway | `https://agentgateway.cristianpuenguenan.online` | Admin / admin |
 | Hubble | `https://hubble.cristianpuenguenan.online` | No authentication |
 
 ---
