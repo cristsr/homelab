@@ -17,8 +17,8 @@ spec:
       releaseName: envoy-gateway-crds
       valuesObject:
         crds:
-          # Gateway API itself stays with `gateway-api-crds` (it also serves
-          # Agent Gateway); v1.9.1 is built against the same v1.6.1.
+          # Gateway API itself stays with `gateway-api-crds`;
+          # v1.9.1 is built against the same v1.6.1.
           gatewayAPI:
             enabled: false
           envoyGateway:
