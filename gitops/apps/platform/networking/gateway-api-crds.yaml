@@ -11,8 +11,8 @@ spec:
   project: homelab
   source:
     repoURL: https://github.com/kubernetes-sigs/gateway-api
-    # Uses the `experimental` channel, not `standard`: Agent Gateway needs the
-    # TCPRoute CRD and crash-loops waiting for it otherwise.
+    # Uses the `experimental` channel, not `standard`: it was chosen while Agent
+    # Gateway needed the TCPRoute CRD, and is kept so switching is a separate change.
     targetRevision: v1.6.1
     path: config/crd/experimental
   destination:
