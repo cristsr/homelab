@@ -1,9 +1,22 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "kubernetes": { "managerFilePatterns": ["/^(workloads|platform)/.+\.ya?ml$/"] },
-  "argocd": { "managerFilePatterns": ["/^gitops/.+\.ya?ml$/"] },
+  "kubernetes": { "managerFilePatterns": ["/^(workloads|platform)/.+[.]ya?ml$/"] },
+  "argocd": { "managerFilePatterns": ["/^gitops/.+[.]ya?ml$/"] },
   "packageRules": [
-    { "matchUpdateTypes": ["minor", "patch"], "groupName": "minor-patch" }
+    { "matchUpdateTypes": ["minor", "patch"], "groupName": "minor-patch" },
+    {
+      "description": "Argo CD OCI charts: the chart name is already part of the repoURL, Renovate appends it twice",
+      "matchPackageNames": ["codeberg.org/forgejo-contrib/forgejo/forgejo"],
+      "overridePackageName": "codeberg.org/forgejo-contrib/forgejo"
+    },
+    {
+      "matchPackageNames": ["docker.io/envoyproxy/gateway-helm/gateway-helm"],
+      "overridePackageName": "docker.io/envoyproxy/gateway-helm"
+    },
+    {
+      "matchPackageNames": ["docker.io/envoyproxy/gateway-crds-helm/gateway-crds-helm"],
+      "overridePackageName": "docker.io/envoyproxy/gateway-crds-helm"
+    }
   ]
 }
