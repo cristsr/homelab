@@ -1,0 +1,64 @@
+# Exposes the Proxmox host's RAPL energy counters (node_rapl_*_joules_total)
+# to Prometheus. Run by hand, like hypervisor-network.yaml.
+---
+- name: Expose host power metrics to Prometheus
+  hosts: proxmox
+
+  tasks:
+    - name: Install node_exporter
+      ansible.builtin.apt:
+        name: prometheus-node-exporter
+        state: present
+
+    # Since Platypus, energy_uj is readable by root only; the Debian unit runs
+    # as the prometheus user.
+    - name: Create the unit drop-in directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/prometheus-node-exporter.service.d
+        state: directory
+        mode: "0755"
+
+    - name: Let node_exporter read RAPL
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/prometheus-node-exporter.service.d/power.conf
+        content: |
+          [Service]
+          AmbientCapabilities=CAP_DAC_READ_SEARCH
+        mode: "0644"
+      notify: Restart node_exporter
+
+    - name: Listen only on the LAN address
+      ansible.builtin.copy:
+        dest: /etc/default/prometheus-node-exporter
+        content: 'ARGS="--web.listen-address={{ ansible_host }}:9100"'
+        mode: "0644"
+      notify: Restart node_exporter
+
+    - name: Allow only the Talos VM to scrape port 9100
+      ansible.builtin.copy:
+        dest: /etc/nftables.d/node-exporter.nft
+        content: |
+          add table inet node_exporter
+          flush table inet node_exporter
+          table inet node_exporter {
+              chain input {
+                  type filter hook input priority 0; policy accept;
+                  tcp dport 9100 ip saddr != 192.168.80.30 drop
+              }
+          }
+        mode: "0644"
+        validate: nft -c -f %s
+      notify: Reload nftables
+
+  handlers:
+    - name: Restart node_exporter
+      ansible.builtin.systemd:
+        name: prometheus-node-exporter
+        state: restarted
+        daemon_reload: true
+        enabled: true
+
+    - name: Reload nftables
+      ansible.builtin.systemd:
+        name: nftables
+        state: reloaded
