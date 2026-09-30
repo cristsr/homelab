@@ -63,16 +63,19 @@
         src: "templates/{{ inventory_hostname }}.container.j2"
         dest: "/etc/containers/systemd/{{ inventory_hostname }}.container"
         mode: "0600"
+      register: quadlet_unit
       no_log: true
 
     - name: Reload systemd so the generated Quadlet unit is picked up
       ansible.builtin.systemd:
         daemon_reload: true
 
-    - name: Start the generated engine service
+    # `started` alone leaves a running engine on its old image, so a changed
+    # unit (e.g. the pgvector image swap) has to restart it to take effect.
+    - name: Start the generated engine service, restarting it if its unit changed
       ansible.builtin.systemd:
         name: "{{ inventory_hostname }}.service"
-        state: started
+        state: "{{ 'restarted' if quadlet_unit is changed else 'started' }}"
         enabled: true
 
     - name: Provision the sonarqube, n8n, firefly and hindsight databases on the shared PostgreSQL instance
