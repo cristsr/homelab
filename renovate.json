@@ -6,6 +6,11 @@
   "packageRules": [
     { "matchUpdateTypes": ["minor", "patch"], "groupName": "minor-patch" },
     {
+      "description": "Private images, Renovate has no access to ghcr.io/cristsr",
+      "matchPackageNames": ["ghcr.io/cristsr/**"],
+      "enabled": false
+    },
+    {
       "description": "Argo CD OCI charts: the chart name is already part of the repoURL, Renovate appends it twice",
       "matchPackageNames": ["codeberg.org/forgejo-contrib/forgejo/forgejo"],
       "overridePackageName": "codeberg.org/forgejo-contrib/forgejo"
