@@ -367,6 +367,8 @@ Auth:     ApiKeyTenantExtension - every request, MCP included, needs HINDSIGHT_A
 Secrets:  hindsight-secrets (SopsSecret): DATABASE_URL, LLM_API_KEY (also used for embeddings), TENANT_API_KEY
 ```
 
+The control plane (`hindsight-control-plane:<version>`, port 9999) is a separate Deployment that shares the hostname: `/v1`, `/mcp`, `/health`, `/metrics`, `/version`, `/docs`, `/redoc` and `/openapi.json` go to the API and everything else to the panel. It calls the API with the server's own key, so `HINDSIGHT_CP_ACCESS_KEY` (in `hindsight-control-plane-secrets`) is what gates the UI.
+
 See ADR-027. OpenMemory and Qdrant stay until the new service is verified.
 
 ### 4.3 SonarQube Community

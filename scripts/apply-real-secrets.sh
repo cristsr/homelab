@@ -108,6 +108,8 @@ set_field workloads/hindsight/secrets.sops.yaml \
   '["spec"]["secretTemplates"][0]["stringData"]["HINDSIGHT_API_LLM_API_KEY"]' "$(get HINDSIGHT_OPENROUTER_API_KEY)"
 set_field workloads/hindsight/secrets.sops.yaml \
   '["spec"]["secretTemplates"][0]["stringData"]["HINDSIGHT_API_TENANT_API_KEY"]' "$(get HINDSIGHT_API_KEY)"
+set_field workloads/hindsight/secrets.sops.yaml \
+  '["spec"]["secretTemplates"][1]["stringData"]["HINDSIGHT_CP_ACCESS_KEY"]' "$(get HINDSIGHT_CP_ACCESS_KEY)"
 
 # --- platform/networking/cloudflared/token.sops.yaml ---
 set_field platform/networking/cloudflared/token.sops.yaml \

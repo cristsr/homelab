@@ -17,4 +17,31 @@ spec:
         - ports:
             - port: "8888"
               protocol: TCP
+    # The control plane calls the API from inside the namespace.
+    - fromEndpoints:
+        - matchLabels:
+            app: hindsight-control-plane
+      toPorts:
+        - ports:
+            - port: "8888"
+              protocol: TCP
+  egress: []
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hindsight-control-plane-default-deny
+  namespace: hindsight
+spec:
+  endpointSelector:
+    matchLabels:
+      app: hindsight-control-plane
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: envoy-gateway-system
+      toPorts:
+        - ports:
+            - port: "9999"
+              protocol: TCP
   egress: []
