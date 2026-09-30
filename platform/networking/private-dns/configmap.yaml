@@ -18,6 +18,7 @@ data:
             192.168.80.240 sonarqube.internal.cristianpuenguenan.online
             192.168.80.240 mcp.internal.cristianpuenguenan.online
             192.168.80.240 openmemory-api.internal.cristianpuenguenan.online
+            192.168.80.240 hindsight-api.internal.cristianpuenguenan.online
             192.168.80.240 hindsight.internal.cristianpuenguenan.online
             192.168.80.240 sonarr.internal.cristianpuenguenan.online
             192.168.80.240 radarr.internal.cristianpuenguenan.online

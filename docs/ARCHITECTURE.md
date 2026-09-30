@@ -231,7 +231,8 @@ The MCP servers are plain `HTTPRoute`s on `main` (`sectionName: https`), each wi
 | Subdomain | Backend | Namespace |
 |-----------|---------|-----------|
 | `openmemory-api.internal.cristianpuenguenan.online` | openmemory:8765 (MCP server) | devtools |
-| `hindsight.internal.cristianpuenguenan.online` | hindsight:8888 (API + MCP, API key required) | hindsight |
+| `hindsight-api.internal.cristianpuenguenan.online` | hindsight:8888 (API + MCP, API key required) | hindsight |
+| `hindsight.internal.cristianpuenguenan.online` | hindsight-control-plane:9999 (panel, access key required) | hindsight |
 | `mcp.internal.cristianpuenguenan.online` | mcp-sonarqube:3000 (`/sonarqube`) | sonarqube |
 
 #### TLS
