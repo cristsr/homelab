@@ -18,7 +18,8 @@ spec:
       containers:
         - name: hindsight
           # Slim variant: no local ML models. Embeddings and the LLM are remote
-          # (OpenRouter), so the reranker is off and the pod stays small.
+          # (OpenRouter), so the reranker is the model-free `rrf` passthrough and the
+          # pod stays small.
           image: ghcr.io/vectorize-io/hindsight-api:0.10.2-slim
           ports:
             - containerPort: 8888
@@ -36,7 +37,7 @@ spec:
             - name: HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL
               value: "openai/text-embedding-3-small"
             - name: HINDSIGHT_API_RERANKER_PROVIDER
-              value: "none"
+              value: "rrf"
             - name: HINDSIGHT_API_VECTOR_EXTENSION
               value: "pgvector"
             # Every request, MCP included, must carry HINDSIGHT_API_TENANT_API_KEY.
