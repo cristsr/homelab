@@ -32,7 +32,7 @@ spec:
       serviceAccountName: hermes
       containers:
         - name: hermes
-          image: nousresearch/hermes-agent:latest
+          image: nousresearch/hermes-agent:latest@sha256:d4da4a40cd7a28aba983775d9fd31d94cbf153eeb0cb9e844d6d0f612b7c24db
           ports:
             - containerPort: 8642
           env:

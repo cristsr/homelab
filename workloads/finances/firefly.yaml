@@ -24,7 +24,7 @@ spec:
         fsGroup: 33
       containers:
         - name: firefly
-          image: fireflyiii/core:latest
+          image: fireflyiii/core:version-6.7.3
           ports:
             - containerPort: 8080
           env:
