@@ -954,7 +954,7 @@ OpenMemory (mem0's self-hosted MCP server) is no longer documented upstream, run
 
 - Run Hindsight (`vectorize-io/hindsight`, MIT) as `hindsight-api:<version>-slim` in its own `hindsight` namespace. It publishes images, has a Helm chart and a native MCP endpoint, and stores everything in PostgreSQL with pgvector.
 - The shared PostgreSQL LXC hosts it: its image changes from `postgres:17` to `pgvector/pgvector:pg17-trixie` (same major version, data directory and glibc; the default `pg17` tag is Debian bookworm, whose older glibc orders text differently and can leave existing text indexes inconsistent), and Ansible creates the `hindsight` role and database and enables `vector` in that database only.
-- LLM provider `openrouter`; embeddings through the `openai` provider with `HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL=https://openrouter.ai/api/v1` and `openai/text-embedding-3-small` (1536 dimensions). The reranker is `none`.
+- LLM provider `openrouter`; embeddings through the `openai` provider with `HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL=https://openrouter.ai/api/v1` and `openai/text-embedding-3-small` (1536 dimensions). The reranker is `rrf`, a passthrough that loads no model (there is no `none` provider).
 - Authentication with `ApiKeyTenantExtension`; the route lives on the internal `main` Gateway with the same `BackendTrafficPolicy` as the other MCP routes.
 
 ### Alternatives considered
