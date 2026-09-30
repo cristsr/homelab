@@ -1,0 +1,66 @@
+# Scrapes node_exporter on the Proxmox host (ansible/hypervisor-power.yaml) and
+# derives the hypervisor's power draw and its monthly kWh projection from RAPL.
+# RAPL only sees CPU package + DRAM, so HYPERVISOR_BASE_WATTS below is a
+# calibration knob for everything else (disks, fans, PSU losses): set it to
+# (wall meter reading - homelab:hypervisor_power_watts) once you have a reading.
+apiVersion: v1
+kind: Service
+metadata:
+  name: hypervisor-node-exporter
+  namespace: observability
+  labels:
+    app: hypervisor-node-exporter
+spec:
+  clusterIP: None
+  ports:
+    - name: metrics
+      port: 9100
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: hypervisor-node-exporter
+  namespace: observability
+  labels:
+    app: hypervisor-node-exporter
+subsets:
+  - addresses:
+      - ip: 192.168.80.20
+    ports:
+      - name: metrics
+        port: 9100
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: hypervisor-node-exporter
+  namespace: observability
+spec:
+  selector:
+    matchLabels:
+      app: hypervisor-node-exporter
+  endpoints:
+    - port: metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: instance
+          replacement: proxmox-host
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: hypervisor-power
+  namespace: observability
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: hypervisor-power
+      rules:
+        # HYPERVISOR_BASE_WATTS = 25 (calibration knob, see header).
+        - record: homelab:hypervisor_power_watts
+          expr: |
+            sum(rate({__name__=~"node_rapl_(package|dram)_joules_total", instance="proxmox-host"}[5m])) + 25
+        # 730 h = average month. Average over 7d so a busy hour doesn't skew it.
+        - record: homelab:hypervisor_energy_kwh_month_forecast
+          expr: avg_over_time(homelab:hypervisor_power_watts[7d]) * 730 / 1000
