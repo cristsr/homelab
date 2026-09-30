@@ -217,7 +217,7 @@ kubectl apply -f my-externalsecret.yaml
 
 ## 3. Backups
 
-Databases don't run in the cluster: they live on five Proxmox LXCs (see [ADR-016](DECISIONS.md) and `docs/ARCHITECTURE.md` §5). Backups are done over the network, using the hostnames that `private-dns` resolves — from any machine on the tailnet. The LXCs are in the isolated data VNet, so a machine on the plain LAN cannot reach them; moving an LXC between networks follows [data-vnet-cutover.md](data-vnet-cutover.md).
+Databases don't run in the cluster: they live on four Proxmox LXCs (see [ADR-016](DECISIONS.md) and `docs/ARCHITECTURE.md` §5). Backups are done over the network, using the hostnames that `private-dns` resolves — from any machine on the tailnet. The LXCs are in the isolated data VNet, so a machine on the plain LAN cannot reach them; moving an LXC between networks follows [data-vnet-cutover.md](data-vnet-cutover.md).
 
 ### PostgreSQL backup (LXC `postgresql`, `10.10.20.10`)
 
@@ -239,7 +239,7 @@ mongodump --host mongodb.internal.cristianpuenguenan.online --out ./backup-mongo
 
 ### Hypervisor-level backup (vzdump)
 
-The five LXCs (`postgresql` 121, `mongodb` 122, `qdrant` 123, `redis` 124, `mysql` 125) can be backed up as complete containers from the Proxmox host with `vzdump` — this also covers Qdrant and Redis, which have no logical dump in these recipes. It complements the logical dumps above (more granular, easier to restore selectively), it doesn't replace them.
+The four LXCs (`postgresql` 121, `mongodb` 122, `redis` 124, `mysql` 125) can be backed up as complete containers from the Proxmox host with `vzdump` — this also covers Redis, which has no logical dump in these recipes. It complements the logical dumps above (more granular, easier to restore selectively), it doesn't replace them.
 
 ### PersistentVolume backup (OpenEBS LVM)
 

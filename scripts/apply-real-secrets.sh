@@ -30,7 +30,6 @@ PG_USER="$(get POSTGRESQL_APP_USERNAME)"
 PG_PASS="$(get POSTGRESQL_APP_PASSWORD)"
 MONGO_PASS="$(get MONGODB_APP_PASSWORD)"
 REDIS_PASS="$(get REDIS_PASSWORD)"
-QDRANT_KEY="$(get QDRANT_API_KEY)"
 SQ_DB_USER="$(get SONARQUBE_DB_USERNAME)"
 SQ_DB_PASS="$(get SONARQUBE_DB_PASSWORD)"
 MYSQL_PASS="$(get MYSQL_APP_PASSWORD)"
@@ -43,13 +42,12 @@ N8N_DB_PASS="$(get N8N_DB_PASSWORD)"
 HINDSIGHT_DB_USER="$(get HINDSIGHT_DB_USERNAME)"
 HINDSIGHT_DB_PASS="$(get HINDSIGHT_DB_PASSWORD)"
 
-if [ -n "$PG_USER$PG_PASS$MONGO_PASS$REDIS_PASS$QDRANT_KEY$SQ_DB_USER$SQ_DB_PASS$MYSQL_PASS$KIMAI_DB_USER$KIMAI_DB_PASS$FIREFLY_DB_USER$FIREFLY_DB_PASS$N8N_DB_USER$N8N_DB_PASS$HINDSIGHT_DB_USER$HINDSIGHT_DB_PASS" ]; then
+if [ -n "$PG_USER$PG_PASS$MONGO_PASS$REDIS_PASS$SQ_DB_USER$SQ_DB_PASS$MYSQL_PASS$KIMAI_DB_USER$KIMAI_DB_PASS$FIREFLY_DB_USER$FIREFLY_DB_PASS$N8N_DB_USER$N8N_DB_PASS$HINDSIGHT_DB_USER$HINDSIGHT_DB_PASS" ]; then
   cat > ansible/data-services.env <<EOF
 POSTGRESQL_APP_USERNAME=$PG_USER
 POSTGRESQL_APP_PASSWORD=$PG_PASS
 MONGODB_APP_PASSWORD=$MONGO_PASS
 REDIS_PASSWORD=$REDIS_PASS
-QDRANT_API_KEY=$QDRANT_KEY
 SONARQUBE_DB_USERNAME=$SQ_DB_USER
 SONARQUBE_DB_PASSWORD=$SQ_DB_PASS
 MYSQL_APP_PASSWORD=$MYSQL_PASS
@@ -75,23 +73,6 @@ set_field workloads/sonarqube/secrets.sops.yaml \
   '["spec"]["secretTemplates"][0]["stringData"]["password"]' "$SQ_DB_PASS"
 set_field workloads/sonarqube/secrets.sops.yaml \
   '["spec"]["secretTemplates"][1]["stringData"]["passcode"]' "$(get SONARQUBE_MONITORING_PASSCODE)"
-
-# --- platform/devtools/openmemory/secrets.sops.yaml ---
-set_field platform/devtools/openmemory/secrets.sops.yaml \
-  '["spec"]["secretTemplates"][0]["stringData"]["OPENAI_API_KEY"]' "$(get OPENMEMORY_OPENAI_API_KEY)"
-set_field platform/devtools/openmemory/secrets.sops.yaml \
-  '["spec"]["secretTemplates"][0]["stringData"]["QDRANT_API_KEY"]' "$QDRANT_KEY"
-
-GHCR_USER="$(get GHCR_USERNAME)"
-GHCR_PAT="$(get GHCR_PAT)"
-if [ -n "$GHCR_USER" ] && [ -n "$GHCR_PAT" ]; then
-  DOCKERCFG=$(jq -n --arg auth "$(printf '%s:%s' "$GHCR_USER" "$GHCR_PAT" | base64 -w0)" \
-    '{auths:{"ghcr.io":{auth:$auth}}}')
-  set_field platform/devtools/openmemory/secrets.sops.yaml \
-    '["spec"]["secretTemplates"][1]["stringData"][".dockerconfigjson"]' "$DOCKERCFG"
-else
-  echo "skip  platform/devtools/openmemory/secrets.sops.yaml ghcr-pull-secret (GHCR_USERNAME/GHCR_PAT empty)"
-fi
 
 # --- workloads/hindsight/secrets.sops.yaml ---
 # The connection URL is rebuilt from the same answers-file values Ansible

@@ -10,8 +10,8 @@ table inet data_vnet {
 
         ct state established,related accept
 
-        ip saddr {{ data_vnet_talos_ip }} ip daddr {{ data_vnet_subnet }} tcp dport { 22, 5432, 27017, 6333, 6379, 3306 } accept
-        iifname "tailscale0" ip daddr {{ data_vnet_subnet }} tcp dport { 22, 5432, 27017, 6333, 6379, 3306 } accept
+        ip saddr {{ data_vnet_talos_ip }} ip daddr {{ data_vnet_subnet }} tcp dport { 22, 5432, 27017, 6379, 3306 } accept
+        iifname "tailscale0" ip daddr {{ data_vnet_subnet }} tcp dport { 22, 5432, 27017, 6379, 3306 } accept
 
         ip daddr {{ data_vnet_subnet }} drop
     }

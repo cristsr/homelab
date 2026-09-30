@@ -135,7 +135,7 @@ jobs:
           KUBECONFIG: ${{ github.workspace }}/terraform/infra/generated/kubeconfig
         run: kubectl apply -f gitops/root-app.yaml
 
-      # Data-service engines (postgresql/mongodb/qdrant/redis) each run in their own LXC.
+      # Data-service engines (postgresql/mongodb/redis) each run in their own LXC.
       - name: Write CI SSH key for the data LXCs
         run: |
           install -m 700 -d ~/.ssh

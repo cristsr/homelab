@@ -971,3 +971,5 @@ OpenMemory (mem0's self-hosted MCP server) is no longer documented upstream, run
 - The embedding dimension is fixed on first start; switching model later means re-embedding.
 - Every retained memory is sent to OpenRouter for extraction and embedding.
 - Follow-up: once verified, remove OpenMemory, OpenMemory UI and the Qdrant LXC (Terraform, Ansible, DNS, secrets).
+
+**Update (2026-09-30): OpenMemory, OpenMemory UI and the Qdrant LXC removed.** Their Argo CD Applications, manifests, DNS records, secret-loading block and docs are gone. The Qdrant LXC (vmid 123) leaves Terraform, Ansible, DNS, the firewall (port 6333) and the secrets, so Deploy destroys it; its data was not migrated.
