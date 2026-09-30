@@ -13,7 +13,7 @@ spec:
     repoURL: https://github.com/kubernetes-sigs/gateway-api
     # Uses the `experimental` channel, not `standard`: it was chosen while Agent
     # Gateway needed the TCPRoute CRD, and is kept so switching is a separate change.
-    targetRevision: v1.6.1
+    targetRevision: v1.6.2
     path: config/crd/experimental
   destination:
     server: https://kubernetes.default.svc

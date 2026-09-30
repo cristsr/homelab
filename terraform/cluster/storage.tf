@@ -28,7 +28,7 @@ resource "kubernetes_job_v1" "openebs_zpool_create" {
 
         container {
           name  = "zfs-admin"
-          image = "alpine:3.20"
+          image = "alpine:3.24"
 
           security_context {
             privileged = true
@@ -118,7 +118,7 @@ resource "kubernetes_job_v1" "openebs_media_zpool_create" {
 
         container {
           name  = "zfs-admin"
-          image = "alpine:3.20"
+          image = "alpine:3.24"
 
           security_context {
             privileged = true
