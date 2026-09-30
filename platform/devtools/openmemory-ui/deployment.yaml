@@ -19,7 +19,7 @@ spec:
         - name: ghcr-pull-secret
       containers:
         - name: openmemory-ui
-          image: ghcr.io/cristsr/openmemory-ui:latest
+          image: ghcr.io/cristsr/openmemory-ui:latest@sha256:d16b7f2267c4ac13d65ece1fb9905f3424fb1b6b5ffeaf952c6e4afaba1d19a1
           ports:
             - containerPort: 3000
           env:

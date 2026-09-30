@@ -29,7 +29,7 @@ spec:
           # ghcr.io publishes no semver tags, only latest + commit shas, and the
           # Jellyfin 12 auth fix (PR #3502, merged 2026-09-12) is only there.
           # Re-pin to the matching sha- tag once confirmed working.
-          image: ghcr.io/seerr-team/seerr:latest
+          image: ghcr.io/seerr-team/seerr:v3.4.1
           ports:
             - containerPort: 5055
           volumeMounts:
