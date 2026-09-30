@@ -19,7 +19,7 @@ spec:
         - name: ghcr-pull-secret
       containers:
         - name: openmemory
-          image: ghcr.io/cristsr/openmemory-mcp:latest@sha256:9158cb1b0dc5036dff809d1f5d4f7e95523dc421f1c03be4098d09262c2096de
+          image: ghcr.io/cristsr/openmemory-mcp:latest
           ports:
             - containerPort: 8765
           env:
