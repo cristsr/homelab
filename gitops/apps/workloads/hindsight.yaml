@@ -6,16 +6,26 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
   annotations:
-    argocd.argoproj.io/sync-wave: "8"
+    argocd.argoproj.io/sync-wave: "9"
 spec:
   project: homelab
   source:
     repoURL: https://github.com/cristsr/homelab
     targetRevision: HEAD
-    path: platform/devtools/hindsight
+    path: workloads/hindsight
   destination:
     server: https://kubernetes.default.svc
     namespace: hindsight
+  ignoreDifferences:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      jqPathExpressions:
+        - '.spec.parentRefs[].group'
+        - '.spec.parentRefs[].kind'
+        - '.spec.rules[].backendRefs[].group'
+        - '.spec.rules[].backendRefs[].kind'
+        - '.spec.rules[].backendRefs[].weight'
+        - '.spec.rules[].matches'
   syncPolicy:
     automated:
       prune: true

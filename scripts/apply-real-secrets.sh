@@ -93,20 +93,20 @@ else
   echo "skip  platform/devtools/openmemory/secrets.sops.yaml ghcr-pull-secret (GHCR_USERNAME/GHCR_PAT empty)"
 fi
 
-# --- platform/devtools/hindsight/secrets.sops.yaml ---
+# --- workloads/hindsight/secrets.sops.yaml ---
 # The connection URL is rebuilt from the same answers-file values Ansible
 # provisions the PostgreSQL role with, so both sides always agree. The host is
 # the postgres domain, so a move of the LXC changes DNS only.
 if [ -n "$HINDSIGHT_DB_USER" ] && [ -n "$HINDSIGHT_DB_PASS" ]; then
-  set_field platform/devtools/hindsight/secrets.sops.yaml \
+  set_field workloads/hindsight/secrets.sops.yaml \
     '["spec"]["secretTemplates"][0]["stringData"]["HINDSIGHT_API_DATABASE_URL"]' \
     "postgresql://${HINDSIGHT_DB_USER}:${HINDSIGHT_DB_PASS}@postgres.internal.cristianpuenguenan.online:5432/hindsight"
 else
-  echo "skip  platform/devtools/hindsight/secrets.sops.yaml HINDSIGHT_API_DATABASE_URL (HINDSIGHT_DB_USERNAME/HINDSIGHT_DB_PASSWORD empty)"
+  echo "skip  workloads/hindsight/secrets.sops.yaml HINDSIGHT_API_DATABASE_URL (HINDSIGHT_DB_USERNAME/HINDSIGHT_DB_PASSWORD empty)"
 fi
-set_field platform/devtools/hindsight/secrets.sops.yaml \
+set_field workloads/hindsight/secrets.sops.yaml \
   '["spec"]["secretTemplates"][0]["stringData"]["HINDSIGHT_API_LLM_API_KEY"]' "$(get HINDSIGHT_OPENROUTER_API_KEY)"
-set_field platform/devtools/hindsight/secrets.sops.yaml \
+set_field workloads/hindsight/secrets.sops.yaml \
   '["spec"]["secretTemplates"][0]["stringData"]["HINDSIGHT_API_TENANT_API_KEY"]' "$(get HINDSIGHT_API_KEY)"
 
 # --- platform/networking/cloudflared/token.sops.yaml ---
