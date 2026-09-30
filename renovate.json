@@ -1,0 +1,9 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "kubernetes": { "managerFilePatterns": ["/^(workloads|platform)/.+\.ya?ml$/"] },
+  "argocd": { "managerFilePatterns": ["/^gitops/.+\.ya?ml$/"] },
+  "packageRules": [
+    { "matchUpdateTypes": ["minor", "patch"], "groupName": "minor-patch" }
+  ]
+}
