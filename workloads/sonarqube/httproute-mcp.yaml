@@ -5,8 +5,9 @@ metadata:
   namespace: sonarqube
 spec:
   parentRefs:
-    - name: agentgateway-mcp
+    - name: main
       namespace: networking
+      sectionName: https
   hostnames:
     - mcp.internal.cristianpuenguenan.online
   rules:

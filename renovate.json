@@ -1,0 +1,33 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "kubernetes": { "managerFilePatterns": ["/^(workloads|platform)/.+[.]ya?ml$/"] },
+  "argocd": { "managerFilePatterns": ["/^gitops/.+[.]ya?ml$/"] },
+  "packageRules": [
+    { "matchUpdateTypes": ["minor", "patch"], "groupName": "minor-patch" },
+    {
+      "description": "talos 0.12 generates KubeNetworkConfig/KubeProxyConfig/UnattendedInstallConfig documents that conflict with our v1alpha1 patches in terraform/infra/talos.tf; migrate the patches first",
+      "matchPackageNames": ["siderolabs/talos"],
+      "matchUpdateTypes": ["minor", "major"],
+      "enabled": false
+    },
+    {
+      "description": "Private images, Renovate has no access to ghcr.io/cristsr",
+      "matchPackageNames": ["ghcr.io/cristsr/**"],
+      "enabled": false
+    },
+    {
+      "description": "Argo CD OCI charts: the chart name is already part of the repoURL, Renovate appends it twice",
+      "matchPackageNames": ["codeberg.org/forgejo-contrib/forgejo/forgejo"],
+      "overridePackageName": "codeberg.org/forgejo-contrib/forgejo"
+    },
+    {
+      "matchPackageNames": ["docker.io/envoyproxy/gateway-helm/gateway-helm"],
+      "overridePackageName": "docker.io/envoyproxy/gateway-helm"
+    },
+    {
+      "matchPackageNames": ["docker.io/envoyproxy/gateway-crds-helm/gateway-crds-helm"],
+      "overridePackageName": "docker.io/envoyproxy/gateway-crds-helm"
+    }
+  ]
+}

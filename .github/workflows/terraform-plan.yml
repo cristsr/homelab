@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: prod
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Needed to reach the Proxmox API on the homelab LAN via the subnet
       # route the hypervisor's Tailscale node advertises.

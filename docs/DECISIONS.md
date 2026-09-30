@@ -40,7 +40,7 @@ The homelab started with **MicroK8s**. Over time, frictions arose that made it i
 
 ## ADR-002: Agent Gateway as ingress
 
-**Status**: Accepted — replaced APISIX
+**Status**: Superseded by [ADR-026](#adr-026-agent-gateway-removed-mcp-served-by-envoy-gateway) — replaced APISIX
 **Date**: 2026-05
 
 ### Context
@@ -362,7 +362,7 @@ Fix: **`platform/argocd/httproute-webhook.yaml`**, a new `HTTPRoute` against the
 
 ## ADR-010: Cilium Gateway API for generic ingress, Agent Gateway only for MCP
 
-**Status**: Accepted — reduces Agent Gateway's scope (see [ADR-002](#adr-002-agent-gateway-as-ingress)); the Cilium Gateway API half is superseded by [ADR-023](#adr-023-envoy-gateway-replaces-cilium-gateway-api-for-generic-ingress)
+**Status**: Accepted — reduces Agent Gateway's scope (see [ADR-002](#adr-002-agent-gateway-as-ingress)); the Cilium Gateway API half is superseded by [ADR-023](#adr-023-envoy-gateway-replaces-cilium-gateway-api-for-generic-ingress) and the Agent Gateway half by [ADR-026](#adr-026-agent-gateway-removed-mcp-served-by-envoy-gateway)
 **Date**: 2026-09-05
 
 ### Context
@@ -430,7 +430,7 @@ Persistent solution: `ansible/host-network.yaml` installs `/etc/libvirt/hooks/ne
 
 ## ADR-012: TLS for internal routes with a private cluster CA
 
-**Status**: Accepted
+**Status**: Accepted — the Agent Gateway plain-HTTP exception and its proxy hop no longer apply; see [ADR-026](#adr-026-agent-gateway-removed-mcp-served-by-envoy-gateway)
 **Date**: 2026-09-06
 
 ### Context
@@ -805,7 +805,7 @@ The Talos image included the `tailscale` system extension, but no `ExtensionServ
 
 ## ADR-023: Envoy Gateway replaces Cilium Gateway API for generic ingress
 
-**Status**: Accepted — supersedes the "Cilium Gateway API" half of [ADR-010](#adr-010-cilium-gateway-api-for-generic-ingress-agent-gateway-only-for-mcp); Agent Gateway's half stands
+**Status**: Accepted — supersedes the "Cilium Gateway API" half of [ADR-010](#adr-010-cilium-gateway-api-for-generic-ingress-agent-gateway-only-for-mcp); Agent Gateway's half is superseded by [ADR-026](#adr-026-agent-gateway-removed-mcp-served-by-envoy-gateway)
 **Date**: 2026-09-20
 
 ### Context
@@ -908,6 +908,38 @@ After ADR-024 the Talos VM (`192.168.80.30`) was the only cluster component left
 - A wrong firewall change can lock the operator out. The hypervisor address is allowed from the first step, and the recovery order is in the runbook: apply a permissive configuration from the hypervisor, then, if needed, the Talos ISO.
 - The firewall protects the control plane ports only. Other ports of the node stay reachable from the LAN, as before.
 - A rule over a wide port range locks out every source it does not list, the hypervisor included. Recovery then needs the offline edit of the node's `STATE` partition described in the runbook.
+
+---
+
+## ADR-026: Agent Gateway removed, MCP served by Envoy Gateway
+
+**Status**: Accepted — supersedes the "Agent Gateway only for MCP" half of [ADR-010](#adr-010-cilium-gateway-api-for-generic-ingress-agent-gateway-only-for-mcp) and [ADR-002](#adr-002-agent-gateway-as-ingress)
+**Date**: 2026-09-29
+
+### Context
+
+Agent Gateway was kept only for two routes, SonarQube MCP and OpenMemory, plus its own admin UI. The features that justified it (MCP federation and per-tool authorization) were never used, and it cost a second controller, a second CRD set, a proxy pod and a plain-HTTP hop behind `main`, because its controller ignores HTTPS listeners. MCP remote transports are ordinary HTTP (Streamable HTTP or SSE), which Envoy Gateway routes as is.
+
+### Decision
+
+- `mcp-sonarqube` and `openmemory` attach to the `main` Gateway (`sectionName: https`) with the same hostnames, prefix, rewrite and backends.
+- Each route gets a `BackendTrafficPolicy` with `requestTimeout: 0s` and `connectionIdleTimeout: 1h`; without it Envoy's default 15 s route timeout cuts long streams. No session affinity: both MCP servers run one replica.
+- The `agentgateway`, `agentgateway-crds` and `agentgateway-config` Applications, the `platform/networking/agentgateway/` manifests, the admin UI route and the proxy route are deleted in one change; Argo CD prunes the cluster resources.
+- The `openmemory` `CiliumNetworkPolicy` admits `envoy-gateway-system` (where Envoy's proxy pods run) instead of `networking`.
+- `gateway-api-crds` stays on the `experimental` channel; going back to `standard` is a separate change.
+
+### Alternatives considered
+
+| Alternative | Why not |
+|---|---|
+| Keep Agent Gateway for future MCP features | Unused since it was installed; it can be reinstalled from Git when a real need appears |
+| Envoy AI Gateway | Adds another component for features that are not needed yet |
+
+### Consequences
+
+- One ingress controller. The MCP URLs do not change.
+- A short MCP interruption while Argo CD syncs the re-parented routes and prunes Agent Gateway.
+- Per-tool authorization and MCP federation are gone; adding them later means introducing a gateway again.
 
 ## ADR-027: Hindsight replaces OpenMemory as the agent memory service
 

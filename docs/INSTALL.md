@@ -256,7 +256,6 @@ kubectl get pods -A
 |-----|----------|--------------|
 | `https://argocd.cristianpuenguenan.online` | Argo CD | admin / (initial password from step 5.2) |
 | `https://grafana.cristianpuenguenan.online` | Grafana | admin / (configured in secrets/homelab.env, see §7) |
-| `https://agentgateway.cristianpuenguenan.online` | Agent Gateway | admin / admin |
 | `https://headlamp.cristianpuenguenan.online` | Headlamp | Service token |
 | `https://hubble.cristianpuenguenan.online` | Hubble | No auth |
 | `https://sonarqube.cristianpuenguenan.online` | SonarQube | admin / (configured in secrets/homelab.env, see §7) |

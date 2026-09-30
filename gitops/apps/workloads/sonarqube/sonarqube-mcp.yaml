@@ -14,7 +14,7 @@ spec:
     targetRevision: HEAD
     path: workloads/sonarqube
     directory:
-      include: "{sonarqube-mcp.yaml,httproute-mcp.yaml}"
+      include: "{sonarqube-mcp.yaml,httproute-mcp.yaml,backendtrafficpolicy-mcp.yaml}"
   destination:
     server: https://kubernetes.default.svc
     namespace: sonarqube

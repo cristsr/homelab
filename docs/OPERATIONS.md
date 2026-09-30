@@ -521,7 +521,7 @@ sudo find /var/log/pods -type f -mtime +7 -delete
 
 ## 11. Private Access: Tailscale
 
-See [ADR-011](DECISIONS.md) and [ADR-012](DECISIONS.md). Administration routes (everything except `portfolio` and `api` `/webhooks`) aren't public — they're accessed via Tailscale (the priority and only supported path, see §11.2), and all 11 serve HTTPS with a real Let's Encrypt certificate (`*.internal.cristianpuenguenan.online`, ADR-012 update) — nothing needs to be installed on any device. The 3 Agent Gateway routes (`mcp`, `openmemory-api`, `agentgateway`) are also `https://` from the client's perspective: its controller still doesn't support HTTPS listeners (ADR-012), so it's the `main` Gateway that terminates TLS and forwards over plain HTTP, internally within the cluster, to the Agent Gateway Service.
+See [ADR-011](DECISIONS.md) and [ADR-012](DECISIONS.md). Administration routes (everything except `portfolio` and `api` `/webhooks`) aren't public — they're accessed via Tailscale (the priority and only supported path, see §11.2), and all 10 serve HTTPS with a real Let's Encrypt certificate (`*.internal.cristianpuenguenan.online`, ADR-012 update) — nothing needs to be installed on any device.
 
 ### 11.1 Configure the Tailscale subnet router (one-time)
 
@@ -560,7 +560,7 @@ Note: the **public** wildcard `*.cristianpuenguenan.online` also matches these s
 **Manual alternative, without Split DNS:** add the hostnames to the local `hosts` file (`/etc/hosts` or `C:\Windows\System32\drivers\etc\hosts`) pointing to the Gateways' fixed IPs (requires being on Tailscale, §11.1):
 
 ```
-192.168.122.240 argocd.internal.cristianpuenguenan.online grafana.internal.cristianpuenguenan.online headlamp.internal.cristianpuenguenan.online hubble.internal.cristianpuenguenan.online openmemory.internal.cristianpuenguenan.online sonarqube.internal.cristianpuenguenan.online agentgateway.internal.cristianpuenguenan.online mcp.internal.cristianpuenguenan.online openmemory-api.internal.cristianpuenguenan.online
+192.168.122.240 argocd.internal.cristianpuenguenan.online grafana.internal.cristianpuenguenan.online headlamp.internal.cristianpuenguenan.online hubble.internal.cristianpuenguenan.online openmemory.internal.cristianpuenguenan.online sonarqube.internal.cristianpuenguenan.online mcp.internal.cristianpuenguenan.online openmemory-api.internal.cristianpuenguenan.online
 ```
 
 To add a new private route: add it to the `Corefile` in `platform/networking/private-dns/configmap.yaml` and `git push` — Reloader restarts the pod on its own, no additional manual step needed.
@@ -570,9 +570,9 @@ To add a new private route: add it to the `Corefile` in `platform/networking/pri
 Cloudflare doesn't have an entry per route — there's a single wildcard (`*.cristianpuenguenan.online`) pointing to `envoy-public.envoy-gateway-system.svc.cluster.local:80`. What's public is decided by **where the `HTTPRoute` lives** in the code, not a list in the dashboard:
 
 - `HTTPRoute` with `parentRefs: [{name: public}]` → reachable from the Internet.
-- `HTTPRoute` with `parentRefs: [{name: main}]` or `[{name: agentgateway-mcp}]` → never reached by the wildcard, only via LAN/Tailscale (§11.1-11.3).
+- `HTTPRoute` with `parentRefs: [{name: main}]` → never reached by the wildcard, only via LAN/Tailscale (§11.1-11.3).
 
-To make a new route public: add its `HTTPRoute` with `parentRefs: [{name: public, namespace: networking}]` (see `workloads/portfolio/httproute.yaml` as an example) — nothing needs to be touched in Cloudflare. To make a currently public one private: change its `parentRefs` to `main` (or `agentgateway-mcp` if it depends on MCP).
+To make a new route public: add its `HTTPRoute` with `parentRefs: [{name: public, namespace: networking}]` (see `workloads/portfolio/httproute.yaml` as an example) — nothing needs to be touched in Cloudflare. To make a currently public one private: change its `parentRefs` to `main`.
 
 At [dash.cloudflare.com](https://dash.cloudflare.com) → Zero Trust → Networks → Tunnels → the homelab's tunnel → Public Hostnames, the only entry to maintain is the wildcard pointing to `envoy-public` — it's not touched when adding or removing private routes.
 
