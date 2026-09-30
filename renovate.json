@@ -6,6 +6,12 @@
   "packageRules": [
     { "matchUpdateTypes": ["minor", "patch"], "groupName": "minor-patch" },
     {
+      "description": "talos 0.12 generates KubeNetworkConfig/KubeProxyConfig/UnattendedInstallConfig documents that conflict with our v1alpha1 patches in terraform/infra/talos.tf; migrate the patches first",
+      "matchPackageNames": ["siderolabs/talos"],
+      "matchUpdateTypes": ["minor", "major"],
+      "enabled": false
+    },
+    {
       "description": "Private images, Renovate has no access to ghcr.io/cristsr",
       "matchPackageNames": ["ghcr.io/cristsr/**"],
       "enabled": false
