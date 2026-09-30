@@ -37,6 +37,10 @@ grafana:
   # the pod when it changes.
   deploymentAnnotations:
     reloader.stakater.com/auto: "true"
+  # The ZFS volume is RWO: a rolling update's new pod can't mount it while the
+  # old one holds it.
+  deploymentStrategy:
+    type: Recreate
   sidecar:
     dashboards:
       enabled: true
