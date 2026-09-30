@@ -911,7 +911,7 @@ After ADR-024 the Talos VM (`192.168.80.30`) was the only cluster component left
 
 ## ADR-027: Hindsight replaces OpenMemory as the agent memory service
 
-**Status**: Accepted — spec-0010
+**Status**: Accepted â€” spec-0010
 **Date**: 2026-09-29
 
 ### Context

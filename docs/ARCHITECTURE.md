@@ -358,7 +358,7 @@ Secrets:  openmemory-secrets (OPENAI_API_KEY) via ExternalSecret
 
 ### 4.2b Hindsight (agent memory, replaces OpenMemory)
 
-**Namespace**: `devtools` — **Image**: `ghcr.io/vectorize-io/hindsight-api:<version>-slim`
+**Namespace**: `devtools` â€” **Image**: `ghcr.io/vectorize-io/hindsight-api:<version>-slim`
 
 Long-term memory for agents and Claude Code (retain / recall / reflect) with a built-in MCP endpoint (`/mcp/{bank_id}/`). Memories, entities and vectors live in one PostgreSQL database with pgvector; the LLM and the embeddings go through OpenRouter, so the pod runs no local models.
 
