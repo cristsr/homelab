@@ -2,7 +2,9 @@
 Description=PostgreSQL data engine
 
 [Container]
-Image=docker.io/pgvector/pgvector:pg17
+# trixie variant: the data was initialised on postgres:17 (Debian trixie, glibc 2.41); the default
+# pgvector tag is bookworm (glibc 2.36) and would break text-index collation.
+Image=docker.io/pgvector/pgvector:pg17-trixie
 Volume=/srv/postgresql:/var/lib/postgresql/data:U,Z
 Network=host
 AutoUpdate=registry
