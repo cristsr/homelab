@@ -29,6 +29,13 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: observability
+  # The chart renders Grafana's PVC without volumeName; once bound it's
+  # immutable, so Replace=true fails on it.
+  ignoreDifferences:
+    - kind: PersistentVolumeClaim
+      name: prometheus-grafana
+      jsonPointers:
+        - /spec/volumeName
   syncPolicy:
     automated:
       prune: true
@@ -37,3 +44,4 @@ spec:
       - CreateNamespace=true
       - ServerSideApply=true
       - Replace=true
+      - RespectIgnoreDifferences=true
