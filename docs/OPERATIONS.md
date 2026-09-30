@@ -221,12 +221,15 @@ Databases don't run in the cluster: they live on five Proxmox LXCs (see [ADR-016
 
 ### PostgreSQL backup (LXC `postgresql`, `10.10.20.10`)
 
-Two databases on the same instance (`homelab` and `sonarqube`) — dump them separately:
+One instance, one database per service (`homelab`, `sonarqube`, `n8n`, `firefly`, `hindsight`) — dump each separately. `hindsight` holds all of Hindsight's memory (the pod keeps no state), so it is the one that matters most to keep:
 
 ```bash
-pg_dump -h postgres.internal.cristianpuenguenan.online -U <user> homelab > homelab.sql
-pg_dump -h postgres.internal.cristianpuenguenan.online -U <user> sonarqube > sonarqube.sql
+for db in homelab sonarqube n8n firefly hindsight; do
+  pg_dump -h postgres.internal.cristianpuenguenan.online -U <user> "$db" > "$db.sql"
+done
 ```
+
+Nothing schedules these dumps: they are manual, and only the `vzdump` below is a whole-container copy.
 
 ### MongoDB backup (LXC `mongodb`, `10.10.20.20`)
 

@@ -40,6 +40,14 @@ spec:
               value: "rrf"
             - name: HINDSIGHT_API_VECTOR_EXTENSION
               value: "pgvector"
+            # The shared PostgreSQL LXC runs with the default max_connections=100 and
+            # the upstream pool defaults to 100, which would starve the other databases.
+            - name: HINDSIGHT_API_DB_POOL_MIN_SIZE
+              value: "2"
+            - name: HINDSIGHT_API_DB_POOL_MAX_SIZE
+              value: "15"
+            - name: HINDSIGHT_API_MIGRATION_ISOLATION
+              value: "true"
             # Every request, MCP included, must carry HINDSIGHT_API_TENANT_API_KEY.
             - name: HINDSIGHT_API_TENANT_EXTENSION
               value: "hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension"
