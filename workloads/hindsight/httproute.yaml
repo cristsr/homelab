@@ -11,6 +11,22 @@ spec:
   hostnames:
     - hindsight.internal.cristianpuenguenan.online
   rules:
-    - backendRefs:
+    # The API and MCP keep the paths they had; the control plane serves the rest
+    # (its own pages live under /<locale>, /api and /_next, none of which overlap).
+    - matches:
+        - path: { type: PathPrefix, value: /v1 }
+        - path: { type: PathPrefix, value: /mcp }
+        - path: { type: PathPrefix, value: /health }
+        - path: { type: PathPrefix, value: /metrics }
+        - path: { type: PathPrefix, value: /version }
+        - path: { type: PathPrefix, value: /docs }
+        - path: { type: PathPrefix, value: /redoc }
+        - path: { type: Exact, value: /openapi.json }
+      backendRefs:
         - name: hindsight
           port: 8888
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: hindsight-control-plane
+          port: 9999

@@ -25,7 +25,6 @@ spec:
         - '.spec.rules[].backendRefs[].group'
         - '.spec.rules[].backendRefs[].kind'
         - '.spec.rules[].backendRefs[].weight'
-        - '.spec.rules[].matches'
   syncPolicy:
     automated:
       prune: true

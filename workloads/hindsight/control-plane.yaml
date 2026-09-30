@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hindsight-control-plane
+  namespace: hindsight
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hindsight-control-plane
+  template:
+    metadata:
+      labels:
+        app: hindsight-control-plane
+    spec:
+      containers:
+        - name: control-plane
+          image: ghcr.io/vectorize-io/hindsight-control-plane:0.10.2
+          ports:
+            - containerPort: 9999
+          env:
+            - name: HINDSIGHT_CP_DATAPLANE_API_URL
+              value: "http://hindsight:8888"
+            # The panel calls the API on the user's behalf with the server's own key,
+            # so whoever logs in has full access; HINDSIGHT_CP_ACCESS_KEY is what
+            # gates the UI.
+            - name: HINDSIGHT_CP_DATAPLANE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: hindsight-secrets
+                  key: HINDSIGHT_API_TENANT_API_KEY
+            - name: HINDSIGHT_CP_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: hindsight-control-plane-secrets
+                  key: HINDSIGHT_CP_ACCESS_KEY
+          startupProbe:
+            tcpSocket:
+              port: 9999
+            periodSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: 9999
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 9999
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hindsight-control-plane
+  namespace: hindsight
+spec:
+  selector:
+    app: hindsight-control-plane
+  ports:
+    - port: 9999
+      targetPort: 9999
+  type: ClusterIP
