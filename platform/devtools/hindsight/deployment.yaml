@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hindsight
+  namespace: devtools
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hindsight
+  template:
+    metadata:
+      labels:
+        app: hindsight
+    spec:
+      containers:
+        - name: hindsight
+          # Slim variant: no local ML models. Embeddings and the LLM are remote
+          # (OpenRouter), so the reranker is off and the pod stays small.
+          image: ghcr.io/vectorize-io/hindsight-api:0.10.2-slim
+          ports:
+            - containerPort: 8888
+          env:
+            - name: HINDSIGHT_API_LLM_PROVIDER
+              value: "openrouter"
+            - name: HINDSIGHT_API_LLM_MODEL
+              value: "anthropic/claude-haiku-4-5"
+            # The embedding dimension (1536) is fixed in the database on first
+            # start; changing this model later means re-embedding everything.
+            - name: HINDSIGHT_API_EMBEDDINGS_PROVIDER
+              value: "openai"
+            - name: HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL
+              value: "https://openrouter.ai/api/v1"
+            - name: HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL
+              value: "openai/text-embedding-3-small"
+            - name: HINDSIGHT_API_RERANKER_PROVIDER
+              value: "none"
+            - name: HINDSIGHT_API_VECTOR_EXTENSION
+              value: "pgvector"
+            # Every request, MCP included, must carry HINDSIGHT_API_TENANT_API_KEY.
+            - name: HINDSIGHT_API_TENANT_EXTENSION
+              value: "hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension"
+          # HINDSIGHT_API_DATABASE_URL, HINDSIGHT_API_LLM_API_KEY (also used for
+          # the embeddings) and HINDSIGHT_API_TENANT_API_KEY.
+          envFrom:
+            - secretRef:
+                name: hindsight-secrets
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: 8888
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8888
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8888
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hindsight
+  namespace: devtools
+spec:
+  selector:
+    app: hindsight
+  ports:
+    - port: 8888
+      targetPort: 8888
+  type: ClusterIP

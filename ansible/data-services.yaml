@@ -19,6 +19,8 @@
     firefly_db_password: "{{ lookup('env', 'FIREFLY_DB_PASSWORD') }}"
     n8n_db_username: "{{ lookup('env', 'N8N_DB_USERNAME') }}"
     n8n_db_password: "{{ lookup('env', 'N8N_DB_PASSWORD') }}"
+    hindsight_db_username: "{{ lookup('env', 'HINDSIGHT_DB_USERNAME') }}"
+    hindsight_db_password: "{{ lookup('env', 'HINDSIGHT_DB_PASSWORD') }}"
 
   tasks:
     - name: Fail loudly if any engine credential is missing
@@ -42,6 +44,8 @@
         - firefly_db_password
         - n8n_db_username
         - n8n_db_password
+        - hindsight_db_username
+        - hindsight_db_password
       delegate_to: localhost
       run_once: true
 
@@ -71,7 +75,7 @@
         state: started
         enabled: true
 
-    - name: Provision the sonarqube, n8n and firefly databases on the shared PostgreSQL instance
+    - name: Provision the sonarqube, n8n, firefly and hindsight databases on the shared PostgreSQL instance
       when: inventory_hostname == 'postgresql'
       no_log: true
       block:
@@ -134,6 +138,32 @@
           community.postgresql.postgresql_db:
             name: firefly
             owner: "{{ firefly_db_username }}"
+            login_user: "{{ postgresql_app_username }}"
+            login_password: "{{ postgresql_app_password }}"
+            login_host: localhost
+
+        - name: Create the hindsight role
+          community.postgresql.postgresql_user:
+            name: "{{ hindsight_db_username }}"
+            password: "{{ hindsight_db_password }}"
+            db: postgres
+            login_user: "{{ postgresql_app_username }}"
+            login_password: "{{ postgresql_app_password }}"
+            login_host: localhost
+
+        - name: Create the hindsight database owned by that role
+          community.postgresql.postgresql_db:
+            name: hindsight
+            owner: "{{ hindsight_db_username }}"
+            login_user: "{{ postgresql_app_username }}"
+            login_password: "{{ postgresql_app_password }}"
+            login_host: localhost
+
+        # Needs the pgvector image (postgresql.container.j2); only this database gets it.
+        - name: Enable the pgvector extension in the hindsight database
+          community.postgresql.postgresql_ext:
+            name: vector
+            db: hindsight
             login_user: "{{ postgresql_app_username }}"
             login_password: "{{ postgresql_app_password }}"
             login_host: localhost
