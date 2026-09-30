@@ -1,0 +1,16 @@
+# MCP clients hold SSE / Streamable HTTP streams open; Envoy's default 15s route
+# timeout would cut them, so the per-request timeout is disabled for this route.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: hindsight
+  namespace: hindsight
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: hindsight
+  timeout:
+    http:
+      requestTimeout: 0s
+      connectionIdleTimeout: 1h

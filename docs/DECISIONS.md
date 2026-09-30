@@ -940,3 +940,34 @@ Agent Gateway was kept only for two routes, SonarQube MCP and OpenMemory, plus i
 - One ingress controller. The MCP URLs do not change.
 - A short MCP interruption while Argo CD syncs the re-parented routes and prunes Agent Gateway.
 - Per-tool authorization and MCP federation are gone; adding them later means introducing a gateway again.
+
+## ADR-027: Hindsight replaces OpenMemory as the agent memory service
+
+**Status**: Accepted — spec-0010
+**Date**: 2026-09-29
+
+### Context
+
+OpenMemory (mem0's self-hosted MCP server) is no longer documented upstream, runs from a private image this repo has to keep building, and needs a dedicated Qdrant LXC. mem0's own self-hosted server is maintained but ships no published image, no MCP endpoint and only OpenAI/Gemini embedders out of the box.
+
+### Decision
+
+- Run Hindsight (`vectorize-io/hindsight`, MIT) as `hindsight-api:<version>-slim` in its own `hindsight` namespace. It publishes images, has a Helm chart and a native MCP endpoint, and stores everything in PostgreSQL with pgvector.
+- The shared PostgreSQL LXC hosts it: its image changes from `postgres:17` to `pgvector/pgvector:pg17` (same major version and data directory), and Ansible creates the `hindsight` role and database and enables `vector` in that database only.
+- LLM provider `openrouter`; embeddings through the `openai` provider with `HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL=https://openrouter.ai/api/v1` and `openai/text-embedding-3-small` (1536 dimensions). The reranker is `none`.
+- Authentication with `ApiKeyTenantExtension`; the route lives on the internal `main` Gateway with the same `BackendTrafficPolicy` as the other MCP routes.
+
+### Alternatives considered
+
+| Alternative | Why not |
+|---|---|
+| mem0 OSS server + a third-party MCP wrapper | No published image, embedder limited to bundled providers, MCP from a small third-party project |
+| Cognee | Needs a graph database and targets document ingestion |
+| Letta | Agent runtime rather than a memory layer; its Docker image is documented as no longer actively maintained |
+| Graphiti/Zep | Requires Neo4j or FalkorDB |
+
+### Consequences
+
+- The embedding dimension is fixed on first start; switching model later means re-embedding.
+- Every retained memory is sent to OpenRouter for extraction and embedding.
+- Follow-up: once verified, remove OpenMemory, OpenMemory UI and the Qdrant LXC (Terraform, Ansible, DNS, secrets).

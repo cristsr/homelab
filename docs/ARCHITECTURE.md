@@ -188,6 +188,7 @@ Created by `terraform/cluster/namespaces.tf` (`kubernetes_namespace_v1.namespace
 | `secret-management` | 1Password ClusterSecretStore, External Secrets, Reloader |
 | `tetragon` | Tetragon |
 | `sonarqube` | SonarQube, MCP server |
+| `hindsight` | Hindsight (agent memory API + MCP) |
 
 ---
 
@@ -230,6 +231,7 @@ The MCP servers are plain `HTTPRoute`s on `main` (`sectionName: https`), each wi
 | Subdomain | Backend | Namespace |
 |-----------|---------|-----------|
 | `openmemory-api.internal.cristianpuenguenan.online` | openmemory:8765 (MCP server) | devtools |
+| `hindsight.internal.cristianpuenguenan.online` | hindsight:8888 (API + MCP, API key required) | hindsight |
 | `mcp.internal.cristianpuenguenan.online` | mcp-sonarqube:3000 (`/sonarqube`) | sonarqube |
 
 #### TLS
@@ -350,6 +352,22 @@ Port:     8080
 Env:      QDRANT_HOST=qdrant.internal.cristianpuenguenan.online (external LXC, §5)
 Secrets:  openmemory-secrets (OPENAI_API_KEY) via ExternalSecret
 ```
+
+### 4.2b Hindsight (agent memory, replaces OpenMemory)
+
+**Namespace**: `hindsight` — **Image**: `ghcr.io/vectorize-io/hindsight-api:<version>-slim`
+
+Long-term memory for agents and Claude Code (retain / recall / reflect) with a built-in MCP endpoint (`/mcp/{bank_id}/`). Memories, entities and vectors live in one PostgreSQL database with pgvector; the LLM and the embeddings go through OpenRouter, so the pod runs no local models.
+
+```
+Replicas: 1
+Port:     8888
+DB:       postgresql://postgres.internal.cristianpuenguenan.online:5432/hindsight (pgvector, database `hindsight`)
+Auth:     ApiKeyTenantExtension - every request, MCP included, needs HINDSIGHT_API_TENANT_API_KEY
+Secrets:  hindsight-secrets (SopsSecret): DATABASE_URL, LLM_API_KEY (also used for embeddings), TENANT_API_KEY
+```
+
+See ADR-027. OpenMemory and Qdrant stay until the new service is verified.
 
 ### 4.3 SonarQube Community
 

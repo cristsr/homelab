@@ -40,8 +40,10 @@ FIREFLY_DB_USER="$(get FIREFLY_DB_USERNAME)"
 FIREFLY_DB_PASS="$(get FIREFLY_DB_PASSWORD)"
 N8N_DB_USER="$(get N8N_DB_USERNAME)"
 N8N_DB_PASS="$(get N8N_DB_PASSWORD)"
+HINDSIGHT_DB_USER="$(get HINDSIGHT_DB_USERNAME)"
+HINDSIGHT_DB_PASS="$(get HINDSIGHT_DB_PASSWORD)"
 
-if [ -n "$PG_USER$PG_PASS$MONGO_PASS$REDIS_PASS$QDRANT_KEY$SQ_DB_USER$SQ_DB_PASS$MYSQL_PASS$KIMAI_DB_USER$KIMAI_DB_PASS$FIREFLY_DB_USER$FIREFLY_DB_PASS$N8N_DB_USER$N8N_DB_PASS" ]; then
+if [ -n "$PG_USER$PG_PASS$MONGO_PASS$REDIS_PASS$QDRANT_KEY$SQ_DB_USER$SQ_DB_PASS$MYSQL_PASS$KIMAI_DB_USER$KIMAI_DB_PASS$FIREFLY_DB_USER$FIREFLY_DB_PASS$N8N_DB_USER$N8N_DB_PASS$HINDSIGHT_DB_USER$HINDSIGHT_DB_PASS" ]; then
   cat > ansible/data-services.env <<EOF
 POSTGRESQL_APP_USERNAME=$PG_USER
 POSTGRESQL_APP_PASSWORD=$PG_PASS
@@ -57,9 +59,11 @@ FIREFLY_DB_USERNAME=$FIREFLY_DB_USER
 FIREFLY_DB_PASSWORD=$FIREFLY_DB_PASS
 N8N_DB_USERNAME=$N8N_DB_USER
 N8N_DB_PASSWORD=$N8N_DB_PASS
+HINDSIGHT_DB_USERNAME=$HINDSIGHT_DB_USER
+HINDSIGHT_DB_PASSWORD=$HINDSIGHT_DB_PASS
 EOF
   sops encrypt -i ansible/data-services.env
-  echo "set   ansible/data-services.env (14 keys)"
+  echo "set   ansible/data-services.env (16 keys)"
 else
   echo "skip  ansible/data-services.env (nothing to load)"
 fi
@@ -88,6 +92,22 @@ if [ -n "$GHCR_USER" ] && [ -n "$GHCR_PAT" ]; then
 else
   echo "skip  platform/devtools/openmemory/secrets.sops.yaml ghcr-pull-secret (GHCR_USERNAME/GHCR_PAT empty)"
 fi
+
+# --- workloads/hindsight/secrets.sops.yaml ---
+# The connection URL is rebuilt from the same answers-file values Ansible
+# provisions the PostgreSQL role with, so both sides always agree. The host is
+# the postgres domain, so a move of the LXC changes DNS only.
+if [ -n "$HINDSIGHT_DB_USER" ] && [ -n "$HINDSIGHT_DB_PASS" ]; then
+  set_field workloads/hindsight/secrets.sops.yaml \
+    '["spec"]["secretTemplates"][0]["stringData"]["HINDSIGHT_API_DATABASE_URL"]' \
+    "postgresql://${HINDSIGHT_DB_USER}:${HINDSIGHT_DB_PASS}@postgres.internal.cristianpuenguenan.online:5432/hindsight"
+else
+  echo "skip  workloads/hindsight/secrets.sops.yaml HINDSIGHT_API_DATABASE_URL (HINDSIGHT_DB_USERNAME/HINDSIGHT_DB_PASSWORD empty)"
+fi
+set_field workloads/hindsight/secrets.sops.yaml \
+  '["spec"]["secretTemplates"][0]["stringData"]["HINDSIGHT_API_LLM_API_KEY"]' "$(get HINDSIGHT_OPENROUTER_API_KEY)"
+set_field workloads/hindsight/secrets.sops.yaml \
+  '["spec"]["secretTemplates"][0]["stringData"]["HINDSIGHT_API_TENANT_API_KEY"]' "$(get HINDSIGHT_API_KEY)"
 
 # --- platform/networking/cloudflared/token.sops.yaml ---
 set_field platform/networking/cloudflared/token.sops.yaml \
