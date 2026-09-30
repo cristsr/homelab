@@ -331,7 +331,6 @@ data:
             <span class="tag">PostgreSQL</span>
             <span class="tag">MongoDB</span>
             <span class="tag">Redis</span>
-            <span class="tag">Qdrant</span>
           </div>
         </div>
         <div class="skill-card">

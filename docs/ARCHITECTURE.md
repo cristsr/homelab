@@ -31,7 +31,7 @@ Single-node homelab built on Talos Linux (a VM on Proxmox VE) with full GitOps. 
 | GitOps | Argo CD 9.5.13 |
 | TLS Certificates | cert-manager: Let's Encrypt (public and private, DNS-01 via Cloudflare) |
 | Storage | OpenEBS ZFS LocalPV 2.11.1 |
-| Databases | PostgreSQL 17, MongoDB 8.0, Qdrant v1.x, Redis 8 on Proxmox LXCs (ADR-016) |
+| Databases | PostgreSQL 17, MongoDB 8.0, Redis 8 on Proxmox LXCs (ADR-016) |
 | Internet Tunnel | Cloudflare Tunnel (cloudflared) |
 | Monitoring | kube-prometheus-stack + Grafana Operator |
 | Secrets | 1Password + External Secrets Operator |
@@ -44,7 +44,7 @@ homelab/
 ├── terraform/
 │   ├── infra/                   # Talos VM + data LXCs on Proxmox (bpg/proxmox + siderolabs/talos providers)
 │   │   ├── proxmox.tf            # VM, disks (installation + dedicated to ZFS), Talos ISO
-│   │   ├── lxc.tf                # Four data LXCs: PostgreSQL, MongoDB, Qdrant, Redis
+│   │   ├── lxc.tf                # Data LXCs: PostgreSQL, MongoDB, Redis, MySQL
 │   │   ├── talos.tf              # machine config, bootstrap, generated kubeconfig/talosconfig
 │   │   ├── variables.tf          # Sizing, network, Talos schematic
 │   │   ├── outputs.tf            # vm_static_ip, kubeconfig_path, talosconfig_path
@@ -61,7 +61,7 @@ homelab/
 │   │   ├── preflight-secrets.yaml        # Validates that credentials are not empty
 │   │   ├── preflight-remote-checks.yaml  # Remote connectivity checks
 │   │   └── install-podman.yaml           # Shared Podman installation + auto-update
-│   ├── data-services.yaml      # Brings up postgresql/mongodb/qdrant/redis via Podman Quadlet
+│   ├── data-services.yaml      # Brings up postgresql/mongodb/redis via Podman Quadlet
 │   ├── bootstrap-lxc-ssh.yaml   # Seeds the SSH pubkey on the LXCs via pct exec
 │   ├── ansible.cfg             # Ansible configuration
 │   ├── inventory.yaml          # localhost + the data LXCs (Talos exposes no SSH/shell on the node)
@@ -84,7 +84,6 @@ homelab/
 │       │   ├── argocd/         # Additional ArgoCD configuration
 │       │   ├── networking/     # cert-manager, cloudflared, envoy-gateway
 │       │   ├── storage/        # OpenEBS ZFS LocalPV
-│       │   ├── devtools/       # OpenMemory
 │       │   ├── observability/  # Prometheus, Grafana, Headlamp
 │       │   ├── secret-management/ # 1Password ClusterSecretStore, External Secrets
 │       │   └── security/       # Tetragon
@@ -181,7 +180,7 @@ Created by `terraform/cluster/namespaces.tf` (`kubernetes_namespace_v1.namespace
 |-----------|-----------|
 | `argocd` | Argo CD |
 | `apps` | Flow API, Portfolio |
-| `devtools` | OpenMemory |
+| `devtools` | Forgejo, Hermes |
 | `openebs` | OpenEBS ZFS LocalPV |
 | `networking` | Envoy Gateway config, cloudflared, cert-manager, private-dns |
 | `observability` | Prometheus, Grafana, Alertmanager, Headlamp |
@@ -221,7 +220,6 @@ Administration/observability tools — reachable only via LAN/Tailscale, never v
 | `grafana.internal.cristianpuenguenan.online` | prometheus-grafana:80 | observability |
 | `headlamp.internal.cristianpuenguenan.online` | headlamp:80 | observability |
 | `hubble.internal.cristianpuenguenan.online` | hubble-ui:80 | kube-system |
-| `openmemory.internal.cristianpuenguenan.online` | openmemory-ui:3000 | devtools |
 | `sonarqube.internal.cristianpuenguenan.online` | sonarqube-sonarqube:9000 | sonarqube |
 
 #### 3.1.c MCP routes
@@ -230,7 +228,6 @@ The MCP servers are plain `HTTPRoute`s on `main` (`sectionName: https`), each wi
 
 | Subdomain | Backend | Namespace |
 |-----------|---------|-----------|
-| `openmemory-api.internal.cristianpuenguenan.online` | openmemory:8765 (MCP server) | devtools |
 | `hindsight-api.internal.cristianpuenguenan.online` | hindsight:8888 (API + MCP, API key required) | hindsight |
 | `hindsight.internal.cristianpuenguenan.online` | hindsight-control-plane:9999 (panel, access key required) | hindsight |
 | `mcp.internal.cristianpuenguenan.online` | mcp-sonarqube:3000 (`/sonarqube`) | sonarqube |
@@ -341,20 +338,7 @@ Port:     80
 Secrets:  flow-secrets via ExternalSecret
 ```
 
-### 4.2 OpenMemory (MCP + Vector Memory)
-
-**Namespace**: `devtools` — **Image**: `mem0/openmemory-mcp:latest`
-
-Vector memory agent for LLMs. Stores embeddings in Qdrant.
-
-```
-Replicas: 1
-Port:     8080
-Env:      QDRANT_HOST=qdrant.internal.cristianpuenguenan.online (external LXC, §5)
-Secrets:  openmemory-secrets (OPENAI_API_KEY) via ExternalSecret
-```
-
-### 4.2b Hindsight (agent memory, replaces OpenMemory)
+### 4.2 Hindsight (agent memory)
 
 **Namespace**: `hindsight` — **Image**: `ghcr.io/vectorize-io/hindsight-api:<version>-slim`
 
@@ -370,7 +354,7 @@ Secrets:  hindsight-secrets (SopsSecret): DATABASE_URL, LLM_API_KEY (also used f
 
 The control plane (`hindsight-control-plane:<version>`, port 9999) is a separate Deployment that shares the hostname: `/v1`, `/mcp`, `/health`, `/metrics`, `/version`, `/docs`, `/redoc` and `/openapi.json` go to the API and everything else to the panel. It calls the API with the server's own key, so `HINDSIGHT_CP_ACCESS_KEY` (in `hindsight-control-plane-secrets`) is what gates the UI.
 
-See ADR-027. OpenMemory and Qdrant stay until the new service is verified.
+See ADR-027. It replaced OpenMemory and the Qdrant LXC.
 
 ### 4.3 SonarQube Community
 
@@ -388,15 +372,14 @@ DB:       PostgreSQL on the external LXC (§5): jdbc:postgresql://postgres.inter
 
 ## 5. Databases
 
-Data services **don't run in the cluster**: they live on five Proxmox VE LXCs, created by Terraform (`terraform/infra/lxc.tf`) as base Debian 13 — bridge `datanet` (the isolated data VNet, see [ADR-024](DECISIONS.md)), datastore `local-lvm`, static IP. See [ADR-016](DECISIONS.md) for the decision and its trade-offs. Installing the engines inside the LXCs is pending (later provisioning); consumers already point to the hostnames that `private-dns` (§7) resolves, same as the private HTTP routes.
+Data services **don't run in the cluster**: they live on four Proxmox VE LXCs, created by Terraform (`terraform/infra/lxc.tf`) as base Debian 13 — bridge `datanet` (the isolated data VNet, see [ADR-024](DECISIONS.md)), datastore `local-lvm`, static IP. See [ADR-016](DECISIONS.md) for the decision and its trade-offs. Installing the engines inside the LXCs is pending (later provisioning); consumers already point to the hostnames that `private-dns` (§7) resolves, same as the private HTTP routes.
 
-### 5.1 The five LXCs
+### 5.1 The four LXCs
 
 | LXC | vmid | IP | Hostname (`private-dns`) | Engine |
 |-----|------|----|--------------------------|-------|
 | `postgresql` | 121 | `10.10.20.10` | `postgres.internal.cristianpuenguenan.online` | PostgreSQL 17 — `homelab` and `sonarqube` databases |
 | `mongodb` | 122 | `10.10.20.20` | `mongodb.internal.cristianpuenguenan.online` | MongoDB 8.0 |
-| `qdrant` | 123 | `10.10.20.30` | `qdrant.internal.cristianpuenguenan.online` | Qdrant v1.x (REST 6333, gRPC 6334) |
 | `redis` | 124 | `10.10.20.40` | `redis.internal.cristianpuenguenan.online` | Redis 8 (port 6379) |
 | `mysql` | 125 | `10.10.20.50` | `mysql.internal.cristianpuenguenan.online` | MariaDB 11 (port 3306) |
 
@@ -409,7 +392,6 @@ A single multi-database PostgreSQL (`homelab` + `sonarqube`) replaces the two se
 | Consumer | Endpoint |
 |------------|----------|
 | SonarQube | `jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube` (`SONAR_JDBC_URL`, credentials via ExternalSecret) |
-| OpenMemory | `qdrant.internal.cristianpuenguenan.online:6333` (`QDRANT_HOST`/`QDRANT_PORT`) |
 | Flow API | PostgreSQL/MongoDB/Redis URLs in 1Password (item `apps/flow`), as plain values |
 
 Backups and operational tasks on the databases are documented in `docs/OPERATIONS.md` §3.
@@ -465,10 +447,10 @@ Tailscale (devices outside the physical LAN, and the CI runner)
       to avoid forcing all of the operator's LAN traffic through the tunnel)
         ├── 192.168.80.240 (envoy-main)
         ├── 192.168.80.253 (private-dns, via Tailscale Split DNS)
-        └── 10.10.20.0/24 (data VNet: the five database LXCs)
+        └── 10.10.20.0/24 (data VNet: the four database LXCs)
 ```
 
-Which hostname resolves to which Gateway is decided, for public traffic, by the Cloudflare tunnel configuration (Zero Trust → Public Hostnames, managed outside Git); for LAN/Tailscale, `private-dns` (CoreDNS, `platform/networking/private-dns/`) resolves `internal.cristianpuenguenan.online` to the corresponding fixed IP, and the data LXC hostnames (§5) to their LAN IPs — see `docs/OPERATIONS.md` to configure Tailscale Split DNS.
+Which hostname resolves to which Gateway is decided, for public traffic, by the Cloudflare tunnel configuration (Zero Trust → Public Hostnames, managed outside Git); for LAN/Tailscale, `private-dns` (CoreDNS, `platform/networking/private-dns/`) resolves `internal.cristianpuenguenan.online` to the corresponding fixed IP, and the data LXC hostnames (§5) to their data-VNet IPs (`10.10.20.x`) — see `docs/OPERATIONS.md` to configure Tailscale Split DNS.
 
 ### Exposed ports
 
@@ -516,10 +498,9 @@ platform/argocd/repo-credentials.sops.yaml          -> GitHub PAT for ArgoCD
 platform/networking/cert-manager/cloudflare-api-token.sops.yaml -> Cloudflare API token (DNS-01)
 platform/networking/cloudflared/token.sops.yaml     -> Cloudflare tunnel token
 platform/observability/secrets/grafana-admin.sops.yaml -> Grafana admin
-platform/devtools/openmemory/secrets.sops.yaml       -> OPENAI_API_KEY, QDRANT_API_KEY, ghcr-pull-secret
 workloads/flow/secrets.sops.yaml                     -> database-url, mongodb-url, redis-url
 workloads/sonarqube/secrets.sops.yaml                -> DB credentials, monitoring passcode
-ansible/data-services.env (dotenv, not a CRD)        -> Postgres/Mongo/Redis/Qdrant credentials, CI only
+ansible/data-services.env (dotenv, not a CRD)        -> Postgres/Mongo/Redis credentials, CI only
 ```
 
 ---
@@ -542,8 +523,6 @@ root-app (gitops/root-app.yaml)
         │     ├── Wave 5: prometheus, cloudflared, headlamp(-config), hubble-config
         │     ├── Wave 6: grafana-config, service-monitors
         │     ├── Wave 7: hubble-dashboards
-        │     ├── Wave 8: openmemory
-        │     └── Wave 9: openmemory-ui
         └── workloads/
               ├── Wave 8: sonarqube, sonarqube-config, sonarqube-mcp
               └── Wave 9: flow, portfolio
@@ -560,7 +539,6 @@ cert-manager (letsencrypt-prod-cloudflare-dns01) ──► wildcard-internal-onl
 1Password (Homelab vault) ──► ExternalSecrets sync ──► all secrets
 
 postgresql LXC (external, §5) ──► SonarQube (sonarqube database), Flow API (homelab database)
-qdrant LXC (external, §5) ──────► OpenMemory
 mongodb / redis LXCs (external) ─► Flow API (URLs from 1Password, item apps/flow)
 
 private-dns ──► the LXCs' *.internal hostnames resolve for cluster consumers

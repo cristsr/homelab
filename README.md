@@ -14,8 +14,8 @@ This repository contains the complete configuration to spin up a single-node Kub
 - **Secrets**: 1Password as the secrets backend, synced with Kubernetes via External Secrets Operator.
 - **Storage**: OpenEBS ZFS LocalPV as local storage (see ADR-013 and ADR-014).
 - **Monitoring**: Prometheus, Grafana and Headlamp.
-- **Databases**: PostgreSQL, MongoDB, Redis and Qdrant in Proxmox LXC, outside the cluster (see ADR-016).
-- **Tools**: SonarQube, OpenMemory.
+- **Databases**: PostgreSQL, MongoDB and Redis in Proxmox LXC, outside the cluster (see ADR-016).
+- **Tools**: SonarQube.
 - **External access**: Cloudflare Tunnel to expose services without opening ports.
 
 The VM is created with **Terraform** (provider `bpg/proxmox` + `siderolabs/talos`) in two stages: `terraform/infra` (VM, Talos, disks) and `terraform/cluster` (namespaces, Cilium, ArgoCD, initial secrets). **Ansible** is used only for preflight validations and to provision the data engines on their LXC — Talos has no SSH or shell, so it no longer provisions the node's operating system.
@@ -38,7 +38,7 @@ The VM is created with **Terraform** (provider `bpg/proxmox` + `siderolabs/talos
 | Ingress TLS | cert-manager + Let's Encrypt + Cloudflare DNS-01 | - |
 | WAN Tunnel | Cloudflare Tunnel (cloudflared) | - |
 | Runtime security | Tetragon | - |
-| Databases | PostgreSQL 17, MongoDB 8.0, Qdrant, Redis 8 (Proxmox LXC) | - |
+| Databases | PostgreSQL 17, MongoDB 8.0, Redis 8 (Proxmox LXC) | - |
 
 ---
 
@@ -49,7 +49,7 @@ homelab/
 ├── terraform/
 │   ├── infra/                   # Talos VM + data LXC on Proxmox: disk, network, Talos bootstrap
 │   │   ├── proxmox.tf           # VM, disks (installation + dedicated to ZFS), Talos ISO
-│   │   ├── lxc.tf               # Four data LXC: PostgreSQL, MongoDB, Qdrant, Redis
+│   │   ├── lxc.tf               # Data LXCs: PostgreSQL, MongoDB, Redis, MySQL
 │   │   ├── talos.tf             # machine config, bootstrap, generated kubeconfig/talosconfig
 │   │   └── generated/           # kubeconfig/talosconfig (gitignored)
 │   └── cluster/                 # Kubernetes bootstrap on the already-running cluster

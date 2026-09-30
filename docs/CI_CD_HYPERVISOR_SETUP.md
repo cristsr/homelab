@@ -122,7 +122,7 @@ Steps:
 4. Also upload the credentials that `ansible/data-services.yaml` requires
    (same names as in `secrets/homelab.env`): `POSTGRESQL_APP_USERNAME`,
    `POSTGRESQL_APP_PASSWORD`, `MONGODB_APP_PASSWORD`, `REDIS_PASSWORD`,
-   `QDRANT_API_KEY`, `SONARQUBE_DB_USERNAME`, `SONARQUBE_DB_PASSWORD`.
+   `SONARQUBE_DB_USERNAME`, `SONARQUBE_DB_PASSWORD`.
 
 ## 6. First `terraform apply` against the old state
 

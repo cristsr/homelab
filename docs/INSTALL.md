@@ -259,7 +259,6 @@ kubectl get pods -A
 | `https://headlamp.cristianpuenguenan.online` | Headlamp | Service token |
 | `https://hubble.cristianpuenguenan.online` | Hubble | No auth |
 | `https://sonarqube.cristianpuenguenan.online` | SonarQube | admin / (configured in secrets/homelab.env, see §7) |
-| `https://openmemory.cristianpuenguenan.online` | OpenMemory | No auth |
 
 Token for Headlamp:
 

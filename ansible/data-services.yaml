@@ -9,7 +9,6 @@
     postgresql_app_password: "{{ lookup('env', 'POSTGRESQL_APP_PASSWORD') }}"
     mongodb_app_password: "{{ lookup('env', 'MONGODB_APP_PASSWORD') }}"
     redis_password: "{{ lookup('env', 'REDIS_PASSWORD') }}"
-    qdrant_api_key: "{{ lookup('env', 'QDRANT_API_KEY') }}"
     sonarqube_db_username: "{{ lookup('env', 'SONARQUBE_DB_USERNAME') }}"
     sonarqube_db_password: "{{ lookup('env', 'SONARQUBE_DB_PASSWORD') }}"
     mysql_app_password: "{{ lookup('env', 'MYSQL_APP_PASSWORD') }}"
@@ -34,7 +33,6 @@
         - postgresql_app_password
         - mongodb_app_password
         - redis_password
-        - qdrant_api_key
         - sonarqube_db_username
         - sonarqube_db_password
         - mysql_app_password

@@ -14,10 +14,8 @@ data:
             192.168.80.240 grafana.internal.cristianpuenguenan.online
             192.168.80.240 headlamp.internal.cristianpuenguenan.online
             192.168.80.240 hubble.internal.cristianpuenguenan.online
-            192.168.80.240 openmemory.internal.cristianpuenguenan.online
             192.168.80.240 sonarqube.internal.cristianpuenguenan.online
             192.168.80.240 mcp.internal.cristianpuenguenan.online
-            192.168.80.240 openmemory-api.internal.cristianpuenguenan.online
             192.168.80.240 hindsight-api.internal.cristianpuenguenan.online
             192.168.80.240 hindsight.internal.cristianpuenguenan.online
             192.168.80.240 sonarr.internal.cristianpuenguenan.online
@@ -36,7 +34,6 @@ data:
             192.168.80.240 forgejo.internal.cristianpuenguenan.online
             10.10.20.10 postgres.internal.cristianpuenguenan.online
             10.10.20.20 mongodb.internal.cristianpuenguenan.online
-            10.10.20.30 qdrant.internal.cristianpuenguenan.online
             10.10.20.40 redis.internal.cristianpuenguenan.online
             10.10.20.50 mysql.internal.cristianpuenguenan.online
             fallthrough
