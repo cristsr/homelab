@@ -15,7 +15,7 @@ spec:
     path: platform/devtools/hindsight
   destination:
     server: https://kubernetes.default.svc
-    namespace: devtools
+    namespace: hindsight
   syncPolicy:
     automated:
       prune: true

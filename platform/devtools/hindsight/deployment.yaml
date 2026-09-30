@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: hindsight
-  namespace: devtools
+  namespace: hindsight
   annotations:
     reloader.stakater.com/auto: "true"
 spec:
@@ -77,7 +77,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: hindsight
-  namespace: devtools
+  namespace: hindsight
 spec:
   selector:
     app: hindsight

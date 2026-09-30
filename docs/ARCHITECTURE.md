@@ -181,13 +181,14 @@ Created by `terraform/cluster/namespaces.tf` (`kubernetes_namespace_v1.namespace
 |-----------|-----------|
 | `argocd` | Argo CD |
 | `apps` | Flow API, Portfolio |
-| `devtools` | OpenMemory, Hindsight |
+| `devtools` | OpenMemory |
 | `openebs` | OpenEBS ZFS LocalPV |
 | `networking` | Envoy Gateway config, cloudflared, cert-manager, private-dns |
 | `observability` | Prometheus, Grafana, Alertmanager, Headlamp |
 | `secret-management` | 1Password ClusterSecretStore, External Secrets, Reloader |
 | `tetragon` | Tetragon |
 | `sonarqube` | SonarQube, MCP server |
+| `hindsight` | Hindsight (agent memory API + MCP) |
 
 ---
 
@@ -230,7 +231,7 @@ The MCP servers are plain `HTTPRoute`s on `main` (`sectionName: https`), each wi
 | Subdomain | Backend | Namespace |
 |-----------|---------|-----------|
 | `openmemory-api.internal.cristianpuenguenan.online` | openmemory:8765 (MCP server) | devtools |
-| `hindsight.internal.cristianpuenguenan.online` | hindsight:8888 (API + MCP, API key required) | devtools |
+| `hindsight.internal.cristianpuenguenan.online` | hindsight:8888 (API + MCP, API key required) | hindsight |
 | `mcp.internal.cristianpuenguenan.online` | mcp-sonarqube:3000 (`/sonarqube`) | sonarqube |
 
 #### TLS
@@ -354,7 +355,7 @@ Secrets:  openmemory-secrets (OPENAI_API_KEY) via ExternalSecret
 
 ### 4.2b Hindsight (agent memory, replaces OpenMemory)
 
-**Namespace**: `devtools` — **Image**: `ghcr.io/vectorize-io/hindsight-api:<version>-slim`
+**Namespace**: `hindsight` — **Image**: `ghcr.io/vectorize-io/hindsight-api:<version>-slim`
 
 Long-term memory for agents and Claude Code (retain / recall / reflect) with a built-in MCP endpoint (`/mcp/{bank_id}/`). Memories, entities and vectors live in one PostgreSQL database with pgvector; the LLM and the embeddings go through OpenRouter, so the pod runs no local models.
 
