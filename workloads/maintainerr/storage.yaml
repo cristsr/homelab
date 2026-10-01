@@ -1,0 +1,15 @@
+# The retaining class, like every other application configuration claim in this
+# repo: a claim recreated by a manifest change must not take the app's settings
+# with it. Unlike the media-stack claims, this one carries Maintainerr's whole
+# state, so losing it would mean reconfiguring every integration from scratch.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: maintainerr-data
+  namespace: media
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: openebs-zfs-retain
+  resources:
+    requests:
+      storage: 1Gi
