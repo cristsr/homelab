@@ -29,6 +29,9 @@ alertmanager:
 
 grafana:
   enabled: true
+  # The chart ships all or none of its dashboards. We keep the few we use as
+  # our own ConfigMaps in platform/observability/grafana-dashboards.
+  defaultDashboardsEnabled: false
   admin:
     existingSecret: grafana-admin-secret
     userKey: GF_SECURITY_ADMIN_USER
@@ -47,14 +50,10 @@ grafana:
       label: grafana_dashboard
       labelValue: "1"
       searchNamespace: ALL
-      # One folder per ConfigMap via the grafana_folder annotation. The chart's
-      # bundled dashboards all share the annotation below; it can't be set per
-      # dashboard.
+      # One folder per ConfigMap via its grafana_folder annotation.
       folderAnnotation: grafana_folder
       provider:
         foldersFromFilesStructure: true
-      annotations:
-        grafana_folder: Cluster
     datasources:
       enabled: true
       searchNamespace: ALL
@@ -94,14 +93,6 @@ kubeDns:
 
 kubernetesServiceMonitors:
   enabled: true
-
-# AIX and macOS dashboards are noise on a Linux-only homelab.
-nodeExporter:
-  operatingSystems:
-    aix:
-      enabled: false
-    darwin:
-      enabled: false
 
 prometheus-node-exporter:
   enabled: true
