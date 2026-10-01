@@ -47,6 +47,14 @@ grafana:
       label: grafana_dashboard
       labelValue: "1"
       searchNamespace: ALL
+      # One folder per ConfigMap via the grafana_folder annotation. The chart's
+      # bundled dashboards all share the annotation below; it can't be set per
+      # dashboard.
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+      annotations:
+        grafana_folder: Cluster
     datasources:
       enabled: true
       searchNamespace: ALL
@@ -65,8 +73,9 @@ kubeApiServer:
 kubelet:
   enabled: true
 
+# Talos binds these to localhost, so the targets are always down.
 kubeControllerManager:
-  enabled: true
+  enabled: false
 
 coreDns:
   enabled: true
@@ -75,7 +84,7 @@ kubeEtcd:
   enabled: false
 
 kubeScheduler:
-  enabled: true
+  enabled: false
 
 kubeProxy:
   enabled: false
@@ -85,6 +94,14 @@ kubeDns:
 
 kubernetesServiceMonitors:
   enabled: true
+
+# AIX and macOS dashboards are noise on a Linux-only homelab.
+nodeExporter:
+  operatingSystems:
+    aix:
+      enabled: false
+    darwin:
+      enabled: false
 
 prometheus-node-exporter:
   enabled: true
