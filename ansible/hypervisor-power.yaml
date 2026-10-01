@@ -1,5 +1,5 @@
 # Exposes the Proxmox host's RAPL energy counters (node_rapl_*_joules_total)
-# to Prometheus. Run by hand, like hypervisor-network.yaml.
+# to Prometheus. Run by the Deploy workflow (idempotent), or by hand.
 ---
 - name: Expose host power metrics to Prometheus
   hosts: proxmox
