@@ -1,0 +1,71 @@
+# Resource accounting for every workload, from cAdvisor + kube-state-metrics
+# (no per-app exporter needed). Feeds the "Homelab / Consumo por workload"
+# dashboard in platform/observability/grafana-dashboards.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: workload-resources
+  namespace: observability
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: workload-resources.rules
+      rules:
+        - record: homelab:namespace_cpu_cores
+          expr: sum by (namespace) (rate(container_cpu_usage_seconds_total{container!="", image!=""}[5m]))
+        # ponytail: splits the host's watts by CPU share only; idle baseline is
+        # spread proportionally too. Add a memory weight if that skews reports.
+        - record: homelab:namespace_power_watts
+          expr: |
+            homelab:hypervisor_power_watts
+              * homelab:namespace_cpu_cores / scalar(sum(homelab:namespace_cpu_cores))
+        # Usage / request per container; < 1 means reserved but unused.
+        - record: homelab:container_cpu_request_usage_ratio
+          expr: |
+            sum by (namespace, pod, container) (rate(container_cpu_usage_seconds_total{container!="", image!=""}[5m]))
+              / sum by (namespace, pod, container) (kube_pod_container_resource_requests{resource="cpu"})
+        - record: homelab:container_memory_request_usage_ratio
+          expr: |
+            sum by (namespace, pod, container) (container_memory_working_set_bytes{container!="", image!=""})
+              / sum by (namespace, pod, container) (kube_pod_container_resource_requests{resource="memory"})
+        - record: homelab:container_memory_limit_usage_ratio
+          expr: |
+            sum by (namespace, pod, container) (container_memory_working_set_bytes{container!="", image!=""})
+              / sum by (namespace, pod, container) (kube_pod_container_resource_limits{resource="memory"})
+    - name: workload-resources.alerts
+      rules:
+        - alert: ContainerMemoryNearLimit
+          expr: homelab:container_memory_limit_usage_ratio > 0.9
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) uses {{ $value | humanizePercentage }} of its memory limit"
+        - alert: ContainerOOMKilled
+          expr: |
+            increase(kube_pod_container_status_restarts_total[15m]) > 0
+              and on (namespace, pod, container)
+            kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) was OOMKilled: raise its memory limit"
+        - alert: PersistentVolumeFillingUp
+          expr: |
+            kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is {{ $value | humanizePercentage }} full"
+        - alert: ContainerOverProvisioned
+          expr: |
+            avg_over_time(homelab:container_memory_request_usage_ratio[7d]) < 0.2
+              and
+            avg_over_time(homelab:container_cpu_request_usage_ratio[7d]) < 0.1
+          for: 6h
+          labels:
+            severity: info
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) averages <20% of its memory and <10% of its CPU requests over 7d: lower them"
