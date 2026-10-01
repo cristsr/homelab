@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maintainerr
+  namespace: media
+spec:
+  replicas: 1
+  # RollingUpdate would create the new pod before the old one releases its
+  # ReadWriteOnce volumes, leaving it stuck FailedMount. Recreate tears the
+  # old pod down first.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: maintainerr
+  template:
+    metadata:
+      labels:
+        app: maintainerr
+    spec:
+      # linuxserver.io images run as uid/gid 911 ("abc"), and fsGroup re-groups
+      # the whole shared media-library volume on every pod start, so 911 is the
+      # group every other app mounting the library depends on; any other value
+      # strips their write access.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 911
+        fsGroup: 911
+      containers:
+        - name: maintainerr
+          image: ghcr.io/maintainerr/maintainerr:3.29.0
+          env:
+            - name: TELEMETRY
+              value: "off"
+          ports:
+            - containerPort: 6246
+          livenessProbe:
+            httpGet:
+              path: /api/health/live
+              port: 6246
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /api/health/ready
+              port: 6246
+            periodSeconds: 15
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /opt/data
+            # Same mount path as the rest of the stack, and the one Radarr and
+            # Sonarr report as their root folder: leftover-folder cleanup only
+            # matches when the library sits at the identical path.
+            - name: library
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: maintainerr-data
+        - name: library
+          persistentVolumeClaim:
+            claimName: media-library
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: maintainerr
+  namespace: media
+spec:
+  selector:
+    app: maintainerr
+  ports:
+    - port: 6246
+      targetPort: 6246
+  type: ClusterIP
