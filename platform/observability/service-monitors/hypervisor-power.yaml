@@ -3,48 +3,24 @@
 # RAPL only sees CPU package + DRAM, so HYPERVISOR_BASE_WATTS below is a
 # calibration knob for everything else (disks, fans, PSU losses): set it to
 # (wall meter reading - homelab:hypervisor_power_watts) once you have a reading.
-apiVersion: v1
-kind: Service
+# A ScrapeConfig, not a Service + Endpoints: ArgoCD excludes Endpoints by
+# default, so a hand-written one is never applied and the target never exists.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
 metadata:
   name: hypervisor-node-exporter
   namespace: observability
   labels:
-    app: hypervisor-node-exporter
+    release: prometheus
 spec:
-  clusterIP: None
-  ports:
-    - name: metrics
-      port: 9100
----
-apiVersion: v1
-kind: Endpoints
-metadata:
-  name: hypervisor-node-exporter
-  namespace: observability
-  labels:
-    app: hypervisor-node-exporter
-subsets:
-  - addresses:
-      - ip: 192.168.80.20
-    ports:
-      - name: metrics
-        port: 9100
----
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: hypervisor-node-exporter
-  namespace: observability
-spec:
-  selector:
-    matchLabels:
-      app: hypervisor-node-exporter
-  endpoints:
-    - port: metrics
-      interval: 30s
-      relabelings:
-        - targetLabel: instance
-          replacement: proxmox-host
+  scrapeInterval: 30s
+  staticConfigs:
+    - targets:
+        - 192.168.80.20:9100
+  relabelings:
+    - action: replace
+      targetLabel: instance
+      replacement: proxmox-host
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
