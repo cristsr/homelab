@@ -18,7 +18,7 @@ spec:
         # spread proportionally too. Add a memory weight if that skews reports.
         - record: homelab:namespace_power_watts
           expr: |
-            homelab:hypervisor_power_watts
+            scalar(homelab:hypervisor_power_watts)
               * homelab:namespace_cpu_cores / scalar(sum(homelab:namespace_cpu_cores))
         # Usage / request per container; < 1 means reserved but unused.
         - record: homelab:container_cpu_request_usage_ratio
