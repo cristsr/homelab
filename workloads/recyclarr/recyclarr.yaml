@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recyclarr-config
+  namespace: media
+data:
+  recyclarr.yml: |
+    # TRaSH Guides profiles, taken from the official recyclarr config-templates.
+    # Tuned for the main viewing PC (RTX 3080, 1440p): it decodes HEVC in hardware,
+    # so x265 is allowed (smaller files, direct play, no CPU transcode on the
+    # GPU-less node). 1080p only: a 1440p screen gains little from 2160p and a
+    # 4K/Remux library would not fit the ~900Gi volume. preferred_ratio 0.5 puts
+    # the size target halfway between the guide's min and max.
+    # reset_unmatched_scores keeps the profile scores identical to the guide.
+    radarr:
+      hd-bluray-web:
+        base_url: http://radarr.media.svc:7878
+        api_key: !env_var RADARR_API_KEY
+        quality_definition:
+          type: movie
+          preferred_ratio: 0.5
+        quality_profiles:
+          - trash_id: d1d67249d3890e49bc12e275d989a7e9 # HD Bluray + WEB
+            reset_unmatched_scores:
+              enabled: true
+        custom_format_groups:
+          add:
+            - trash_id: f8bf8eab4617f12dfdbd16303d8da245 # [Optional] Golden Rule HD
+              exclude:
+                - dc98083864ea246d05a42df0d05f81cc # x265 (HD)
+              select:
+                - 839bea857ed2c0a8e084f3cbdbd65ecb # x265 (no HDR/DV)
+            - trash_id: a3ac6af01d78e4f21fcb75f601ac96df # [Unwanted] Unwanted Formats
+    sonarr:
+      web-1080p:
+        base_url: http://sonarr.media.svc:8989
+        api_key: !env_var SONARR_API_KEY
+        quality_definition:
+          type: series
+          preferred_ratio: 0.5
+        quality_profiles:
+          - trash_id: 72dae194fc92bf828f32cde7744e51a1 # WEB-1080p
+            reset_unmatched_scores:
+              enabled: true
+        custom_format_groups:
+          add:
+            - trash_id: 158188097a58d7687dee647e04af0da3 # [Optional] Golden Rule HD
+              exclude:
+                - 47435ece6b99a0b477caf360e79ba0bb # x265 (HD)
+              select:
+                - 9b64dff695c2115facf1b6ea59c9bd07 # x265 (no HDR/DV)
+            - trash_id: 74aff4168620ed49dcc67e92b2c2a5b4 # [Optional] Language Profiles
+            - trash_id: 85fae4a2294965b75710ef2989c850eb # [Streaming Services] HD/UHD boost
+            - trash_id: 59c3af66780d08332fdc64e68297098f # [Unwanted] Unwanted Formats
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: recyclarr
+  namespace: media
+spec:
+  # TRaSH updates its scores a few times a week; daily keeps Radarr/Sonarr current.
+  schedule: "0 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          containers:
+            - name: recyclarr
+              image: ghcr.io/recyclarr/recyclarr:8.7.2
+              args: ["sync"]
+              envFrom:
+                - secretRef:
+                    name: recyclarr-api-keys
+              env:
+                - name: RECYCLARR_APP_DATA
+                  value: /config
+              volumeMounts:
+                # Recyclarr writes its guide cache under /config, so that dir is
+                # writable scratch and only the config file comes from the ConfigMap.
+                - name: scratch
+                  mountPath: /config
+                - name: config
+                  mountPath: /config/recyclarr.yml
+                  subPath: recyclarr.yml
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 512Mi
+          volumes:
+            - name: scratch
+              emptyDir: {}
+            - name: config
+              configMap:
+                name: recyclarr-config
