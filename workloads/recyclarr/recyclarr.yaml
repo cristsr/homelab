@@ -83,16 +83,14 @@ spec:
               env:
                 - name: RECYCLARR_CONFIG_DIR
                   value: /config
-                - name: RECYCLARR_DATA_DIR
-                  value: /data
               volumeMounts:
-                - name: config
-                  mountPath: /config
-                  readOnly: true
-                # Recyclarr 8 keeps its guide cache apart from the config, so only
-                # this scratch dir needs to be writable.
+                # Recyclarr 8 creates state/ and its guide cache under the config dir,
+                # so that dir is writable scratch and only the file comes from the ConfigMap.
                 - name: scratch
-                  mountPath: /data
+                  mountPath: /config
+                - name: config
+                  mountPath: /config/recyclarr.yml
+                  subPath: recyclarr.yml
               resources:
                 requests:
                   cpu: 50m
