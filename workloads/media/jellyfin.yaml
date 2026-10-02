@@ -36,6 +36,12 @@ spec:
             # a hardlink, never a copy across volumes.
             - name: library
               mountPath: /data
+            # Transcodes can grow to several GB per session; keep them on the
+            # media disk instead of the small config volume, where a full disk
+            # breaks Jellyfin's SQLite database and with it every login.
+            - name: library
+              mountPath: /config/cache/transcodes
+              subPath: .jellyfin-transcodes
           resources:
             requests:
               cpu: 100m
