@@ -74,6 +74,20 @@ spec:
     requests:
       storage: 5Gi
 ---
+# Scratch space, not configuration: it is rebuilt on demand, so it uses the
+# default (deleting) class instead of the retaining one.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-transcodes
+  namespace: media
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: openebs-zfs
+  resources:
+    requests:
+      storage: 20Gi
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
