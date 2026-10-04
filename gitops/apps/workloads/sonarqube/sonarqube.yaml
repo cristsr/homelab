@@ -23,6 +23,12 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: sonarqube
+  ignoreDifferences:
+    # The chart stamps its version on this label, and a bound claim refuses
+    # the replace that would update it. Nothing reads the label.
+    - kind: PersistentVolumeClaim
+      jqPathExpressions:
+        - '.metadata.labels.chart'
   syncPolicy:
     automated:
       prune: true
@@ -31,3 +37,6 @@ spec:
       - CreateNamespace=true
       - ServerSideApply=true
       - Replace=true
+      # Replace turns every object of a sync into a full replace, and a bound
+      # claim refuses it even when it is in sync. Apply only what drifted.
+      - ApplyOutOfSyncOnly=true

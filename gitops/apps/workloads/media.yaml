@@ -26,11 +26,14 @@ spec:
         - '.spec.rules[].backendRefs[].kind'
         - '.spec.rules[].backendRefs[].weight'
         - '.spec.rules[].matches'
-    # The manifests render PVCs without volumeName; once bound it's
-    # immutable, so Replace=true fails on them.
+    # The config claims were created by hand, so they never got the tracking
+    # annotation. Adding it needs a replace, which a bound claim refuses.
+    # Same for volumeName: the manifests omit it and a bound claim is immutable.
     - kind: PersistentVolumeClaim
       jsonPointers:
         - /spec/volumeName
+      jqPathExpressions:
+        - '.metadata.annotations["argocd.argoproj.io/tracking-id"]'
   syncPolicy:
     automated:
       prune: true
@@ -40,3 +43,6 @@ spec:
       - ServerSideApply=true
       - Replace=true
       - RespectIgnoreDifferences=true
+      # Replace turns every object of a sync into a full replace, and a bound
+      # claim refuses it even when it is in sync. Apply only what drifted.
+      - ApplyOutOfSyncOnly=true
