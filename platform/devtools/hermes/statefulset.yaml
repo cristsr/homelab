@@ -33,8 +33,17 @@ spec:
       containers:
         - name: hermes
           image: nousresearch/hermes-agent:latest@sha256:d4da4a40cd7a28aba983775d9fd31d94cbf153eeb0cb9e844d6d0f612b7c24db
+          # The image defaults to the interactive chat, which exits at once
+          # without a TTY; the Gateway API is the foreground server mode.
+          args: ["gateway", "run"]
           ports:
             - containerPort: 8642
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8642
+            periodSeconds: 10
+            failureThreshold: 6
           env:
             - name: FORGEJO_TOKEN
               valueFrom:
