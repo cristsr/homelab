@@ -1002,3 +1002,39 @@ Vikunja (spec-0012) and Kaneo (spec-0013) were deployed one after the other for 
 - Vikunja's tasks and attachments are gone for good.
 - The pool space of the deleted volume is reclaimed only if removing its `ZFSVolume` destroys the dataset; that was not verified.
 - Kaneo is the only task manager left in the cluster.
+
+## ADR-029: Syncs apply only what drifted, and two claims ignore metadata ArgoCD cannot update
+
+**Status**: Accepted
+**Date**: 2026-10-04
+
+### Context
+
+`Replace=true` is set on every Application (#56) so that no stray field can block a rollout. A `replace` sends the manifest as written, without `spec.volumeName`, and Kubernetes refuses it for any claim that is already bound (`spec is immutable after creation`).
+
+Two Applications had been failing for that reason:
+
+- `media`: eleven config and library claims were created by hand on 2026-09-17 and 2026-09-18, so they never got the `argocd.argoproj.io/tracking-id` annotation. ArgoCD wanted to add it, did it with a replace, and failed. Its last good sync was 2026-09-18.
+- `sonarqube`: the chart bump of 2026-09-30 changed the `chart` label of every object of the release. Everything accepted the replace except the bound claim.
+
+By default a sync applies every object of the Application, so one refused claim fails the whole sync, and ArgoCD does not retry the same revision. Each merge made a new failed attempt.
+
+### Decision
+
+- Add `ApplyOutOfSyncOnly=true` to `media` and `sonarqube`: a sync applies only the objects that drifted, so a claim that is in sync is never replaced.
+- In `media`, ignore `metadata.annotations["argocd.argoproj.io/tracking-id"]` on `PersistentVolumeClaim`. The claims that lack it count as in sync and are no longer part of any sync.
+- In `sonarqube`, ignore `metadata.labels.chart` on `PersistentVolumeClaim`, which changes on every chart bump and which nothing reads.
+
+### Alternatives considered
+
+| Alternative | Why not |
+|---|---|
+| `argocd.argoproj.io/sync-options: Replace=false` on each claim | It has no effect: ArgoCD replaces when the Application or the resource asks for it, so the annotation can only turn replace on |
+| Annotate the eleven claims by hand | Not GitOps, and it does nothing for `sonarqube`, whose claim drifts again on the next chart bump |
+| Remove `Replace=true` from both Applications | Brings back the stuck `Recreate` rollout that #56 fixed |
+
+### Consequences
+
+- The `chart` label of the `sonarqube` claim stays on its old value; nothing depends on it.
+- The `media` claims stay without the tracking annotation, so ArgoCD never prunes them, which is the safe side for claims that hold data.
+- Other Applications with a bound claim and `Replace=true` fail the same way as soon as anything else in them drifts. They were not changed here.
