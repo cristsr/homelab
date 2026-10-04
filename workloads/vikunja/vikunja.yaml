@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vikunja
+  namespace: vikunja
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  # RollingUpdate would create the new pod before the old one releases its
+  # ReadWriteOnce volume, leaving it stuck FailedMount. Recreate tears the
+  # old pod down first.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vikunja
+  template:
+    metadata:
+      labels:
+        app: vikunja
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: vikunja
+          image: vikunja/vikunja:2.7.0
+          ports:
+            - containerPort: 3456
+          env:
+            - name: VIKUNJA_SERVICE_PUBLICURL
+              value: https://vikunja.internal.cristianpuenguenan.online
+            # The owner's account is created with `vikunja user create`, so
+            # sign-up stays closed from the first start.
+            - name: VIKUNJA_SERVICE_ENABLEREGISTRATION
+              value: "false"
+            - name: VIKUNJA_SERVICE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-app-secret
+                  key: jwt-secret
+            - name: VIKUNJA_DATABASE_TYPE
+              value: postgres
+            - name: VIKUNJA_DATABASE_HOST
+              value: "postgres.internal.cristianpuenguenan.online:5432"
+            - name: VIKUNJA_DATABASE_DATABASE
+              value: vikunja
+            - name: VIKUNJA_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-app-secret
+                  key: db-username
+            - name: VIKUNJA_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-app-secret
+                  key: db-password
+            - name: VIKUNJA_FILES_BASEPATH
+              value: /app/vikunja/files
+          volumeMounts:
+            - name: files
+              mountPath: /app/vikunja/files
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: files
+          persistentVolumeClaim:
+            claimName: vikunja-files
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vikunja-files
+  namespace: vikunja
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: openebs-zfs-retain
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vikunja
+  namespace: vikunja
+spec:
+  selector:
+    app: vikunja
+  ports:
+    - port: 80
+      targetPort: 3456
+  type: ClusterIP
