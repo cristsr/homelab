@@ -41,8 +41,10 @@ N8N_DB_USER="$(get N8N_DB_USERNAME)"
 N8N_DB_PASS="$(get N8N_DB_PASSWORD)"
 HINDSIGHT_DB_USER="$(get HINDSIGHT_DB_USERNAME)"
 HINDSIGHT_DB_PASS="$(get HINDSIGHT_DB_PASSWORD)"
+VIKUNJA_DB_USER="$(get VIKUNJA_DB_USERNAME)"
+VIKUNJA_DB_PASS="$(get VIKUNJA_DB_PASSWORD)"
 
-if [ -n "$PG_USER$PG_PASS$MONGO_PASS$REDIS_PASS$SQ_DB_USER$SQ_DB_PASS$MYSQL_PASS$KIMAI_DB_USER$KIMAI_DB_PASS$FIREFLY_DB_USER$FIREFLY_DB_PASS$N8N_DB_USER$N8N_DB_PASS$HINDSIGHT_DB_USER$HINDSIGHT_DB_PASS" ]; then
+if [ -n "$PG_USER$PG_PASS$MONGO_PASS$REDIS_PASS$SQ_DB_USER$SQ_DB_PASS$MYSQL_PASS$KIMAI_DB_USER$KIMAI_DB_PASS$FIREFLY_DB_USER$FIREFLY_DB_PASS$N8N_DB_USER$N8N_DB_PASS$HINDSIGHT_DB_USER$HINDSIGHT_DB_PASS$VIKUNJA_DB_USER$VIKUNJA_DB_PASS" ]; then
   cat > ansible/data-services.env <<EOF
 POSTGRESQL_APP_USERNAME=$PG_USER
 POSTGRESQL_APP_PASSWORD=$PG_PASS
@@ -59,9 +61,11 @@ N8N_DB_USERNAME=$N8N_DB_USER
 N8N_DB_PASSWORD=$N8N_DB_PASS
 HINDSIGHT_DB_USERNAME=$HINDSIGHT_DB_USER
 HINDSIGHT_DB_PASSWORD=$HINDSIGHT_DB_PASS
+VIKUNJA_DB_USERNAME=$VIKUNJA_DB_USER
+VIKUNJA_DB_PASSWORD=$VIKUNJA_DB_PASS
 EOF
   sops encrypt -i ansible/data-services.env
-  echo "set   ansible/data-services.env (16 keys)"
+  echo "set   ansible/data-services.env (17 keys)"
 else
   echo "skip  ansible/data-services.env (nothing to load)"
 fi
@@ -91,6 +95,14 @@ set_field workloads/hindsight/secrets.sops.yaml \
   '["spec"]["secretTemplates"][0]["stringData"]["HINDSIGHT_API_TENANT_API_KEY"]' "$(get HINDSIGHT_API_KEY)"
 set_field workloads/hindsight/secrets.sops.yaml \
   '["spec"]["secretTemplates"][1]["stringData"]["HINDSIGHT_CP_ACCESS_KEY"]' "$(get HINDSIGHT_CP_ACCESS_KEY)"
+
+# --- workloads/vikunja/secrets.sops.yaml ---
+set_field workloads/vikunja/secrets.sops.yaml \
+  '["spec"]["secretTemplates"][0]["stringData"]["db-username"]' "$VIKUNJA_DB_USER"
+set_field workloads/vikunja/secrets.sops.yaml \
+  '["spec"]["secretTemplates"][0]["stringData"]["db-password"]' "$VIKUNJA_DB_PASS"
+set_field workloads/vikunja/secrets.sops.yaml \
+  '["spec"]["secretTemplates"][0]["stringData"]["jwt-secret"]' "$(get VIKUNJA_JWT_SECRET)"
 
 # --- platform/networking/cloudflared/token.sops.yaml ---
 set_field platform/networking/cloudflared/token.sops.yaml \
