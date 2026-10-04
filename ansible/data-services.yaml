@@ -20,8 +20,6 @@
     n8n_db_password: "{{ lookup('env', 'N8N_DB_PASSWORD') }}"
     hindsight_db_username: "{{ lookup('env', 'HINDSIGHT_DB_USERNAME') }}"
     hindsight_db_password: "{{ lookup('env', 'HINDSIGHT_DB_PASSWORD') }}"
-    vikunja_db_username: "{{ lookup('env', 'VIKUNJA_DB_USERNAME') }}"
-    vikunja_db_password: "{{ lookup('env', 'VIKUNJA_DB_PASSWORD') }}"
     kaneo_db_username: "{{ lookup('env', 'KANEO_DB_USERNAME') }}"
     kaneo_db_password: "{{ lookup('env', 'KANEO_DB_PASSWORD') }}"
 
@@ -48,8 +46,6 @@
         - n8n_db_password
         - hindsight_db_username
         - hindsight_db_password
-        - vikunja_db_username
-        - vikunja_db_password
         - kaneo_db_username
         - kaneo_db_password
       delegate_to: localhost
@@ -84,7 +80,7 @@
         state: "{{ 'restarted' if quadlet_unit is changed else 'started' }}"
         enabled: true
 
-    - name: Provision the sonarqube, n8n, firefly, hindsight, vikunja and kaneo databases on the shared PostgreSQL instance
+    - name: Provision the sonarqube, n8n, firefly, hindsight and kaneo databases on the shared PostgreSQL instance
       when: inventory_hostname == 'postgresql'
       no_log: true
       block:
@@ -164,23 +160,6 @@
           community.postgresql.postgresql_db:
             name: hindsight
             owner: "{{ hindsight_db_username }}"
-            login_user: "{{ postgresql_app_username }}"
-            login_password: "{{ postgresql_app_password }}"
-            login_host: localhost
-
-        - name: Create the vikunja role
-          community.postgresql.postgresql_user:
-            name: "{{ vikunja_db_username }}"
-            password: "{{ vikunja_db_password }}"
-            db: postgres
-            login_user: "{{ postgresql_app_username }}"
-            login_password: "{{ postgresql_app_password }}"
-            login_host: localhost
-
-        - name: Create the vikunja database owned by that role
-          community.postgresql.postgresql_db:
-            name: vikunja
-            owner: "{{ vikunja_db_username }}"
             login_user: "{{ postgresql_app_username }}"
             login_password: "{{ postgresql_app_password }}"
             login_host: localhost
