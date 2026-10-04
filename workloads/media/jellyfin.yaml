@@ -32,6 +32,11 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
+            # Transcode scratch files filled the 5Gi config volume (disk quota
+            # exceeded broke Jellyfin's SQLite, so nobody could log in). They
+            # are disposable, so keep them off the PVC.
+            - name: transcodes
+              mountPath: /config/cache/transcodes
             # Same mount path as the rest of the stack: an import is a move or
             # a hardlink, never a copy across volumes.
             - name: library
@@ -47,6 +52,9 @@ spec:
         - name: config
           persistentVolumeClaim:
             claimName: jellyfin-config
+        - name: transcodes
+          emptyDir:
+            sizeLimit: 10Gi
         - name: library
           persistentVolumeClaim:
             claimName: media-library
