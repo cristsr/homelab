@@ -26,6 +26,11 @@ spec:
         - '.spec.rules[].backendRefs[].kind'
         - '.spec.rules[].backendRefs[].weight'
         - '.spec.rules[].matches'
+    # The config claims were created by hand, so they never got the tracking
+    # annotation. Adding it needs a replace, which a bound claim refuses.
+    - kind: PersistentVolumeClaim
+      jqPathExpressions:
+        - '.metadata.annotations["argocd.argoproj.io/tracking-id"]'
   syncPolicy:
     automated:
       prune: true
@@ -34,3 +39,6 @@ spec:
       - CreateNamespace=true
       - ServerSideApply=true
       - Replace=true
+      # Replace turns every object of a sync into a full replace, and a bound
+      # claim refuses it even when it is in sync. Apply only what drifted.
+      - ApplyOutOfSyncOnly=true
