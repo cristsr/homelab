@@ -26,6 +26,11 @@ spec:
         - '.spec.rules[].backendRefs[].kind'
         - '.spec.rules[].backendRefs[].weight'
         - '.spec.rules[].matches'
+    # The manifests render PVCs without volumeName; once bound it's
+    # immutable, so Replace=true fails on them.
+    - kind: PersistentVolumeClaim
+      jsonPointers:
+        - /spec/volumeName
   syncPolicy:
     automated:
       prune: true
@@ -34,3 +39,4 @@ spec:
       - CreateNamespace=true
       - ServerSideApply=true
       - Replace=true
+      - RespectIgnoreDifferences=true
