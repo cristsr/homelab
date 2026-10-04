@@ -36,6 +36,12 @@ spec:
             # a hardlink, never a copy across volumes.
             - name: library
               mountPath: /data
+            # Transcodes can grow to several GB per session. Their own SSD
+            # volume keeps them off the config volume, where a full disk breaks
+            # Jellyfin's SQLite database (and every login), and off the media
+            # HDD, where the churn would fight qBittorrent for the heads.
+            - name: transcodes
+              mountPath: /config/cache/transcodes
           resources:
             requests:
               cpu: 100m
@@ -50,6 +56,9 @@ spec:
         - name: library
           persistentVolumeClaim:
             claimName: media-library
+        - name: transcodes
+          persistentVolumeClaim:
+            claimName: jellyfin-transcodes
 ---
 apiVersion: v1
 kind: Service
