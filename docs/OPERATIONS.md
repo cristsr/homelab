@@ -221,15 +221,25 @@ Databases don't run in the cluster: they live on four Proxmox LXCs (see [ADR-016
 
 ### PostgreSQL backup (LXC `postgresql`, `10.10.20.10`)
 
-One instance, one database per service (`homelab`, `sonarqube`, `n8n`, `firefly`, `hindsight`) — dump each separately. `hindsight` holds all of Hindsight's memory (the pod keeps no state), so it is the one that matters most to keep:
+One instance, one database per service (`homelab`, `sonarqube`, `n8n`, `firefly`, `hindsight`, `vikunja`) — dump each separately. `hindsight` holds all of Hindsight's memory (the pod keeps no state), so it is the one that matters most to keep:
 
 ```bash
-for db in homelab sonarqube n8n firefly hindsight; do
+for db in homelab sonarqube n8n firefly hindsight vikunja; do
   pg_dump -h postgres.internal.cristianpuenguenan.online -U <user> "$db" > "$db.sql"
 done
 ```
 
 Nothing schedules these dumps: they are manual, and only the `vzdump` below is a whole-container copy.
+
+Vikunja's attachments are not in the database: they live on the `vikunja-files` PVC in the `vikunja` namespace (`openebs-zfs-retain`, so the volume survives deleting the claim). A restore needs the `vikunja` dump and that volume.
+
+Vikunja has no public sign-up, so the owner's account is created once from inside the pod, after the first sync:
+
+```bash
+kubectl -n vikunja exec -it deploy/vikunja -- /app/vikunja/vikunja user create --username <name> --email <email>
+```
+
+It prompts for the password when `--password` is omitted.
 
 ### MongoDB backup (LXC `mongodb`, `10.10.20.20`)
 
