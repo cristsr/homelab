@@ -973,3 +973,32 @@ OpenMemory (mem0's self-hosted MCP server) is no longer documented upstream, run
 - Follow-up: once verified, remove OpenMemory, OpenMemory UI and the Qdrant LXC (Terraform, Ansible, DNS, secrets).
 
 **Update (2026-09-30): OpenMemory, OpenMemory UI and the Qdrant LXC removed.** Their Argo CD Applications, manifests, DNS records, secret-loading block and docs are gone. The Qdrant LXC (vmid 123) leaves Terraform, Ansible, DNS, the firewall (port 6333) and the secrets, so Deploy destroys it; its data was not migrated.
+
+## ADR-028: Kaneo replaces Vikunja for task management
+
+**Status**: Accepted — spec-0014
+**Date**: 2026-10-04
+
+### Context
+
+Vikunja (spec-0012) and Kaneo (spec-0013) were deployed one after the other for the same job, task management. The owner kept Kaneo, so running both has no purpose and leaves a second database, a second volume and a second secret to maintain.
+
+### Decision
+
+- Remove Vikunja: its Argo CD Application and manifests, its private DNS record, its credentials and secret-loading block, and its documentation. The root Application prunes the namespace on merge.
+- Delete its data without a copy: the `vikunja` database and role on the shared PostgreSQL LXC, and the retained volume with its `ZFSVolume`. The tasks cannot be recovered.
+- The database and the volume are deleted by hand after the merge, because the playbook has no way to drop anything and both the volume and its storage class are `Retain`.
+
+### Alternatives considered
+
+| Alternative | Why not |
+|---|---|
+| Keep both task managers | Two tools for one job, with a second database, volume and secret to look after |
+| Take a final dump before deleting | Offered to the owner, who chose to delete everything with no copy |
+| Add an Ansible task that drops the database and role | It would stay in the playbook as dead code once it had run, and the volume still needs a manual step |
+
+### Consequences
+
+- Vikunja's tasks and attachments are gone for good.
+- The pool space of the deleted volume is reclaimed only if removing its `ZFSVolume` destroys the dataset; that was not verified.
+- Kaneo is the only task manager left in the cluster.

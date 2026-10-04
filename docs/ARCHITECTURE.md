@@ -188,7 +188,6 @@ Created by `terraform/cluster/namespaces.tf` (`kubernetes_namespace_v1.namespace
 | `tetragon` | Tetragon |
 | `sonarqube` | SonarQube, MCP server |
 | `hindsight` | Hindsight (agent memory API + MCP) |
-| `vikunja` | Vikunja (task management) |
 | `kaneo` | Kaneo (task management) |
 
 ---
@@ -223,7 +222,6 @@ Administration/observability tools — reachable only via LAN/Tailscale, never v
 | `headlamp.internal.cristianpuenguenan.online` | headlamp:80 | observability |
 | `hubble.internal.cristianpuenguenan.online` | hubble-ui:80 | kube-system |
 | `sonarqube.internal.cristianpuenguenan.online` | sonarqube-sonarqube:9000 | sonarqube |
-| `vikunja.internal.cristianpuenguenan.online` | vikunja:80 | vikunja |
 | `kaneo.internal.cristianpuenguenan.online` | kaneo:80 | kaneo |
 
 #### 3.1.c MCP routes
@@ -372,28 +370,11 @@ Port:     9000
 DB:       PostgreSQL on the external LXC (§5): jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube
 ```
 
-### 4.4 Vikunja (task management)
-
-**Namespace**: `vikunja` — **Image**: `vikunja/vikunja:<version>` — **Manifests**: `workloads/vikunja/`
-
-Task manager that replaces Notion for tasks. Internal only: it is served at `vikunja.internal.cristianpuenguenan.online` through the `main` Gateway and has no route on `public`.
-
-```
-Replicas: 1 (Recreate: the volume is ReadWriteOnce)
-Port:     3456 (Service 80)
-DB:       PostgreSQL on the external LXC (§5): postgres.internal.cristianpuenguenan.online:5432/vikunja
-Files:    PVC vikunja-files, 1Gi, openebs-zfs-retain, mounted at /app/vikunja/files
-Auth:     local account, public registration disabled, no identity provider
-Secrets:  vikunja-secrets (SopsSecret): db-username, db-password, jwt-secret (the signing secret, VIKUNJA_SERVICE_SECRET)
-```
-
-The owner's account is created once with `vikunja user create` (see `docs/OPERATIONS.md` §3). Vikunja starts empty: nothing is migrated from Notion.
-
-### 4.5 Kaneo (task management)
+### 4.4 Kaneo (task management)
 
 **Namespace**: `kaneo` — **Image**: `ghcr.io/usekaneo/kaneo:<version>` — **Manifests**: `workloads/kaneo/`
 
-A second task manager, running alongside Vikunja: neither replaces the other. Internal only: it is served at `kaneo.internal.cristianpuenguenan.online` through the `main` Gateway and has no route on `public`.
+Task manager. Internal only: it is served at `kaneo.internal.cristianpuenguenan.online` through the `main` Gateway and has no route on `public`.
 
 ```
 Replicas: 1 (no volume, so the default rolling update applies)
@@ -404,7 +385,7 @@ Auth:     local account, public registration disabled (DISABLE_REGISTRATION), no
 Secrets:  kaneo-secrets (SopsSecret): db-username, db-password, auth-secret (AUTH_SECRET, the session signing secret)
 ```
 
-The owner's account is created once, at the first visit (see `docs/OPERATIONS.md` §3). Kaneo starts empty: nothing is migrated from Notion or Vikunja.
+The owner's account is created once, at the first visit (see `docs/OPERATIONS.md` §3). Kaneo starts empty: nothing is migrated from Notion.
 
 ---
 
@@ -431,7 +412,6 @@ A single multi-database PostgreSQL (`homelab` + `sonarqube`) replaces the two se
 |------------|----------|
 | SonarQube | `jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube` (`SONAR_JDBC_URL`, credentials via ExternalSecret) |
 | Flow API | PostgreSQL/MongoDB/Redis URLs in 1Password (item `apps/flow`), as plain values |
-| Vikunja | `postgres.internal.cristianpuenguenan.online:5432/vikunja` (`VIKUNJA_DATABASE_*`, credentials via `vikunja-secrets`) |
 | Kaneo | `postgres.internal.cristianpuenguenan.online:5432/kaneo` (`POSTGRES_*`, credentials via `kaneo-secrets`) |
 
 Backups and operational tasks on the databases are documented in `docs/OPERATIONS.md` §3.
@@ -540,7 +520,6 @@ platform/networking/cloudflared/token.sops.yaml     -> Cloudflare tunnel token
 platform/observability/secrets/grafana-admin.sops.yaml -> Grafana admin
 workloads/flow/secrets.sops.yaml                     -> database-url, mongodb-url, redis-url
 workloads/sonarqube/secrets.sops.yaml                -> DB credentials, monitoring passcode
-workloads/vikunja/secrets.sops.yaml                  -> DB credentials, signing secret
 workloads/kaneo/secrets.sops.yaml                    -> DB credentials, auth secret
 ansible/data-services.env (dotenv, not a CRD)        -> Postgres/Mongo/Redis credentials, CI only
 ```
@@ -600,7 +579,6 @@ Databases no longer consume cluster PVCs — they live on the Proxmox LXCs (§5)
 | Grafana | 5Gi | openebs-zfs |
 | Alertmanager | 1Gi | openebs-zfs |
 | SonarQube | 10Gi | openebs-zfs |
-| Vikunja | 1Gi | openebs-zfs-retain |
 | **Total** | **~38Gi** | |
 
 ### Minimum VM requirement
