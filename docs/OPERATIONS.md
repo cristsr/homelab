@@ -221,10 +221,10 @@ Databases don't run in the cluster: they live on four Proxmox LXCs (see [ADR-016
 
 ### PostgreSQL backup (LXC `postgresql`, `10.10.20.10`)
 
-One instance, one database per service (`homelab`, `sonarqube`, `n8n`, `firefly`, `hindsight`, `vikunja`) — dump each separately. `hindsight` holds all of Hindsight's memory (the pod keeps no state), so it is the one that matters most to keep:
+One instance, one database per service (`homelab`, `sonarqube`, `n8n`, `firefly`, `hindsight`, `vikunja`, `kaneo`) — dump each separately. `hindsight` holds all of Hindsight's memory (the pod keeps no state), so it is the one that matters most to keep:
 
 ```bash
-for db in homelab sonarqube n8n firefly hindsight vikunja; do
+for db in homelab sonarqube n8n firefly hindsight vikunja kaneo; do
   pg_dump -h postgres.internal.cristianpuenguenan.online -U <user> "$db" > "$db.sql"
 done
 ```
@@ -240,6 +240,10 @@ kubectl -n vikunja exec -it deploy/vikunja -- /app/vikunja/vikunja user create -
 ```
 
 It prompts for the password when `--password` is omitted.
+
+Kaneo keeps no files: everything is in the `kaneo` database, so a restore needs only that dump.
+
+Kaneo starts with public registration disabled (`DISABLE_REGISTRATION=true`). It still lets the first non-guest user complete the instance setup, so the owner creates the account once by opening `https://kaneo.internal.cristianpuenguenan.online` right after the first sync; nobody can sign up after that.
 
 ### MongoDB backup (LXC `mongodb`, `10.10.20.20`)
 

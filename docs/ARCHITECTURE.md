@@ -189,6 +189,7 @@ Created by `terraform/cluster/namespaces.tf` (`kubernetes_namespace_v1.namespace
 | `sonarqube` | SonarQube, MCP server |
 | `hindsight` | Hindsight (agent memory API + MCP) |
 | `vikunja` | Vikunja (task management) |
+| `kaneo` | Kaneo (task management) |
 
 ---
 
@@ -223,6 +224,7 @@ Administration/observability tools — reachable only via LAN/Tailscale, never v
 | `hubble.internal.cristianpuenguenan.online` | hubble-ui:80 | kube-system |
 | `sonarqube.internal.cristianpuenguenan.online` | sonarqube-sonarqube:9000 | sonarqube |
 | `vikunja.internal.cristianpuenguenan.online` | vikunja:80 | vikunja |
+| `kaneo.internal.cristianpuenguenan.online` | kaneo:80 | kaneo |
 
 #### 3.1.c MCP routes
 
@@ -387,6 +389,23 @@ Secrets:  vikunja-secrets (SopsSecret): db-username, db-password, jwt-secret (th
 
 The owner's account is created once with `vikunja user create` (see `docs/OPERATIONS.md` §3). Vikunja starts empty: nothing is migrated from Notion.
 
+### 4.5 Kaneo (task management)
+
+**Namespace**: `kaneo` — **Image**: `ghcr.io/usekaneo/kaneo:<version>` — **Manifests**: `workloads/kaneo/`
+
+A second task manager, running alongside Vikunja: neither replaces the other. Internal only: it is served at `kaneo.internal.cristianpuenguenan.online` through the `main` Gateway and has no route on `public`.
+
+```
+Replicas: 1 (no volume, so the default rolling update applies)
+Port:     5173 (Service 80), web and API in the same container
+DB:       PostgreSQL on the external LXC (§5): postgres.internal.cristianpuenguenan.online:5432/kaneo
+Files:    none; all state is in the database
+Auth:     local account, public registration disabled (DISABLE_REGISTRATION), no identity provider
+Secrets:  kaneo-secrets (SopsSecret): db-username, db-password, auth-secret (AUTH_SECRET, the session signing secret)
+```
+
+The owner's account is created once, at the first visit (see `docs/OPERATIONS.md` §3). Kaneo starts empty: nothing is migrated from Notion or Vikunja.
+
 ---
 
 ## 5. Databases
@@ -413,6 +432,7 @@ A single multi-database PostgreSQL (`homelab` + `sonarqube`) replaces the two se
 | SonarQube | `jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube` (`SONAR_JDBC_URL`, credentials via ExternalSecret) |
 | Flow API | PostgreSQL/MongoDB/Redis URLs in 1Password (item `apps/flow`), as plain values |
 | Vikunja | `postgres.internal.cristianpuenguenan.online:5432/vikunja` (`VIKUNJA_DATABASE_*`, credentials via `vikunja-secrets`) |
+| Kaneo | `postgres.internal.cristianpuenguenan.online:5432/kaneo` (`POSTGRES_*`, credentials via `kaneo-secrets`) |
 
 Backups and operational tasks on the databases are documented in `docs/OPERATIONS.md` §3.
 
@@ -521,6 +541,7 @@ platform/observability/secrets/grafana-admin.sops.yaml -> Grafana admin
 workloads/flow/secrets.sops.yaml                     -> database-url, mongodb-url, redis-url
 workloads/sonarqube/secrets.sops.yaml                -> DB credentials, monitoring passcode
 workloads/vikunja/secrets.sops.yaml                  -> DB credentials, signing secret
+workloads/kaneo/secrets.sops.yaml                    -> DB credentials, auth secret
 ansible/data-services.env (dotenv, not a CRD)        -> Postgres/Mongo/Redis credentials, CI only
 ```
 
