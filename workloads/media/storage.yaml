@@ -74,8 +74,10 @@ spec:
     requests:
       storage: 5Gi
 ---
-# Scratch space, not configuration: it is rebuilt on demand, so it uses the
-# default (deleting) class instead of the retaining one.
+# Scratch space, not configuration: it is rebuilt on demand, so it uses a
+# deleting class instead of the retaining one. It sits on the media disk, not the
+# SSD: that disk is slower, but it is a separate virtual disk, so a transcode no
+# longer shares I/O with etcd and the rest of the control plane on the system disk.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -83,7 +85,7 @@ metadata:
   namespace: media
 spec:
   accessModes: ["ReadWriteOnce"]
-  storageClassName: openebs-zfs
+  storageClassName: openebs-zfs-media
   resources:
     requests:
       storage: 20Gi

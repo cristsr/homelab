@@ -36,10 +36,10 @@ spec:
             # a hardlink, never a copy across volumes.
             - name: library
               mountPath: /data
-            # Transcodes can grow to several GB per session. Their own SSD
-            # volume keeps them off the config volume, where a full disk breaks
-            # Jellyfin's SQLite database (and every login), and off the media
-            # HDD, where the churn would fight qBittorrent for the heads.
+            # Transcodes can grow to several GB per session. Their own volume
+            # keeps them off the config volume, where a full disk breaks
+            # Jellyfin's SQLite database (and every login). It lives on the
+            # media disk so the churn stays away from the system disk etcd runs on.
             - name: transcodes
               mountPath: /config/cache/transcodes
           resources:
