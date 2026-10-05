@@ -26,8 +26,13 @@ spec:
           env:
             - name: HINDSIGHT_API_LLM_PROVIDER
               value: "openrouter"
+            # Fact extraction and consolidation run on every session write-back, so
+            # this is the cost driver (claude-haiku-4-5 burned 5 USD / 5.5M tokens in
+            # half a day). gpt-oss-120b is ~25x cheaper ($0.037/$0.17 per M tokens);
+            # the LLM can be swapped freely (only the embedding model is locked to the
+            # DB dimension).
             - name: HINDSIGHT_API_LLM_MODEL
-              value: "anthropic/claude-haiku-4-5"
+              value: "openai/gpt-oss-120b"
             # The embedding dimension (1536) is fixed in the database on first
             # start; changing this model later means re-embedding everything.
             - name: HINDSIGHT_API_EMBEDDINGS_PROVIDER
