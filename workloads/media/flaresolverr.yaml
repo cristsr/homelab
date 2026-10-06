@@ -26,13 +26,16 @@ spec:
               value: info
             - name: PORT
               value: "8191"
+          # Byparr launches Firefox per request and closes it afterwards: idle is
+          # ~1m CPU / ~300Mi, a solve peaks at ~1Gi. Requests cover idle, limits
+          # leave room for the browser (500m / 1Gi throttled it into timeouts).
           resources:
             requests:
-              cpu: 50m
+              cpu: 25m
               memory: 256Mi
             limits:
-              cpu: 500m
-              memory: 1Gi
+              cpu: "2"
+              memory: 2Gi
 ---
 apiVersion: v1
 kind: Service
