@@ -6,6 +6,14 @@ prometheus:
     serviceMonitorSelector: {}
     podMonitorSelectorNilUsesHelmValues: false
     podMonitorSelector: {}
+    # Without requests/limits the pod is BestEffort and Talos' OOM controller
+    # picks it first under memory pressure (7-day peak: ~690Mi).
+    resources:
+      requests:
+        cpu: 100m
+        memory: 768Mi
+      limits:
+        memory: 1536Mi
     storageSpec:
       volumeClaimTemplate:
         spec:
@@ -32,6 +40,14 @@ grafana:
   # The chart ships all or none of its dashboards. We keep the few we use as
   # our own ConfigMaps in platform/observability/grafana-dashboards.
   defaultDashboardsEnabled: false
+  # BestEffort otherwise: it was OOM-killed 40+ times (7-day peaks: Grafana
+  # ~815Mi, each sidecar ~95Mi).
+  resources:
+    requests:
+      cpu: 50m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
   admin:
     existingSecret: grafana-admin-secret
     userKey: GF_SECURITY_ADMIN_USER
@@ -49,6 +65,12 @@ grafana:
       enabled: true
       label: grafana_dashboard
       labelValue: "1"
+      resources:
+        requests:
+          cpu: 10m
+          memory: 96Mi
+        limits:
+          memory: 256Mi
       searchNamespace: ALL
       # One folder per ConfigMap via its grafana_folder annotation.
       folderAnnotation: grafana_folder
@@ -57,6 +79,12 @@ grafana:
     datasources:
       enabled: true
       searchNamespace: ALL
+      resources:
+        requests:
+          cpu: 10m
+          memory: 96Mi
+        limits:
+          memory: 256Mi
   persistence:
     enabled: true
     storageClassName: openebs-zfs
