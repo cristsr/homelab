@@ -11,6 +11,12 @@ tetragon:
   exportFileMaxSizeMB: 10
   exportFileMaxBackups: 5
   enableK8sAPI: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 192Mi
+    limits:
+      memory: 512Mi
   enablePolicyFilter: true
   prometheus:
     enabled: true
@@ -32,3 +38,9 @@ crds:
 
 export:
   mode: "stdout"
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      memory: 64Mi

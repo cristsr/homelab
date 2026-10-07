@@ -61,16 +61,16 @@ grafana:
   deploymentStrategy:
     type: Recreate
   sidecar:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 96Mi
+      limits:
+        memory: 256Mi
     dashboards:
       enabled: true
       label: grafana_dashboard
       labelValue: "1"
-      resources:
-        requests:
-          cpu: 10m
-          memory: 96Mi
-        limits:
-          memory: 256Mi
       searchNamespace: ALL
       # One folder per ConfigMap via its grafana_folder annotation.
       folderAnnotation: grafana_folder
@@ -79,12 +79,6 @@ grafana:
     datasources:
       enabled: true
       searchNamespace: ALL
-      resources:
-        requests:
-          cpu: 10m
-          memory: 96Mi
-        limits:
-          memory: 256Mi
   persistence:
     enabled: true
     storageClassName: openebs-zfs
@@ -124,9 +118,29 @@ kubernetesServiceMonitors:
 
 prometheus-node-exporter:
   enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      memory: 64Mi
 
 kube-state-metrics:
   enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 48Mi
+    limits:
+      memory: 192Mi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 48Mi
+    limits:
+      memory: 192Mi
 
 prometheus-windows-exporter:
   enabled: false

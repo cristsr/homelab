@@ -38,6 +38,12 @@ spec:
           args: ["gateway", "run"]
           ports:
             - containerPort: 8642
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              memory: 512Mi
           readinessProbe:
             httpGet:
               path: /health

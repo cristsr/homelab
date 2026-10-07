@@ -2,10 +2,30 @@ crds:
   enabled: true
   keep: true
 
+# Memory limits are sized from 7-day peaks (no CPU limits). Without them these
+# pods are BestEffort and Talos' OOM controller kills them first.
 replicaCount: 1
+resources:
+  requests:
+    cpu: 10m
+    memory: 48Mi
+  limits:
+    memory: 192Mi
 
 webhook:
   replicaCount: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
 
 cainjector:
   replicaCount: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      memory: 256Mi

@@ -60,12 +60,32 @@ hubble:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
         effect: NoSchedule
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
   ui:
     enabled: true
     tolerations:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
         effect: NoSchedule
+    frontend:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 64Mi
+    backend:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 128Mi
   metrics:
     enabled:
       - dns
@@ -78,10 +98,26 @@ hubble:
 prometheus:
   enabled: true
 
+# Memory limits below are sized from 7-day peaks (no CPU limits). Without them
+# these pods are BestEffort and Talos' OOM controller kills them first.
 operator:
   replicas: 1
   prometheus:
     enabled: true
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+envoy:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
 
 daemon:
   runPath: /var/run/cilium
