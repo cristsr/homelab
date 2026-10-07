@@ -36,10 +36,6 @@ spec:
               value: "911"
             - name: PGID
               value: "911"
-            # fsGroup already fixed the volume's group; chowning a 900Gi library
-            # on every start is wasted I/O.
-            - name: CHOWN_ON_START
-              value: never
             - name: HTTP_PORT
               value: "8080"
             - name: SOLID_QUEUE_IN_PUMA
