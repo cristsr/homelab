@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shelfarr
+  namespace: media
+spec:
+  replicas: 1
+  # RollingUpdate would create the new pod before the old one releases its
+  # ReadWriteOnce volumes, leaving it stuck FailedMount. Recreate tears the
+  # old pod down first.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: shelfarr
+  template:
+    metadata:
+      labels:
+        app: shelfarr
+    spec:
+      # fsGroup re-groups the whole media-library volume every time this pod
+      # starts, so it has to match the group the rest of the stack uses (911);
+      # any other value strips write access from radarr/sonarr/jellyfin.
+      securityContext:
+        fsGroup: 911
+      containers:
+        - name: shelfarr
+          # Request front-end for ebooks and audiobooks with its own direct
+          # sources (Anna's Archive, Z-Library, LibriVox) next to Prowlarr. It
+          # does not talk to Chaptarr: it is a second book manager, not a front
+          # for it. The companion Libation container is left out; it stays idle
+          # unless Audible backup is enabled.
+          image: ghcr.io/pedro-revez-silva/shelfarr:2026.10.05.1
+          env:
+            - name: PUID
+              value: "911"
+            - name: PGID
+              value: "911"
+            # fsGroup already fixed the volume's group; chowning a 900Gi library
+            # on every start is wasted I/O.
+            - name: CHOWN_ON_START
+              value: never
+            - name: HTTP_PORT
+              value: "8080"
+            - name: SOLID_QUEUE_IN_PUMA
+              value: "1"
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            # Database and the auto-generated secret key.
+            - name: config
+              mountPath: /rails/storage
+            # Same mount path as the rest of the stack: an import is a move or
+            # a hardlink, never a copy across volumes. Output paths are set in
+            # the admin UI under /data/media.
+            - name: library
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: shelfarr-config
+        - name: library
+          persistentVolumeClaim:
+            claimName: media-library
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shelfarr
+  namespace: media
+spec:
+  selector:
+    app: shelfarr
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
