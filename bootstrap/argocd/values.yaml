@@ -13,6 +13,16 @@ server:
   extraArgs:
     - --insecure
 
+controller:
+  # BestEffort otherwise, so Talos' OOM controller kills it first under memory
+  # pressure (7-day peak: ~1.2Gi).
+  resources:
+    requests:
+      cpu: 250m
+      memory: 768Mi
+    limits:
+      memory: 2Gi
+
 repoServer:
   # Without limits, a memory-pressure kill gives exit 255 instead of a clean
   # OOMKilled, and the git index cached in the emptyDir can end up corrupted
