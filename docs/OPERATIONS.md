@@ -320,6 +320,16 @@ kubectl top nodes
 kubectl describe node
 ```
 
+### Turn a namespace off to free memory
+
+```bash
+./scripts/workload.sh down sonarqube   # replicas 0, remembers the old count
+./scripts/workload.sh up sonarqube     # back to what it was
+./scripts/workload.sh status sonarqube
+```
+
+Only Deployments and StatefulSets are scaled; PVCs and routes stay, so data survives (an HTTPRoute with no backend answers 503). ArgoCD ignores `spec.replicas` (`bootstrap/argocd/values.yaml`), so `selfHeal` leaves them off. Apps synced with `Replace=true` can scale back up when a Git change forces a full sync (e.g. a chart bump); run `down` again if so.
+
 ### Adjust a deployment's resources
 
 Edit the manifest under `platform/` or `gitops/apps/` and apply the changes.

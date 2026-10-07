@@ -83,6 +83,14 @@ configs:
     # set this to 0s - that silently disables sync entirely.
     timeout.reconciliation: 180s
     application.resourceTrackingMethod: annotation
+    # Nothing here autoscales, and scripts/workload.sh scales workloads to 0 on
+    # purpose: without this selfHeal would scale them straight back up.
+    resource.customizations.ignoreDifferences.apps_Deployment: |
+      jsonPointers:
+        - /spec/replicas
+    resource.customizations.ignoreDifferences.apps_StatefulSet: |
+      jsonPointers:
+        - /spec/replicas
   rbac:
     policy.default: role:readonly
     policy.csv: |
