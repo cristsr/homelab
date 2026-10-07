@@ -19,23 +19,23 @@ server:
       cpu: 20m
       memory: 64Mi
     limits:
-      memory: 256Mi
+      memory: 320Mi
 
 dex:
   resources:
     requests:
       cpu: 10m
-      memory: 32Mi
+      memory: 64Mi
     limits:
-      memory: 192Mi
+      memory: 256Mi
 
 redis:
   resources:
     requests:
       cpu: 10m
-      memory: 16Mi
+      memory: 32Mi
     limits:
-      memory: 64Mi
+      memory: 128Mi
 
 notifications:
   resources:
@@ -49,9 +49,9 @@ applicationSet:
   resources:
     requests:
       cpu: 10m
-      memory: 48Mi
+      memory: 64Mi
     limits:
-      memory: 192Mi
+      memory: 256Mi
 
 controller:
   # BestEffort otherwise, so Talos' OOM controller kills it first under memory

@@ -5,7 +5,7 @@ resources:
     cpu: 10m
     memory: 32Mi
   limits:
-    memory: 128Mi
+    memory: 160Mi
 
 config:
   inCluster: true

@@ -14,7 +14,7 @@ authentication:
           resources:
             requests:
               cpu: 10m
-              memory: 48Mi
+              memory: 64Mi
             limits:
               memory: 192Mi
         server:
