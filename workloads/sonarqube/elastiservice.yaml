@@ -1,0 +1,23 @@
+# Scale SonarQube (~1.2 GiB) to zero when its routes see no traffic, and wake it
+# on the first request. The query counts both HTTPRoutes in this namespace
+# (UI and MCP), since the MCP server calls SonarQube without passing back
+# through Envoy.
+apiVersion: elasti.truefoundry.com/v1alpha1
+kind: ElastiService
+metadata:
+  name: sonarqube-sonarqube
+  namespace: sonarqube
+spec:
+  service: sonarqube-sonarqube
+  minTargetReplicas: 1
+  # Seconds idle before scaling down. Long, because a cold start takes minutes.
+  cooldownPeriod: 1800
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: sonarqube-sonarqube
+  triggers:
+    - type: prometheus
+      metadata:
+        query: sum(rate(envoy_cluster_upstream_rq_total{envoy_cluster_name=~"httproute/sonarqube/.*"}[1m])) or vector(0)
+        threshold: "0.001"

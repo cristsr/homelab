@@ -1,0 +1,40 @@
+# KubeElasti values. Memory is the chart default (40Mi/80Mi); the resolver gets
+# more headroom because it buffers requests while a target scales up.
+
+elastiController:
+  # Single-node cluster: without this the control-plane taint leaves it Pending.
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+  manager:
+    resources:
+      requests:
+        cpu: 20m
+        memory: 40Mi
+      limits:
+        cpu: 200m
+        memory: 80Mi
+    env:
+      # Default for every ElastiService, so they don't repeat it.
+      prometheusTriggerServerAddress: http://prometheus-kube-prometheus-prometheus.observability.svc.cluster.local:9090
+
+elastiResolver:
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+  proxy:
+    env:
+      # The resolver finds the target service in this header. Envoy Gateway
+      # doesn't send the chart's default (X-Envoy-Decorator-Operation), and
+      # in-cluster callers only have Host, so each HTTPRoute rewrites Host to
+      # the service FQDN (docs: KubeElasti "Envoy Gateway" integration).
+      headerForHost: Host
+    resources:
+      requests:
+        cpu: 20m
+        memory: 48Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
