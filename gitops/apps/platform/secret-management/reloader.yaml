@@ -18,6 +18,13 @@ spec:
       values: |
         reloader:
           autoReloadAll: true
+          deployment:
+            resources:
+              requests:
+                cpu: 10m
+                memory: 48Mi
+              limits:
+                memory: 192Mi
         webhook:
           enabled: true
   destination:

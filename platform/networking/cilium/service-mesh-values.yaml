@@ -8,7 +8,22 @@ authentication:
         # Lets namespace.yaml manage the Namespace and its PodSecurity labels
         # instead of the chart, since spire-agent/spire-server need privileged access.
         existingNamespace: true
+        # Memory limits sized from 7-day peaks (no CPU limits); without them
+        # these pods are BestEffort and Talos' OOM controller kills them first.
+        agent:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 192Mi
         server:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
           dataStorage:
             enabled: true
           # The persistent volume's files are already owned by root:root, but

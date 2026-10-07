@@ -8,3 +8,17 @@ analytics:
 # directory fails to create. /var is the only writable persistent path.
 zfsNode:
   encrKeysDir: "/var/openebs/keys"
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+zfsController:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      memory: 192Mi
