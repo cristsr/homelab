@@ -40,7 +40,7 @@ ansible-playbook preflight.yaml
 | Resource | Minimum | This repo's default |
 |---------|--------|-----------------------|
 | CPU | 4 cores | 8 vCPU (`var.vcpu`) |
-| RAM | 8 GB | 16 GB (`var.memory_mib`) |
+| RAM | 8 GB | 20 GB (`var.memory_mib`) |
 | Installation disk | 100 GB | 120 GB (`var.disk_size_gb`) |
 | Dedicated ZFS disk | - | 100 GB (`var.zfs_disk_size_gb`) |
 | Network | Static IP on the LAN | `var.vm_static_ip`, bridge `vmbr0` |
