@@ -11,6 +11,12 @@ spec:
   hostnames:
     - sonarqube.internal.cristianpuenguenan.online
   rules:
-    - backendRefs:
+    # KubeElasti's resolver reads the target service from Host, so it is rewritten
+    # to the service FQDN (see platform/networking/elasti/elasti.yaml).
+    - filters:
+        - type: URLRewrite
+          urlRewrite:
+            hostname: sonarqube-sonarqube.sonarqube.svc.cluster.local
+      backendRefs:
         - name: sonarqube-sonarqube
           port: 9000

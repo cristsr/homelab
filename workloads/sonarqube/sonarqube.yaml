@@ -31,6 +31,10 @@ env:
       secretKeyRef:
         name: sonarqube-db-secret
         key: password
+  # The HTTPRoute rewrites Host to the service FQDN for KubeElasti, so
+  # SonarQube must not build redirects and links from it.
+  - name: SONAR_CORE_SERVERBASEURL
+    value: "https://sonarqube.internal.cristianpuenguenan.online"
 
 service:
   type: ClusterIP

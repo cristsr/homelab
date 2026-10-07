@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: elasti
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-description: "KubeElasti: scale-to-zero on demand"
+spec:
+  project: homelab
+  sources:
+    - repoURL: oci://ghcr.io/kubeelasti/charts
+      chart: elasti
+      targetRevision: 0.1.30
+      helm:
+        releaseName: elasti
+        valueFiles:
+          - $values/platform/networking/elasti/elasti.yaml
+    - repoURL: https://github.com/cristsr/homelab
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: elasti
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
