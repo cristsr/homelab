@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "terraform/**"
+      - "bootstrap/**"
   workflow_dispatch: {}
 
 permissions:

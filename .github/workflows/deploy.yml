@@ -6,6 +6,8 @@ on:
     paths:
       - "terraform/**"
       - "ansible/**"
+      - "bootstrap/**"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch: {}
 
 concurrency:
