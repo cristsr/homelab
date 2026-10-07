@@ -11,7 +11,7 @@ metadata:
 spec:
   project: homelab
   sources:
-    - repoURL: oci://ghcr.io/kubeelasti/charts
+    - repoURL: oci://ghcr.io/kubeelasti/charts/elasti
       chart: elasti
       targetRevision: 0.1.30
       helm:
