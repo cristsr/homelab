@@ -44,8 +44,16 @@ resource "talos_machine_configuration_apply" "this" {
         }
         kernel = {
           modules = [
-            { name = "zfs" }
+            { name = "zfs" },
+            { name = "nvidia" },
+            { name = "nvidia_uvm" },
+            { name = "nvidia_drm" },
+            { name = "nvidia_modeset" }
           ]
+        }
+        # Required by the NVIDIA extensions on Talos.
+        sysctls = {
+          "net.core.bpf_jit_harden" = "1"
         }
       }
       cluster = {

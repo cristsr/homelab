@@ -1038,3 +1038,24 @@ By default a sync applies every object of the Application, so one refused claim 
 - The `chart` label of the `sonarqube` claim stays on its old value; nothing depends on it.
 - The `media` claims stay without the tracking annotation, so ArgoCD never prunes them, which is the safe side for claims that hold data.
 - Other Applications with a bound claim and `Replace=true` fail the same way as soon as anything else in them drifts. They were not changed here.
+
+## ADR-030: The host's RTX 2060 is passed through to the Talos VM for Jellyfin transcoding
+
+**Status**: Accepted
+**Date**: 2026-10-10
+
+### Context
+
+Jellyfin played through Chrome with a software AV1 transcode (`libsvtav1`) that ran at 0.92x realtime and pinned the pod's CPU limit, so playback stuttered (#164 raised the limits). The Talos VM has no GPU, so every transcode runs on the CPU. The hypervisor has an RTX 2060 (Turing: NVENC encodes H.264 and HEVC, not AV1), so a transcode would produce H.264 that Chrome plays directly.
+
+### Decision
+
+- Pass the card through to the VM with a `hostpci` block (`var.gpu_pci_id`, empty by default so nothing changes until it is set). The VM already uses `q35` + `ovmf`, which PCIe passthrough needs.
+- New Talos schematic `42dcbb7542e7f2d53beec866d4687f9306cd2b2da3b049fb4872cfc41942723e`: the previous extensions plus `nonfree-kmod-nvidia-production` and `nvidia-container-toolkit-production`. The `nvidia*` kernel modules and `net.core.bpf_jit_harden=1` are added to the machine config.
+- The Kubernetes side (RuntimeClass, NVIDIA device plugin, Jellyfin's `nvidia.com/gpu` limit) lands in a later PR, once the node reports the GPU. Merging it first would leave Jellyfin `Pending` on a resource that does not exist.
+
+### Consequences
+
+- The hypervisor loses the card: it cannot be used for its console or another VM.
+- The change needs steps outside the repo, in this order: enable IOMMU and bind the card to `vfio-pci` on Proxmox; set `GPU_PCI_ID` and `TALOS_SCHEMATIC_ID` in the `prod` GitHub environment; `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<version>` (applying the machine config does not change the installed image). The VM reboots, so the whole single-node cluster is down for a few minutes.
+- The schematic carries no extension that needs an `ExtensionServiceConfig` (see ADR-022's rule); if the node loops on `startAllServices` after the upgrade, revert with `talosctl upgrade` to the previous schematic.
