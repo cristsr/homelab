@@ -162,6 +162,14 @@ jobs:
         run: |
           ansible-playbook hypervisor-power.yaml --limit proxmox             -e proxmox_ssh_user=root             -e proxmox_ssh_private_key_file="$HOME/.ssh/ci_ed25519"
 
+      # Idempotent. Only prepares the host; the reboot that hands the GPU to vfio-pci is manual (ADR-030).
+      - name: Reserve the GPU for passthrough
+        working-directory: ansible
+        run: |
+          ansible-playbook hypervisor-gpu.yaml --limit proxmox \
+            -e proxmox_ssh_user=root \
+            -e proxmox_ssh_private_key_file="$HOME/.ssh/ci_ed25519"
+
       # Only ansible/data-services.env is decrypted here; SopsSecret CRDs are
       # decrypted in-cluster by sops-secrets-operator, not by CI.
       - name: Install sops

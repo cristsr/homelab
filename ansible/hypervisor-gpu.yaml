@@ -1,0 +1,59 @@
+# Binds the host's RTX 2060 to vfio-pci so it can be passed through to the
+# Talos VM (ADR-030). Run by the Deploy workflow (idempotent), or by hand.
+# It only prepares the host: vfio-pci takes the card at the next boot, and the
+# reboot is manual because it stops every VM and the Tailscale subnet router
+# this workflow reaches the host through.
+---
+- name: Reserve the GPU for passthrough
+  hosts: proxmox
+
+  vars:
+    # 07:00.0 GPU, .1 audio, .2 USB, .3 UCSI: one IOMMU group, passed together.
+    gpu_pci_ids: "10de:1e89,10de:10f8,10de:1ad8,10de:1ad9"
+    gpu_pci_slot: "07:00"
+
+  tasks:
+    - name: Load vfio-pci before the drivers that claim the card
+      ansible.builtin.copy:
+        dest: /etc/modprobe.d/vfio.conf
+        content: |
+          options vfio-pci ids={{ gpu_pci_ids }}
+          softdep nouveau pre: vfio-pci
+          softdep nvidiafb pre: vfio-pci
+          softdep snd_hda_intel pre: vfio-pci
+          softdep i2c_nvidia_gpu pre: vfio-pci
+          softdep xhci_pci pre: vfio-pci
+        mode: "0644"
+      notify: Rebuild initramfs
+
+    - name: Keep the host from loading its own GPU drivers
+      ansible.builtin.copy:
+        dest: /etc/modprobe.d/blacklist-nvidia.conf
+        content: |
+          blacklist nouveau
+          blacklist nvidiafb
+        mode: "0644"
+      notify: Rebuild initramfs
+
+    - name: Load the vfio modules at boot
+      ansible.builtin.lineinfile:
+        path: /etc/modules
+        line: "{{ item }}"
+      loop: [vfio, vfio_iommu_type1, vfio_pci]
+      notify: Rebuild initramfs
+
+    - name: Read the driver bound to the card
+      ansible.builtin.command: lspci -nnk -s {{ gpu_pci_slot }}
+      register: gpu_bind
+      changed_when: false
+
+    - name: Report whether a reboot is still needed
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'vfio-pci already owns the GPU.' if 'driver in use: vfio-pci' in gpu_bind.stdout
+          else 'The GPU is not on vfio-pci yet: reboot the host (manual, it stops every VM).' }}
+
+  handlers:
+    - name: Rebuild initramfs
+      ansible.builtin.command: update-initramfs -u -k all
+      changed_when: true
