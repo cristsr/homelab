@@ -30,7 +30,7 @@ spec:
           # does not talk to Chaptarr: it is a second book manager, not a front
           # for it. The companion Libation container is left out; it stays idle
           # unless Audible backup is enabled.
-          image: ghcr.io/pedro-revez-silva/shelfarr:2026.10.05.1
+          image: ghcr.io/pedro-revez-silva/shelfarr:2026.10.12.1
           env:
             - name: PUID
               value: "911"
