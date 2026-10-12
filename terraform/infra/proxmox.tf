@@ -67,6 +67,19 @@ resource "proxmox_virtual_environment_vm" "talos_node" {
     replicate    = false
   }
 
+  # GPU for Jellyfin's NVENC transcoding. The host must already have IOMMU on and
+  # the card bound to vfio-pci (see docs/DECISIONS.md); a VM with this set won't
+  # start otherwise.
+  dynamic "hostpci" {
+    for_each = var.gpu_pci_id == "" ? [] : [var.gpu_pci_id]
+    content {
+      device = "hostpci0"
+      id     = hostpci.value
+      pcie   = true
+      rombar = true
+    }
+  }
+
   cdrom {
     file_id   = proxmox_download_file.talos_iso.id
     interface = "ide3"

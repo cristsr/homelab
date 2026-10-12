@@ -25,7 +25,7 @@ Single-node homelab built on Talos Linux (a VM on Proxmox VE) with full GitOps. 
 | Layer | Technology |
 |------|-----------|
 | Hypervisor | Proxmox VE (Terraform provider `bpg/proxmox`) |
-| Kubernetes | Talos Linux v1.14.0 (immutable, no SSH) |
+| Kubernetes | Talos Linux v1.14.2 (immutable, no SSH) |
 | CNI / NetworkPolicy | Cilium 1.20.1 (eBPF, kube-proxy replacement) |
 | Ingress / Gateway (generic) | Envoy Gateway v1.9.1 |
 | GitOps | Argo CD 9.5.13 |
@@ -120,7 +120,7 @@ homelab/
 
 ### 2.1 Talos Linux (Kubernetes)
 
-**Version**: `v1.14.0` — **Mode**: Single node (control-plane, no separate workers)
+**Version**: `v1.14.2` — **Mode**: Single node (control-plane, no separate workers)
 
 - Runs on a VM on Proxmox VE, provisioned by Terraform (`terraform/infra/`, see [ADR-014](DECISIONS.md#adr-014-migration-from-k0slibvirtfedora-to-talos-linuxproxmox-ve-and-from-openebs-lvm-to-openebs-zfs-localpv)).
 - Talos is immutable and has no SSH or shell: configuration is 100% declarative via machine config, applied by the Terraform provider `siderolabs/talos` (`terraform/infra/talos.tf`). Ansible no longer provisions the node's operating system.

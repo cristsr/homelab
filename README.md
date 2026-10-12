@@ -27,7 +27,7 @@ The VM is created with **Terraform** (provider `bpg/proxmox` + `siderolabs/talos
 | Layer | Technology | Version |
 |------|-----------|---------|
 | VM / Hypervisor | Terraform + Proxmox VE (`bpg/proxmox`) | - |
-| Kubernetes | Talos Linux (`siderolabs/talos`) | v1.14.0 |
+| Kubernetes | Talos Linux (`siderolabs/talos`) | v1.14.2 |
 | CNI | Cilium | 1.20.1 |
 | GitOps | Argo CD | 9.5.13 |
 | Ingress (generic) | Envoy Gateway | v1.9.1 |

@@ -75,6 +75,7 @@ jobs:
           TF_VAR_proxmox_endpoint: ${{ vars.PROXMOX_ENDPOINT }}
           TF_VAR_proxmox_api_token: ${{ secrets.PROXMOX_API_TOKEN }}
           TF_VAR_talos_schematic_id: ${{ vars.TALOS_SCHEMATIC_ID }}
+          TF_VAR_gpu_pci_id: ${{ vars.GPU_PCI_ID }}
           TF_VAR_vm_static_ip: ${{ vars.VM_STATIC_IP }}
           TF_VAR_vm_gateway: ${{ vars.VM_GATEWAY }}
         run: |
