@@ -1052,7 +1052,7 @@ Jellyfin played through Chrome with a software AV1 transcode (`libsvtav1`) that 
 
 - Pass the card through to the VM with a `hostpci` block (`var.gpu_pci_id`, empty by default so nothing changes until it is set). The VM already uses `q35` + `ovmf`, which PCIe passthrough needs.
 - Talos moves from v1.14.0 to v1.14.2 (the latest stable in the Image Factory; the same release carries the extension versions the schematic resolves to) with a new schematic `42dcbb7542e7f2d53beec866d4687f9306cd2b2da3b049fb4872cfc41942723e`: the previous extensions plus `nonfree-kmod-nvidia-production` and `nvidia-container-toolkit-production`. The `nvidia*` kernel modules and `net.core.bpf_jit_harden=1` are added to the machine config.
-- The Kubernetes side (RuntimeClass, NVIDIA device plugin, Jellyfin's `nvidia.com/gpu` limit) lands in a later PR, once the node reports the GPU. Merging it first would leave Jellyfin `Pending` on a resource that does not exist.
+- The Kubernetes side landed once the node reported the GPU (merging it first would have left Jellyfin `Pending` on a resource that does not exist): the `nvidia` RuntimeClass and the NVIDIA device plugin (`platform/gpu/nvidia-device-plugin/`, in `kube-system`, with the chart's NFD-label affinity removed because the cluster runs no NFD), and Jellyfin asks for `runtimeClassName: nvidia` and `nvidia.com/gpu: 1`. Its CPU and memory limits go back to 2 cores / 4Gi, since the encode no longer runs on the CPU.
 
 ### Consequences
 

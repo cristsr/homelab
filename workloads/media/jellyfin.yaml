@@ -22,13 +22,18 @@ spec:
       # volume isn't auto-chowned like /config, so grant group write via fsGroup.
       securityContext:
         fsGroup: 911
+      # The nvidia runtime is what mounts the driver libraries into the
+      # container; the device plugin only hands out the card.
+      runtimeClassName: nvidia
       containers:
-        # The VM is passed no GPU, so transcodes run on the CPU: the limit is
-        # what keeps one session from taking the node with it.
         - name: jellyfin
           image: linuxserver/jellyfin:12.1ubu2604-ls50
           ports:
             - containerPort: 8096
+          env:
+            # video: NVENC/NVDEC. The plugin sets NVIDIA_VISIBLE_DEVICES itself.
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: compute,video,utility
           volumeMounts:
             - name: config
               mountPath: /config
@@ -42,13 +47,17 @@ spec:
             # media disk so the churn stays away from the system disk etcd runs on.
             - name: transcodes
               mountPath: /config/cache/transcodes
+          # Encoding and decoding run on the GPU (enable NVENC/NVDEC in
+          # Jellyfin's transcoding settings); the CPU limit now only covers the
+          # demuxer, audio and burned-in subtitles.
           resources:
             requests:
               cpu: 100m
               memory: 512Mi
             limits:
-              cpu: 4000m
-              memory: 6Gi
+              cpu: 2000m
+              memory: 4Gi
+              nvidia.com/gpu: 1
       volumes:
         - name: config
           persistentVolumeClaim:
