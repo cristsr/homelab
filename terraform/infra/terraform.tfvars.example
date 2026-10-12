@@ -10,7 +10,7 @@
 # media_disk_size_gb = 1024
 # proxmox_datastore_id = "local-lvm"
 # network_bridge   = "vmbr0"
-# talos_version      = "v1.14.0"
+# talos_version      = "v1.14.2"
 # talos_schematic_id = "42dcbb7542e7f2d53beec866d4687f9306cd2b2da3b049fb4872cfc41942723e"
 # cluster_name       = "talos"
 

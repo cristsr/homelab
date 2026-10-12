@@ -18,7 +18,7 @@ variable "proxmox_node_name" {
 variable "talos_version" {
   description = "Talos Linux version to use (must exist in the Image Factory)"
   type        = string
-  default     = "v1.14.0"
+  default     = "v1.14.2"
 }
 
 variable "talos_schematic_id" {
