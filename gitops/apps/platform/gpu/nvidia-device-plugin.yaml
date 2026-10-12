@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nvidia-device-plugin
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-description: "NVIDIA device plugin and the nvidia RuntimeClass"
+spec:
+  project: homelab
+  sources:
+    - repoURL: https://nvidia.github.io/k8s-device-plugin
+      chart: nvidia-device-plugin
+      targetRevision: "0.20.1"
+      helm:
+        releaseName: nvidia-device-plugin
+        valueFiles:
+          - $values/platform/gpu/nvidia-device-plugin/values.yaml
+    - repoURL: https://github.com/cristsr/homelab
+      targetRevision: HEAD
+      ref: values
+    - repoURL: https://github.com/cristsr/homelab
+      targetRevision: HEAD
+      path: platform/gpu/nvidia-device-plugin/runtime-class
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - Replace=true

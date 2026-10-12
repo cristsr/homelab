@@ -1,0 +1,8 @@
+# Talos registers the NVIDIA container runtime through the
+# nvidia-container-toolkit extension; pods that touch the GPU, this one
+# included, have to ask for it by RuntimeClass.
+runtimeClassName: nvidia
+
+# The chart only schedules onto nodes labelled by Node Feature Discovery,
+# which this cluster does not run. The only node has the GPU, so drop the rule.
+affinity: null
