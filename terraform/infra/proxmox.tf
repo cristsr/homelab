@@ -76,6 +76,7 @@ resource "proxmox_virtual_environment_vm" "talos_node" {
       device = "hostpci0"
       id     = hostpci.value
       pcie   = true
+      rombar = true
     }
   }
 
