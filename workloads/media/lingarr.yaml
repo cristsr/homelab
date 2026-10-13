@@ -28,6 +28,10 @@ spec:
         - name: lingarr
           image: lingarr/lingarr:1.4.0
           env:
+            # Lingarr refuses to start without it; sqlite keeps the database on
+            # the config volume (/app/config), so no extra database to run.
+            - name: DB_CONNECTION
+              value: sqlite
             - name: SONARR_URL
               value: http://sonarr.media:8989
             - name: RADARR_URL
