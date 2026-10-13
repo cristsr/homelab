@@ -12,6 +12,13 @@
       "enabled": false
     },
     {
+      "description": "ansible-core 2.21 crashes on import under Python 3.15 (dataclasses._is_type is gone), which broke the Deploy workflow; bump by hand once ansible supports it",
+      "matchManagers": ["github-actions"],
+      "matchDepNames": ["python"],
+      "matchUpdateTypes": ["minor", "major"],
+      "enabled": false
+    },
+    {
       "description": "Private images, Renovate has no access to ghcr.io/cristsr",
       "matchPackageNames": ["ghcr.io/cristsr/**"],
       "enabled": false
