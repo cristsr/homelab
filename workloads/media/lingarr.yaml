@@ -30,10 +30,18 @@ spec:
           env:
             - name: SONARR_URL
               value: http://sonarr.media:8989
-            # DeepSeek is the primary translator; its key and Sonarr's are set
-            # in Lingarr's own settings (stored on the config volume) because
-            # secrets in this repo are SOPS-encrypted and these two are only
-            # known to the running apps.
+            - name: SONARR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lingarr
+                  key: SONARR_API_KEY
+            - name: DEEPSEEK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lingarr
+                  key: DEEPSEEK_API_KEY
+            # DeepSeek is the only translator: no fallback, so a bad key fails
+            # loudly instead of silently switching service.
             - name: SERVICE_TYPE
               value: '["deepseek"]'
             - name: DEEPSEEK_MODEL
