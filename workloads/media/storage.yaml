@@ -150,6 +150,18 @@ spec:
     requests:
       storage: 1Gi
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lingarr-config
+  namespace: media
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: openebs-zfs-retain
+  resources:
+    requests:
+      storage: 1Gi
+---
 # Size this to the library you intend to keep: it holds every download and every
 # imported file, and ZFS expansion is the only way to grow it after the fact.
 # It has to stay within the pool terraform sizes from media_disk_size_gb, or the

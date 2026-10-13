@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lingarr
+  namespace: media
+spec:
+  replicas: 1
+  # RollingUpdate would create the new pod before the old one releases its
+  # ReadWriteOnce volumes, leaving it stuck FailedMount. Recreate tears the
+  # old pod down first.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: lingarr
+  template:
+    metadata:
+      labels:
+        app: lingarr
+    spec:
+      # Runs as the library owner so the .es.srt files it writes next to the
+      # episodes are readable by Jellyfin, Sonarr and Bazarr.
+      securityContext:
+        runAsUser: 911
+        runAsGroup: 911
+        fsGroup: 911
+      containers:
+        - name: lingarr
+          image: lingarr/lingarr:1.4.0
+          env:
+            - name: SONARR_URL
+              value: http://sonarr.media:8989
+            - name: RADARR_URL
+              value: http://radarr.media:7878
+            - name: RADARR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lingarr
+                  key: RADARR_API_KEY
+            - name: SONARR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lingarr
+                  key: SONARR_API_KEY
+            - name: DEEPSEEK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lingarr
+                  key: DEEPSEEK_API_KEY
+            # DeepSeek is the only translator: no fallback, so a bad key fails
+            # loudly instead of silently switching service.
+            - name: SERVICE_TYPE
+              value: '["deepseek"]'
+            - name: DEEPSEEK_MODEL
+              value: deepseek-chat
+            - name: SOURCE_LANGUAGES
+              value: '[{"name":"English","code":"en"}]'
+            - name: TARGET_LANGUAGES
+              value: '[{"name":"Spanish","code":"es"}]'
+            - name: USE_BATCH_TRANSLATION
+              value: "true"
+          ports:
+            - containerPort: 9876
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+            # Same path as Sonarr sees, so the file paths Sonarr reports resolve
+            # here without a path mapping.
+            - name: library
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: lingarr-config
+        - name: library
+          persistentVolumeClaim:
+            claimName: media-library
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lingarr
+  namespace: media
+spec:
+  selector:
+    app: lingarr
+  ports:
+    - port: 9876
+      targetPort: 9876
+  type: ClusterIP

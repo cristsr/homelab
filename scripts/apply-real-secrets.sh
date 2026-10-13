@@ -104,6 +104,14 @@ set_field workloads/kaneo/secrets.sops.yaml \
 set_field workloads/kaneo/secrets.sops.yaml \
   '["spec"]["secretTemplates"][0]["stringData"]["auth-secret"]' "$(get KANEO_AUTH_SECRET)"
 
+# --- workloads/media/secrets.sops.yaml (Lingarr) ---
+set_field workloads/media/secrets.sops.yaml \
+  '["spec"]["secretTemplates"][1]["stringData"]["SONARR_API_KEY"]' "$(get LINGARR_SONARR_API_KEY)"
+set_field workloads/media/secrets.sops.yaml \
+  '["spec"]["secretTemplates"][1]["stringData"]["RADARR_API_KEY"]' "$(get LINGARR_RADARR_API_KEY)"
+set_field workloads/media/secrets.sops.yaml \
+  '["spec"]["secretTemplates"][1]["stringData"]["DEEPSEEK_API_KEY"]' "$(get LINGARR_DEEPSEEK_API_KEY)"
+
 # --- platform/networking/cloudflared/token.sops.yaml ---
 set_field platform/networking/cloudflared/token.sops.yaml \
   '["spec"]["secretTemplates"][0]["stringData"]["token"]' "$(get CLOUDFLARED_TUNNEL_TOKEN)"
