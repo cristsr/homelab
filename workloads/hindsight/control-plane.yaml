@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: control-plane
-          image: ghcr.io/vectorize-io/hindsight-control-plane:0.10.3
+          image: ghcr.io/vectorize-io/hindsight-control-plane:1.0.0
           ports:
             - containerPort: 9999
           env:
