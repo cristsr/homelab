@@ -184,3 +184,20 @@ spec:
     - backendRefs:
         - name: shelfarr
           port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: lingarr
+  namespace: media
+spec:
+  parentRefs:
+    - name: main
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - lingarr.internal.cristianpuenguenan.online
+  rules:
+    - backendRefs:
+        - name: lingarr
+          port: 9876

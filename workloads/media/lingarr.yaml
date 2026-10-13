@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lingarr
+  namespace: media
+spec:
+  replicas: 1
+  # RollingUpdate would create the new pod before the old one releases its
+  # ReadWriteOnce volumes, leaving it stuck FailedMount. Recreate tears the
+  # old pod down first.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: lingarr
+  template:
+    metadata:
+      labels:
+        app: lingarr
+    spec:
+      # Runs as the library owner so the .es.srt files it writes next to the
+      # episodes are readable by Jellyfin, Sonarr and Bazarr.
+      securityContext:
+        runAsUser: 911
+        runAsGroup: 911
+        fsGroup: 911
+      containers:
+        - name: lingarr
+          image: lingarr/lingarr:1.4.0
+          env:
+            - name: SONARR_URL
+              value: http://sonarr.media:8989
+            # DeepSeek is the primary translator; its key and Sonarr's are set
+            # in Lingarr's own settings (stored on the config volume) because
+            # secrets in this repo are SOPS-encrypted and these two are only
+            # known to the running apps.
+            - name: SERVICE_TYPE
+              value: '["deepseek"]'
+            - name: DEEPSEEK_MODEL
+              value: deepseek-chat
+            - name: SOURCE_LANGUAGES
+              value: '[{"name":"English","code":"en"}]'
+            - name: TARGET_LANGUAGES
+              value: '[{"name":"Spanish","code":"es"}]'
+            - name: USE_BATCH_TRANSLATION
+              value: "true"
+          ports:
+            - containerPort: 9876
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+            # Same path as Sonarr sees, so the file paths Sonarr reports resolve
+            # here without a path mapping.
+            - name: library
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: lingarr-config
+        - name: library
+          persistentVolumeClaim:
+            claimName: media-library
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lingarr
+  namespace: media
+spec:
+  selector:
+    app: lingarr
+  ports:
+    - port: 9876
+      targetPort: 9876
+  type: ClusterIP
