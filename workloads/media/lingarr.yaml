@@ -30,6 +30,13 @@ spec:
           env:
             - name: SONARR_URL
               value: http://sonarr.media:8989
+            - name: RADARR_URL
+              value: http://radarr.media:7878
+            - name: RADARR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lingarr
+                  key: RADARR_API_KEY
             - name: SONARR_API_KEY
               valueFrom:
                 secretKeyRef:
