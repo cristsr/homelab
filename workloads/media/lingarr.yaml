@@ -64,7 +64,7 @@ spec:
             - name: USE_BATCH_TRANSLATION
               value: "true"
           ports:
-            - containerPort: 9876
+            - containerPort: 8080
           volumeMounts:
             - name: config
               mountPath: /app/config
@@ -97,5 +97,5 @@ spec:
     app: lingarr
   ports:
     - port: 9876
-      targetPort: 9876
+      targetPort: 8080
   type: ClusterIP
