@@ -12,7 +12,7 @@ spec:
   sources:
     - repoURL: oci://codeberg.org/forgejo-contrib/forgejo
       chart: forgejo
-      targetRevision: "17.2.0"
+      targetRevision: "17.3.0"
       helm:
         releaseName: forgejo
         valueFiles:
