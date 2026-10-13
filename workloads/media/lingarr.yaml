@@ -51,6 +51,11 @@ spec:
                 secretKeyRef:
                   name: lingarr
                   key: DEEPSEEK_API_KEY
+            # Each line is a separate ~1s DeepSeek call, so a single worker takes
+            # ~4.5 min per episode. The API accepts parallel requests; quality
+            # is unchanged, only the throughput goes up.
+            - name: MAX_CONCURRENT_JOBS
+              value: "4"
             # DeepSeek is the only translator: no fallback, so a bad key fails
             # loudly instead of silently switching service.
             - name: SERVICE_TYPE
