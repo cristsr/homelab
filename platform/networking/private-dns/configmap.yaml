@@ -23,6 +23,7 @@ data:
             192.168.80.240 prowlarr.internal.cristianpuenguenan.online
             192.168.80.240 qbittorrent.internal.cristianpuenguenan.online
             192.168.80.240 bazarr.internal.cristianpuenguenan.online
+            192.168.80.240 lingarr.internal.cristianpuenguenan.online
             192.168.80.240 jellyfin.internal.cristianpuenguenan.online
             192.168.80.240 overseerr.internal.cristianpuenguenan.online
             192.168.80.240 heimdall.internal.cristianpuenguenan.online
