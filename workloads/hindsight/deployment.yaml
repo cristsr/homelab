@@ -20,7 +20,7 @@ spec:
           # Slim variant: no local ML models. Embeddings and the LLM are remote
           # (OpenRouter), so the reranker is the model-free `rrf` passthrough and the
           # pod stays small.
-          image: ghcr.io/vectorize-io/hindsight-api:0.10.3-slim
+          image: ghcr.io/vectorize-io/hindsight-api:1.0.0-slim
           ports:
             - containerPort: 8888
           env:
