@@ -1,0 +1,16 @@
+# Envoy's default 15s route timeout cuts the request while KubeElasti holds it
+# during a cold start (~80s to become ready), and the browser gets "upstream
+# request timeout". 3m leaves room for a slow start.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: sonarqube
+  namespace: sonarqube
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: sonarqube
+  timeout:
+    http:
+      requestTimeout: 180s
