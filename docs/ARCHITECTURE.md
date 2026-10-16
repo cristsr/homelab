@@ -232,7 +232,7 @@ The MCP servers are plain `HTTPRoute`s on `main` (`sectionName: https`), each wi
 |-----------|---------|-----------|
 | `hindsight-api.internal.cristianpuenguenan.online` | hindsight:8888 (API + MCP, API key required) | hindsight |
 | `hindsight.internal.cristianpuenguenan.online` | hindsight-control-plane:9999 (panel, access key required) | hindsight |
-| `mcp.internal.cristianpuenguenan.online` | mcp-sonarqube:3000 (`/sonarqube`) | sonarqube |
+| `sonarqube.internal.cristianpuenguenan.online` (`/mcp`) | mcp-sonarqube:3000 (shares the host with the SonarQube UI route) | sonarqube |
 
 #### TLS
 

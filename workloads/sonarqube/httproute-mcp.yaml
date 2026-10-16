@@ -9,18 +9,13 @@ spec:
       namespace: networking
       sectionName: https
   hostnames:
-    - mcp.internal.cristianpuenguenan.online
+    - sonarqube.internal.cristianpuenguenan.online
   rules:
+    # Same host as the UI route; the longer /mcp prefix wins over its catch-all.
     - matches:
         - path:
             type: PathPrefix
-            value: /sonarqube
-      filters:
-        - type: URLRewrite
-          urlRewrite:
-            path:
-              type: ReplacePrefixMatch
-              replacePrefixMatch: /
+            value: /mcp
       backendRefs:
         - name: mcp-sonarqube
           port: 3000
