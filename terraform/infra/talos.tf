@@ -44,7 +44,9 @@ resource "talos_machine_configuration_apply" "this" {
         }
         kernel = {
           modules = [
-            { name = "zfs" },
+            # ARC defaults to ~100% of RAM; on a node shared with pods that left no
+            # headroom and the OOM controller killed system pods. Capped at 5 GiB.
+            { name = "zfs", parameters = ["zfs_arc_max=5368709120"] },
             { name = "nvidia" },
             { name = "nvidia_uvm" },
             { name = "nvidia_drm" },
