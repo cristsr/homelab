@@ -12,7 +12,7 @@ spec:
   sources:
     - repoURL: https://helm.cilium.io
       # 1.20+ is required for compatibility with the Gateway API CRD version installed below.
-      targetRevision: 1.20.2
+      targetRevision: 1.20.3
       chart: cilium
       helm:
         releaseName: cilium
