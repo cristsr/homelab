@@ -75,7 +75,7 @@ spec:
             runAsGroup: 1000
           containers:
             - name: recyclarr
-              image: ghcr.io/recyclarr/recyclarr:8.7.3
+              image: ghcr.io/recyclarr/recyclarr:8.8.0
               args: ["sync"]
               envFrom:
                 - secretRef:
