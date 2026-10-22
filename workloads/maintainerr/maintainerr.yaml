@@ -28,7 +28,7 @@ spec:
         fsGroup: 911
       containers:
         - name: maintainerr
-          image: ghcr.io/maintainerr/maintainerr:3.30.2
+          image: ghcr.io/maintainerr/maintainerr:3.31.0
           env:
             - name: TELEMETRY
               value: "off"
