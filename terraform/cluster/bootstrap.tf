@@ -2,7 +2,7 @@ resource "helm_release" "cilium" {
   name       = "cilium"
   repository = "https://helm.cilium.io"
   chart      = "cilium"
-  version    = "1.20.3"
+  version    = "1.20.4"
   namespace  = "kube-system"
 
   values = [
@@ -21,7 +21,7 @@ resource "helm_release" "argocd" {
   name             = "argocd"
   repository       = "https://argoproj.github.io/argo-helm"
   chart            = "argo-cd"
-  version          = "10.10.5"
+  version          = "10.11.1"
   namespace        = "argocd"
   create_namespace = true
 
