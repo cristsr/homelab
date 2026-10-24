@@ -26,7 +26,7 @@ spec:
         fsGroup: 911
       containers:
         - name: lingarr
-          image: lingarr/lingarr:1.4.0
+          image: lingarr/lingarr:1.4.1
           env:
             # Lingarr refuses to start without it; sqlite keeps the database on
             # the config volume (/app/config), so no extra database to run.
