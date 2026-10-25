@@ -31,27 +31,80 @@ data:
               select:
                 - 839bea857ed2c0a8e084f3cbdbd65ecb # x265 (no HDR/DV)
             - trash_id: a3ac6af01d78e4f21fcb75f601ac96df # [Unwanted] Unwanted Formats
+    # Sonarr uses hand-declared profiles (not TRaSH's WEB-only ones): the anime
+    # library comes mostly from Bluray/HDTV, which WEB-1080p would reject. Recyclarr
+    # owns the qualities and upgrade rules; TRaSH only supplies the [Unwanted] scores.
+    # "Subs Español" is a CF made by hand in Sonarr (not in the guide), scored +1000 in
+    # both profiles; until_score 1000 stops upgrades once a release carries it.
     sonarr:
-      web-1080p:
+      anime:
         base_url: http://sonarr.media.svc:8989
         api_key: !env_var SONARR_API_KEY
         quality_definition:
           type: series
           preferred_ratio: 0.5
         quality_profiles:
-          - trash_id: 72dae194fc92bf828f32cde7744e51a1 # WEB-1080p
-            reset_unmatched_scores:
-              enabled: true
+          # TRaSH anime profile (SeaDex-based group tiers, v0-v4, raws/LQ penalties).
+          # min_format_score 0: its default 100 would reject groups outside the tier
+          # lists. "Subs Español" / "Spanish (Latino)" are scored by hand on it, and
+          # so is "Dubs Only" (-10000 in the guide; overriding it here conflicts).
+          - trash_id: 20e0fc959f1f1704bed501f23bdae76f # [Anime] Remux-1080p
+            min_format_score: 0
+            # Same qualities as the guide minus Remux: too big for the ~900Gi volume
+            # and indistinguishable from Bluray on a 1440p screen.
+            upgrade:
+              allowed: true
+              until_quality: Bluray-1080p
+            qualities:
+              - name: Bluray-1080p
+              - name: WEB 1080p
+                qualities:
+                  - WEBDL-1080p
+                  - WEBRip-1080p
+                  - HDTV-1080p
+              - name: Bluray-720p
+              - name: WEB 720p
+                qualities:
+                  - WEBDL-720p
+                  - WEBRip-720p
+                  - HDTV-720p
+              - name: Bluray-480p
+              - name: WEB 480p
+                qualities:
+                  - WEBDL-480p
+                  - WEBRip-480p
+              - name: DVD
+              - name: SDTV
+          - name: HD-1080p
+            upgrade:
+              allowed: true
+              until_quality: Bluray-1080p
+              until_score: 1000
+            qualities:
+              - name: Bluray-1080p
+              - name: WEB 1080p
+                qualities:
+                  - WEBDL-1080p
+                  - WEBRip-1080p
+              - name: HDTV-1080p
+          - name: HD-720p
+            upgrade:
+              allowed: true
+              until_quality: Bluray-720p
+              until_score: 1000
+            qualities:
+              - name: Bluray-720p
+              - name: WEB 720p
+                qualities:
+                  - WEBDL-720p
+                  - WEBRip-720p
+              - name: HDTV-720p
         custom_format_groups:
           add:
-            - trash_id: 158188097a58d7687dee647e04af0da3 # [Optional] Golden Rule HD
-              exclude:
-                - 47435ece6b99a0b477caf360e79ba0bb # x265 (HD)
-              select:
-                - 9b64dff695c2115facf1b6ea59c9bd07 # x265 (no HDR/DV)
-            - trash_id: 74aff4168620ed49dcc67e92b2c2a5b4 # [Optional] Language Profiles
-            - trash_id: 85fae4a2294965b75710ef2989c850eb # [Streaming Services] HD/UHD boost
             - trash_id: 59c3af66780d08332fdc64e68297098f # [Unwanted] Unwanted Formats
+              assign_scores_to:
+                - name: HD-1080p
+                - name: HD-720p
 ---
 apiVersion: batch/v1
 kind: CronJob
