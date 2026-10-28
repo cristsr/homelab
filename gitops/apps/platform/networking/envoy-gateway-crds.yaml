@@ -12,7 +12,7 @@ spec:
   source:
     repoURL: oci://docker.io/envoyproxy/gateway-crds-helm
     chart: gateway-crds-helm
-    targetRevision: 1.9.2
+    targetRevision: 1.9.3
     helm:
       releaseName: envoy-gateway-crds
       valuesObject:
