@@ -112,6 +112,12 @@ set_field workloads/media/secrets.sops.yaml \
 set_field workloads/media/secrets.sops.yaml \
   '["spec"]["secretTemplates"][1]["stringData"]["DEEPSEEK_API_KEY"]' "$(get LINGARR_DEEPSEEK_API_KEY)"
 
+# --- workloads/media/secrets.sops.yaml (Autosubtitle) ---
+set_field workloads/media/secrets.sops.yaml \
+  '["spec"]["secretTemplates"][2]["stringData"]["BAZARR_API_KEY"]' "$(get BAZARR_API_KEY)"
+set_field workloads/media/secrets.sops.yaml \
+  '["spec"]["secretTemplates"][2]["stringData"]["REDIS_PASSWORD"]' "$(get REDIS_PASSWORD)"
+
 # --- platform/networking/cloudflared/token.sops.yaml ---
 set_field platform/networking/cloudflared/token.sops.yaml \
   '["spec"]["secretTemplates"][0]["stringData"]["token"]' "$(get CLOUDFLARED_TUNNEL_TOKEN)"

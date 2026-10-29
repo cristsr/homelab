@@ -1,0 +1,37 @@
+name: Autosubtitle image
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "workloads/autosubtitle/Dockerfile"
+      - "workloads/autosubtitle/requirements.txt"
+      - ".github/workflows/autosubtitle-image.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Holds only the dependencies; the script reaches the pod through a ConfigMap.
+      # Bump this tag together with the image tag in workloads/autosubtitle/autosubtitle.yaml
+      # (Deployment and CronJob) whenever the Dockerfile or requirements.txt change:
+      # Renovate skips ghcr.io/cristsr/**, so nothing updates it for us. The tag is
+      # major.minor.patch and is never reused: see docs/autosubtitle.md.
+      - uses: docker/build-push-action@v7
+        with:
+          context: workloads/autosubtitle
+          push: true
+          tags: ghcr.io/cristsr/autosubtitle-base:1.0.0
