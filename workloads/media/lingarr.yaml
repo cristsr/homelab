@@ -68,6 +68,12 @@ spec:
               value: '[{"name":"Spanish","code":"es"}]'
             - name: USE_BATCH_TRANSLATION
               value: "true"
+            # Fansub ASS tracks carry <font size="50"> (and face/color) that
+            # survive the conversion to .srt and render huge in Jellyfin.
+            # Stripping the markup leaves plain text, so the player's own
+            # subtitle size applies to every translation.
+            - name: STRIP_SUBTITLE_FORMATTING
+              value: "true"
           ports:
             - containerPort: 8080
           volumeMounts:
