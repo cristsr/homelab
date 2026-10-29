@@ -1,28 +1,29 @@
-# Gives Spanish subtitles to the episodes Sonarr imports: it waits for Bazarr's own
+# Glue between the arr stack and what it lacks. Its first job gives Spanish subtitles
+# to the episodes Sonarr imports: it waits for Bazarr's own
 # search and, when nothing is found, asks Bazarr to translate the English dialogue
 # track through Lingarr. It sits at zero replicas and KubeElasti wakes it on the
 # first call (Sonarr's webhook, or the daily CronJob below).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: autosubtitle
+  name: relay
   namespace: media
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: autosubtitle
+      app: relay
   template:
     metadata:
       labels:
-        app: autosubtitle
+        app: relay
     spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 911
         runAsGroup: 911
       containers:
-        - name: autosubtitle
+        - name: relay
           # Holds only the dependencies; the script comes from the ConfigMap.
           # Bumped by hand with the workflow when requirements.txt changes,
           # because Renovate skips ghcr.io/cristsr.
@@ -36,6 +37,15 @@ spec:
               value: "1"
             - name: BAZARR_URL
               value: http://bazarr.media.svc.cluster.local:6767
+            - name: SONARR_URL
+              value: http://sonarr.media.svc.cluster.local:8989
+            # Reuses the key Lingarr already holds in the same SopsSecret, so no new
+            # secret has to be encrypted.
+            - name: SONARR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lingarr
+                  key: SONARR_API_KEY
             - name: REDIS_HOST
               value: redis.internal.cristianpuenguenan.online
             - name: BAZARR_API_KEY
@@ -72,16 +82,16 @@ spec:
       volumes:
         - name: code
           configMap:
-            name: autosubtitle-code
+            name: relay-code
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: autosubtitle
+  name: relay
   namespace: media
 spec:
   selector:
-    app: autosubtitle
+    app: relay
   ports:
     - port: 8080
       targetPort: 8080
@@ -93,16 +103,16 @@ spec:
 apiVersion: elasti.truefoundry.com/v1alpha1
 kind: ElastiService
 metadata:
-  name: autosubtitle
+  name: relay
   namespace: media
 spec:
-  service: autosubtitle
+  service: relay
   minTargetReplicas: 1
   cooldownPeriod: 1800
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: autosubtitle
+    name: relay
   triggers:
     - type: prometheus
       metadata:
@@ -115,7 +125,7 @@ spec:
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: autosubtitle-daily
+  name: relay-subtitles-daily
   namespace: media
 spec:
   schedule: "0 6 * * *"
@@ -138,7 +148,7 @@ spec:
               command:
                 - python
                 - -c
-                - "import httpx; httpx.post('http://autosubtitle.media.svc.cluster.local:8080/run', timeout=300).raise_for_status()"
+                - "import httpx; httpx.post('http://relay.media.svc.cluster.local:8080/subtitles/run', timeout=300).raise_for_status()"
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true

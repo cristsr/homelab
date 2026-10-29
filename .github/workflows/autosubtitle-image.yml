@@ -4,8 +4,8 @@ on:
   push:
     branches: [master]
     paths:
-      - "workloads/autosubtitle/Dockerfile"
-      - "workloads/autosubtitle/requirements.txt"
+      - "workloads/relay/Dockerfile"
+      - "workloads/relay/requirements.txt"
       - ".github/workflows/autosubtitle-image.yml"
   workflow_dispatch: {}
 
@@ -26,12 +26,12 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Holds only the dependencies; the script reaches the pod through a ConfigMap.
-      # Bump this tag together with the image tag in workloads/autosubtitle/autosubtitle.yaml
+      # Bump this tag together with the image tag in workloads/relay/relay.yaml
       # (Deployment and CronJob) whenever the Dockerfile or requirements.txt change:
       # Renovate skips ghcr.io/cristsr/**, so nothing updates it for us. The tag is
-      # major.minor.patch and is never reused: see docs/autosubtitle.md.
+      # major.minor.patch and is never reused: see docs/relay.md.
       - uses: docker/build-push-action@v7
         with:
-          context: workloads/autosubtitle
+          context: workloads/relay
           push: true
           tags: ghcr.io/cristsr/autosubtitle-base:1.0.0

@@ -1084,3 +1084,21 @@ Bazarr searches Spanish subtitles for each imported episode, but many anime have
 - The package must be made public once in GitHub, and Sonarr's webhook is created by hand after the service exists: Sonarr tests a webhook when it saves it, and refuses it while the URL does not resolve. Both steps are in `docs/autosubtitle.md`.
 - Bazarr leaves the extracted `.en.ass` beside the video and adds a one-line banner cue to the Spanish `.srt`; the translation is line by line, about 15 minutes for a 25-minute episode, and the gender mix-ups (él/ella) of the translations are not addressed.
 - The first image this repo builds, and the first use of kustomize, are introduced here.
+
+## ADR-032: The autosubtitle worker becomes `relay`, a home for arr-stack automations
+
+### Context
+
+`autosubtitle` was named for its one job. The arr stack lacks other automations too, such as refreshing Sonarr's metadata when TheTVDB gets an episode title after Sonarr cached it as "TBA", which blocks the import. A service per automation would repeat the KubeElasti, Secret, ConfigMap and CronJob scaffolding each time.
+
+### Decision
+
+- The service is renamed `relay` (`workloads/relay/`, ArgoCD Application `relay`) and each automation gets its own route prefix: the subtitle run is now `POST /subtitles/run`, and the next one will be `/metadata/...`. Each automation keeps its own lock and ledger.
+- Kept on purpose: the image `ghcr.io/cristsr/autosubtitle-base` (it holds only dependencies, and a new name would need a new public package), the Secret `autosubtitle` (renaming it means re-encrypting `secrets.sops.yaml`) and the Redis prefix `autosubtitle:requested:`. They name the subtitles automation or a published artifact, not the service.
+- The CronJob is now `relay-subtitles-daily`.
+- `POST /metadata/refresh` is the second automation. Sonarr calls it on grab; while a grabbed episode still has a TBA title the service refreshes the series every 5 minutes, at most 5 times, one loop per series, and never when Sonarr already has a `RefreshSeries` queued or running for it. It reuses the Sonarr key of the `lingarr` secret so no secret is re-encrypted.
+
+### Consequences
+
+- Sonarr's webhook must point to `http://relay.media.svc.cluster.local:8080/subtitles/run`. The old Service disappears with the old Deployment, so until the webhook is updated Sonarr's calls fail without a visible error (steps in `docs/relay.md`).
+- Merging pushes `workloads/relay/` to the image workflow's paths, so the workflow rebuilds `autosubtitle-base:1.0.0` once with the same pinned dependencies.

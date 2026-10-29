@@ -27,5 +27,5 @@ work
 token.txt
 sops.exe
 
-# Python bytecode from the autosubtitle tests
+# Python bytecode from the relay tests
 __pycache__/

@@ -2,15 +2,17 @@ openapi: 3.1.0
 info:
   title: spec-0015 API
   version: "1.0.0"
-  description: spec-0015, Auto-translate subtitles when an episode is imported. The HTTP surface of the autosubtitle worker, which Sonarr and a daily CronJob call to start a run.
+  description: spec-0015, Auto-translate subtitles when an episode is imported. The HTTP surface of the relay service, which Sonarr and a daily CronJob call to start a run.
 tags:
-  - name: autosubtitle
-    description: Endpoints exposed by the autosubtitle worker in the media namespace
+  - name: metadata
+    description: Keeps Sonarr's cached metadata from blocking imports
+  - name: subtitles
+    description: Endpoints exposed by the relay service in the media namespace
 
 paths:
-  /run:
+  /subtitles/run:
     post:
-      tags: [autosubtitle]
+      tags: [subtitles]
       operationId: runSubtitleCycle
       summary: Start a run that gives Spanish subtitles to the episodes that still lack them
       description: Called by Sonarr when it finishes importing or upgrading an episode, and once a day by a CronJob with no body. The worker answers at once and works in the background; a call that arrives during a run makes exactly one more run follow it.
@@ -28,9 +30,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/RunAccepted'
 
+  /metadata/refresh:
+    post:
+      tags: [metadata]
+      operationId: refreshSeriesMetadata
+      summary: Make Sonarr re-read a series while a grabbed episode still has a TBA title
+      description: Called by Sonarr on grab. Sonarr refuses to import a recently aired episode whose cached title is TBA, even after TheTVDB names it. The worker asks Sonarr to refresh the series every 5 minutes, up to 5 times, until the named episodes have a title or a file. Only one loop runs per series; a grab that arrives meanwhile joins it, and no refresh is requested while Sonarr already has one queued or running for that series. Any event other than a grab is ignored.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SonarrWebhookPayload'
+      responses:
+        '202':
+          description: The call was accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state:
+                    description: started when no loop ran for the series, joined when one was running, ignored when the body is not a grab of a known series
+                    enum: [started, joined, ignored]
+
   /healthz:
     get:
-      tags: [autosubtitle]
+      tags: [subtitles]
       operationId: getWorkerHealth
       summary: Tell whether the worker is ready to take a call
       description: The readiness check KubeElasti waits on before it forwards a call it held while the worker was at zero replicas.

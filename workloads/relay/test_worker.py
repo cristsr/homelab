@@ -377,7 +377,7 @@ class RequestTranslationsTest(unittest.IsolatedAsyncioTestCase):
         bazarr = self.bazarr_for(self.nana)
         bazarr.statuses = {101: 415}
         redis_client = FakeRedis()
-        with self.assertLogs("autosubtitle", level="WARNING") as logs:
+        with self.assertLogs("relay", level="WARNING") as logs:
             requested = await worker.request_translations(bazarr, redis_client, candidates(*self.nana[:1]), 0)
         self.assertEqual(requested, [])
         self.assertTrue(any("NO_TRANSLATABLE_TRACK" in line for line in logs.output))
@@ -387,7 +387,7 @@ class RequestTranslationsTest(unittest.IsolatedAsyncioTestCase):
         bazarr = self.bazarr_for(self.nana)
         bazarr.titles = [SIGNS, SIGNS]
         redis_client = FakeRedis()
-        with self.assertLogs("autosubtitle", level="WARNING"):
+        with self.assertLogs("relay", level="WARNING"):
             requested = await worker.request_translations(bazarr, redis_client, candidates(*self.nana[:1]), 0)
         self.assertEqual(requested, [])
         self.assertEqual(bazarr.translate_calls, [])
@@ -398,7 +398,7 @@ class RequestTranslationsTest(unittest.IsolatedAsyncioTestCase):
         bazarr = self.bazarr_for(items)
         bazarr.statuses = {101: 502}
         redis_client = FakeRedis()
-        with self.assertLogs("autosubtitle", level="WARNING") as logs:
+        with self.assertLogs("relay", level="WARNING") as logs:
             requested = await worker.request_translations(bazarr, redis_client, candidates(*items), 0)
         self.assertEqual(requested, [201])
         self.assertTrue(any("TRANSLATE_REJECTED" in line for line in logs.output))
@@ -448,7 +448,7 @@ class RunCycleTest(unittest.IsolatedAsyncioTestCase):
     async def test_redis_down_keeps_the_searches_and_requests_nothing(self):
         bazarr = FakeBazarr(self.clock, [self.paradise])
         redis_client = FakeRedis(error=redis.exceptions.ConnectionError("down"))
-        with self.assertLogs("autosubtitle", level="WARNING") as logs:
+        with self.assertLogs("relay", level="WARNING") as logs:
             result = await self.run_cycle(bazarr, redis_client)
         self.assertEqual(bazarr.search_calls, [15])
         self.assertEqual(result["requested"], [])
@@ -457,7 +457,7 @@ class RunCycleTest(unittest.IsolatedAsyncioTestCase):
     async def test_bazarr_down_ends_the_run(self):
         bazarr = FakeBazarr(self.clock, [self.paradise])
         bazarr.down = True
-        with self.assertLogs("autosubtitle", level="WARNING") as logs:
+        with self.assertLogs("relay", level="WARNING") as logs:
             result = await self.run_cycle(bazarr, FakeRedis())
         self.assertEqual(result["requested"], [])
         self.assertTrue(any("BAZARR_UNAVAILABLE" in line for line in logs.output))
@@ -495,7 +495,7 @@ class HttpSurfaceTest(unittest.IsolatedAsyncioTestCase):
     async def test_the_first_call_starts_a_run(self):
         with self.fake_run(block_first=False):
             async with self.client() as client:
-                response = await client.post("/run")
+                response = await client.post("/subtitles/run")
             await self.idle()
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.json(), {"state": "started"})
@@ -504,9 +504,9 @@ class HttpSurfaceTest(unittest.IsolatedAsyncioTestCase):
     async def test_a_call_during_a_run_is_queued(self):
         with self.fake_run():
             async with self.client() as client:
-                await client.post("/run")
+                await client.post("/subtitles/run")
                 await asyncio.sleep(0)
-                response = await client.post("/run")
+                response = await client.post("/subtitles/run")
                 self.gate.set()
                 await self.idle()
         self.assertEqual(response.status_code, 202)
@@ -515,9 +515,9 @@ class HttpSurfaceTest(unittest.IsolatedAsyncioTestCase):
     async def test_twelve_calls_during_one_run_cause_exactly_one_more_run(self):
         with self.fake_run():
             async with self.client() as client:
-                await client.post("/run")
+                await client.post("/subtitles/run")
                 await asyncio.sleep(0)
-                responses = [await client.post("/run") for _ in range(12)]
+                responses = [await client.post("/subtitles/run") for _ in range(12)]
                 self.gate.set()
                 await self.idle()
         self.assertEqual({r.status_code for r in responses}, {202})
@@ -526,7 +526,7 @@ class HttpSurfaceTest(unittest.IsolatedAsyncioTestCase):
     async def test_a_body_that_is_not_json_still_starts_a_run(self):
         with self.fake_run(block_first=False):
             async with self.client() as client:
-                response = await client.post("/run", content=b"not json {")
+                response = await client.post("/subtitles/run", content=b"not json {")
             await self.idle()
         self.assertEqual(response.status_code, 202)
         self.assertEqual(self.calls, [set()])
@@ -535,7 +535,7 @@ class HttpSurfaceTest(unittest.IsolatedAsyncioTestCase):
         body = {"eventType": "Download", "episodes": [{"id": 718, "title": "Atelier"}]}
         with self.fake_run(block_first=False):
             async with self.client() as client:
-                await client.post("/run", content=json.dumps(body))
+                await client.post("/subtitles/run", content=json.dumps(body))
             await self.idle()
         self.assertEqual(self.calls, [{718}])
 
@@ -549,6 +549,131 @@ class HttpSurfaceTest(unittest.IsolatedAsyncioTestCase):
             docs = await client.get("/docs")
             schema = await client.get("/openapi.json")
         self.assertEqual((docs.status_code, schema.status_code), (404, 404))
+
+
+class FakeSonarr:
+    def __init__(self, titles, pending=False, error=None):
+        self.titles = list(titles)
+        self.pending = pending
+        self.error = error
+        self.refreshes = 0
+
+    async def episodes(self, series_id):
+        if self.error:
+            raise worker.SonarrUnavailable(self.error)
+        title = self.titles[min(self.refreshes, len(self.titles) - 1)]
+        return [{"id": 5, "title": title, "hasFile": False}, {"id": 6, "title": "TBA", "hasFile": False}]
+
+    async def refresh_pending(self, series_id):
+        return self.pending
+
+    async def refresh(self, series_id):
+        self.refreshes += 1
+
+
+class RefreshUntilTitledTest(unittest.IsolatedAsyncioTestCase):
+    async def run_loop(self, sonarr, named={5}):
+        clock = Clock()
+        result = await worker.refresh_until_titled(sonarr, 12, named, clock.sleep)
+        return result, clock.t
+
+    async def test_it_refreshes_once_and_stops_when_the_title_arrives(self):
+        sonarr = FakeSonarr(["TBA", "Transition"])
+        result, waited = await self.run_loop(sonarr)
+        self.assertTrue(result)
+        self.assertEqual(sonarr.refreshes, 1)
+        self.assertEqual(waited, worker.REFRESH_INTERVAL)
+
+    async def test_an_episode_that_is_not_named_is_left_alone(self):
+        sonarr = FakeSonarr(["Transition"])
+        result, _ = await self.run_loop(sonarr)
+        self.assertTrue(result)
+        self.assertEqual(sonarr.refreshes, 0)
+
+    async def test_a_refresh_already_pending_in_sonarr_is_not_repeated(self):
+        sonarr = FakeSonarr(["TBA"], pending=True)
+        with self.assertLogs("relay", level="WARNING"):
+            result, _ = await self.run_loop(sonarr)
+        self.assertFalse(result)
+        self.assertEqual(sonarr.refreshes, 0)
+
+    async def test_it_gives_up_after_the_attempts_without_waiting_after_the_last(self):
+        sonarr = FakeSonarr(["TBA"])
+        with self.assertLogs("relay", level="WARNING") as logs:
+            result, waited = await self.run_loop(sonarr)
+        self.assertFalse(result)
+        self.assertEqual(sonarr.refreshes, worker.REFRESH_ATTEMPTS)
+        self.assertEqual(waited, worker.REFRESH_INTERVAL * (worker.REFRESH_ATTEMPTS - 1))
+        self.assertIn("TITLE_STILL_MISSING", logs.output[-1])
+
+    async def test_sonarr_down_is_logged_and_retried(self):
+        sonarr = FakeSonarr(["TBA"], error="refused")
+        with self.assertLogs("relay", level="WARNING") as logs:
+            result, _ = await self.run_loop(sonarr)
+        self.assertFalse(result)
+        self.assertEqual(sum("SONARR_UNAVAILABLE" in line for line in logs.output), worker.REFRESH_ATTEMPTS)
+
+
+class MetadataRefreshEndpointTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        worker._refreshing.clear()
+        self.gate = asyncio.Event()
+        self.loops = []
+
+    def client(self):
+        return httpx.AsyncClient(transport=httpx.ASGITransport(app=worker.app), base_url="http://worker.test")
+
+    def fake_loop(self):
+        async def loop(sonarr, series_id, named, sleep, **kwargs):
+            self.loops.append((series_id, named))
+            await self.gate.wait()
+
+        return mock.patch.multiple(worker, refresh_until_titled=loop, _sonarr_from_env=lambda: None)
+
+    async def idle(self):
+        for _ in range(200):
+            if not worker._refreshing:
+                return
+            await asyncio.sleep(0)
+
+    def grab(self, series_id=12, episode_id=5):
+        return json.dumps({"eventType": "Grab", "series": {"id": series_id}, "episodes": [{"id": episode_id}]})
+
+    async def test_a_grab_starts_a_loop_for_its_series(self):
+        with self.fake_loop():
+            async with self.client() as client:
+                response = await client.post("/metadata/refresh", content=self.grab())
+                await asyncio.sleep(0)
+                self.gate.set()
+                await self.idle()
+        self.assertEqual(response.json(), {"state": "started"})
+        self.assertEqual(self.loops[0][0], 12)
+
+    async def test_grabs_of_the_same_series_share_one_loop(self):
+        with self.fake_loop():
+            async with self.client() as client:
+                await client.post("/metadata/refresh", content=self.grab(episode_id=5))
+                await asyncio.sleep(0)
+                second = await client.post("/metadata/refresh", content=self.grab(episode_id=6))
+                named = set(worker._refreshing[12])
+                self.gate.set()
+                await self.idle()
+        self.assertEqual(second.json(), {"state": "joined"})
+        self.assertEqual(len(self.loops), 1)
+        self.assertEqual(named, {5, 6})
+
+    async def test_other_events_and_bad_bodies_are_ignored(self):
+        bodies = [
+            json.dumps({"eventType": "Test", "series": {"id": 1}, "episodes": []}),
+            json.dumps({"eventType": "Grab", "episodes": [{"id": 5}]}),
+            "not json {",
+            "",
+        ]
+        with self.fake_loop():
+            async with self.client() as client:
+                responses = [await client.post("/metadata/refresh", content=b) for b in bodies]
+        self.assertEqual([r.json() for r in responses], [{"state": "ignored"}] * 4)
+        self.assertEqual(self.loops, [])
 
 
 if __name__ == "__main__":
