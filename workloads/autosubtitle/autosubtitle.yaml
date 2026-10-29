@@ -1,0 +1,153 @@
+# Gives Spanish subtitles to the episodes Sonarr imports: it waits for Bazarr's own
+# search and, when nothing is found, asks Bazarr to translate the English dialogue
+# track through Lingarr. It sits at zero replicas and KubeElasti wakes it on the
+# first call (Sonarr's webhook, or the daily CronJob below).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autosubtitle
+  namespace: media
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: autosubtitle
+  template:
+    metadata:
+      labels:
+        app: autosubtitle
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 911
+        runAsGroup: 911
+      containers:
+        - name: autosubtitle
+          # Holds only the dependencies; the script comes from the ConfigMap.
+          # Bumped by hand with the workflow when requirements.txt changes,
+          # because Renovate skips ghcr.io/cristsr.
+          image: ghcr.io/cristsr/autosubtitle-base:1.0.0
+          workingDir: /app
+          command: ["uvicorn", "worker:app", "--host", "0.0.0.0", "--port", "8080"]
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: BAZARR_URL
+              value: http://bazarr.media.svc.cluster.local:6767
+            - name: REDIS_HOST
+              value: redis.internal.cristianpuenguenan.online
+            - name: BAZARR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: autosubtitle
+                  key: BAZARR_API_KEY
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: autosubtitle
+                  key: REDIS_PASSWORD
+          # KubeElasti forwards the call it held only once this passes.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: code
+              mountPath: /app
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 192Mi
+      volumes:
+        - name: code
+          configMap:
+            name: autosubtitle-code
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: autosubtitle
+  namespace: media
+spec:
+  selector:
+    app: autosubtitle
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+# Sonarr calls the Service from inside the cluster, never through Envoy, so no
+# traffic metric exists to keep the pod alive. The query is therefore a constant
+# zero and the pod lives for the cooldown after each wake-up; a run that outlasts
+# it is finished by Bazarr's own queue, and the next call resumes the rest.
+apiVersion: elasti.truefoundry.com/v1alpha1
+kind: ElastiService
+metadata:
+  name: autosubtitle
+  namespace: media
+spec:
+  service: autosubtitle
+  minTargetReplicas: 1
+  cooldownPeriod: 1800
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: autosubtitle
+  triggers:
+    - type: prometheus
+      metadata:
+        query: vector(0)
+        threshold: "0.001"
+---
+# Drains the episodes left over by the cap on translation jobs and the ones Bazarr
+# already lists as missing Spanish, without waiting for a new import. The call is
+# held by KubeElasti while the pod starts, hence the long timeout.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: autosubtitle-daily
+  namespace: media
+spec:
+  schedule: "0 6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 911
+            runAsGroup: 911
+          containers:
+            - name: call
+              image: ghcr.io/cristsr/autosubtitle-base:1.0.0
+              command:
+                - python
+                - -c
+                - "import httpx; httpx.post('http://autosubtitle.media.svc.cluster.local:8080/run', timeout=300).raise_for_status()"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 96Mi
