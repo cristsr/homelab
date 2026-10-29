@@ -2,11 +2,11 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: media
 resources:
-  - autosubtitle.yaml
+  - relay.yaml
 # The script is a plain source file with its own tests. The generator hashes its
 # content into the ConfigMap name, so editing it rolls the Deployment without
 # building an image.
 configMapGenerator:
-  - name: autosubtitle-code
+  - name: relay-code
     files:
       - worker.py

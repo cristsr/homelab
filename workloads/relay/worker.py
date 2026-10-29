@@ -1,4 +1,4 @@
-"""Gives Spanish subtitles to the episodes Sonarr imports, through Bazarr and Lingarr."""
+"""Glue between the arr stack and what it lacks. Gives Spanish subtitles to the episodes Sonarr imports, through Bazarr and Lingarr."""
 
 import asyncio
 import contextlib
@@ -20,7 +20,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
-log = logging.getLogger("autosubtitle")
+log = logging.getLogger("relay")
 
 LEDGER_PREFIX = "autosubtitle:requested:"
 # A request is forgotten once Bazarr holds no translation job; this expiry only
@@ -33,7 +33,12 @@ POLL = 10
 SEARCH_TIMEOUT = 600
 # Bazarr can finish its own search a moment before Sonarr's call reaches us.
 SINCE_MARGIN = 120
-SEARCH_JOB_PREFIX = "Downloading missing subtitles for"
+# Sonarr's title for an episode TheTVDB has not named yet. The wait stays under
+# KubeElasti's 30-minute cooldown so the pod is not scaled down mid-loop.
+SONARR_TBA = "TBA"
+REFRESH_INTERVAL = 300
+REFRESH_ATTEMPTS = 5
+SEARCH_JOB_PREFIX ="Downloading missing subtitles for"
 TRANSLATION_JOB_PREFIXES = ("Extracting and translating", "Translating from")
 
 
@@ -42,6 +47,10 @@ class RedisUnavailable(Exception):
 
 
 class BazarrUnavailable(Exception):
+    pass
+
+
+class SonarrUnavailable(Exception):
     pass
 
 
@@ -154,6 +163,66 @@ class Bazarr:
             },
         )
         return response.status_code
+
+
+class Sonarr:
+    def __init__(self, base_url, api_key, client=None):
+        self._base = base_url.rstrip("/")
+        self._headers = {"X-Api-Key": api_key}
+        self._client = client or httpx.AsyncClient(timeout=30)
+
+    async def _json(self, method, path, **kwargs):
+        try:
+            response = await self._client.request(method, self._base + path, headers=self._headers, **kwargs)
+        except httpx.HTTPError as error:
+            raise SonarrUnavailable(str(error)) from error
+        if response.status_code >= 400:
+            raise SonarrUnavailable(f"{method} {path} answered {response.status_code}")
+        try:
+            return response.json()
+        except ValueError as error:
+            raise SonarrUnavailable(f"{method} {path} returned an unexpected body") from error
+
+    async def episodes(self, series_id):
+        return await self._json("GET", "/api/v3/episode", params={"seriesId": series_id})
+
+    async def refresh_pending(self, series_id):
+        commands = await self._json("GET", "/api/v3/command")
+        return any(
+            c["name"] == "RefreshSeries"
+            and c["status"] in ("queued", "started")
+            and series_id in (c.get("body") or {}).get("seriesIds", [])
+            for c in commands
+        )
+
+    async def refresh(self, series_id):
+        await self._json("POST", "/api/v3/command", json={"name": "RefreshSeries", "seriesId": series_id})
+
+
+async def refresh_until_titled(sonarr, series_id, named, sleep, interval=REFRESH_INTERVAL, attempts=REFRESH_ATTEMPTS):
+    """Refreshes a series until its named episodes lose the TBA title or reach disk.
+
+    Sonarr refuses to import a recently aired episode whose cached title is TBA, and it
+    only re-reads TheTVDB on its own schedule. `named` is read on every pass, so a grab
+    that arrives during the loop joins it instead of starting another.
+    """
+    for attempt in range(attempts):
+        try:
+            untitled = [
+                e for e in await sonarr.episodes(series_id)
+                if e["id"] in named and not e["hasFile"] and e["title"] in ("", SONARR_TBA)
+            ]
+            if not untitled:
+                return True
+            if not await sonarr.refresh_pending(series_id):
+                await sonarr.refresh(series_id)
+                log.info("REFRESH_REQUESTED series=%s episodes=%s", series_id, [e["id"] for e in untitled])
+        except SonarrUnavailable as error:
+            log.warning("SONARR_UNAVAILABLE %s", error)
+        if attempt < attempts - 1:
+            await sleep(interval)
+    log.warning("TITLE_STILL_MISSING series=%s", series_id)
+    return False
 
 
 def parse_episode_number(text):
@@ -280,6 +349,13 @@ def _bazarr_from_env():
     )
 
 
+def _sonarr_from_env():
+    return Sonarr(
+        os.environ.get("SONARR_URL", "http://sonarr.media.svc.cluster.local:8989"),
+        os.environ.get("SONARR_API_KEY", ""),
+    )
+
+
 def _redis_from_env():
     return aioredis.Redis(
         host=os.environ.get("REDIS_HOST", "redis.internal.cristianpuenguenan.online"),
@@ -379,7 +455,53 @@ def _episode_ids(body):
     return {e["id"] for e in episodes if isinstance(e, dict) and isinstance(e.get("id"), int)}
 
 
-@app.post("/run", status_code=202, operation_id="runSubtitleCycle")
+# Series being refreshed, with the episode ids their loop is watching.
+_refreshing = {}
+
+
+def trigger_refresh(series_id, episode_ids):
+    if series_id in _refreshing:
+        _refreshing[series_id] |= episode_ids
+        return "joined"
+    _refreshing[series_id] = set(episode_ids)
+    task = asyncio.get_running_loop().create_task(_refresh(series_id))
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
+    return "started"
+
+
+async def _refresh(series_id):
+    try:
+        await refresh_until_titled(_sonarr_from_env(), series_id, _refreshing[series_id], asyncio.sleep)
+    except Exception:
+        log.exception("refresh failed")
+    finally:
+        _refreshing.pop(series_id, None)
+
+
+def _grab(body):
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return None, set()
+    if not isinstance(data, dict) or data.get("eventType") != "Grab":
+        return None, set()
+    series = data.get("series")
+    series_id = series.get("id") if isinstance(series, dict) else None
+    if not isinstance(series_id, int):
+        return None, set()
+    return series_id, _episode_ids(body)
+
+
+@app.post("/metadata/refresh", status_code=202, operation_id="refreshSeriesMetadata")
+async def post_metadata_refresh(request: Request):
+    series_id, episode_ids = _grab(await request.body())
+    if series_id is None:
+        return JSONResponse({"state": "ignored"}, status_code=202)
+    return JSONResponse({"state": trigger_refresh(series_id, episode_ids)}, status_code=202)
+
+
+@app.post("/subtitles/run", status_code=202, operation_id="runSubtitleCycle")
 async def post_run(request: Request):
     state = trigger(_episode_ids(await request.body()))
     return JSONResponse({"state": state}, status_code=202)

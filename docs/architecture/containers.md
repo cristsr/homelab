@@ -1,6 +1,6 @@
 # Containers (C4 Level 2)
 
-The apps, platform components and data services of the homelab and the integrations between them. Bootstrapped and last updated 2026-10-28 by spec-0015, which added the `autosubtitle` node and its edges. The external systems are the ones of [context.md](context.md).
+The apps, platform components and data services of the homelab and the integrations between them. Bootstrapped and last updated 2026-10-28 by spec-0015, which added the `relay` node and its edges. The external systems are the ones of [context.md](context.md).
 
 ```mermaid
 graph TB
@@ -29,8 +29,8 @@ graph TB
       qbittorrent("qBittorrent with VPN sidecar")
       bazarr("Bazarr")
       lingarr("Lingarr")
-      autosubtitle("autosubtitle<br/>(scaled to zero)")
-      autosubtitle_daily("autosubtitle-daily<br/>(CronJob, 06:00)")
+      relay("relay<br/>(scaled to zero)")
+      relay_daily("relay-subtitles-daily<br/>(CronJob, 06:00)")
     end
 
     subgraph tools["Other workloads"]
@@ -74,10 +74,12 @@ graph TB
   lingarr -- "translates with" --> deepseek
 
   sonarr -- "webhook POST /run" --> elasti
-  autosubtitle_daily -- "POST /run" --> elasti
-  elasti -- "wakes and forwards" --> autosubtitle
-  autosubtitle -- "REST" --> bazarr
-  autosubtitle -- "TCP, ledger" --> redis
+  relay_daily -- "POST /subtitles/run" --> elasti
+  elasti -- "wakes and forwards" --> relay
+  relay -- "REST" --> bazarr
+  relay -- "TCP, ledger" --> redis
+  sonarr -- "webhook on grab" --> relay
+  relay -- "REST, refresh series" --> sonarr
 
   sonarqube --> postgres
   kaneo --> postgres
