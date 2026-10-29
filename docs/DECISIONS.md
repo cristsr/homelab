@@ -1059,3 +1059,28 @@ Jellyfin played through Chrome with a software AV1 transcode (`libsvtav1`) that 
 - The hypervisor loses the card: it cannot be used for its console or another VM.
 - The change needs steps outside the repo, in this order: enable IOMMU and bind the card to `vfio-pci` on Proxmox; set `GPU_PCI_ID` and `TALOS_SCHEMATIC_ID` in the `prod` GitHub environment; `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<version>` (applying the machine config does not change the installed image). The VM reboots, so the whole single-node cluster is down for a few minutes.
 - The schematic carries no extension that needs an `ExtensionServiceConfig` (see ADR-022's rule); if the node loops on `startAllServices` after the upgrade, revert with `talosctl upgrade` to the previous schematic.
+
+---
+
+## ADR-031: Autosubtitle gives Spanish subtitles to imported episodes through Bazarr and Lingarr
+
+**Status**: Accepted
+**Date**: 2026-10-28
+
+### Context
+
+Bazarr searches Spanish subtitles for each imported episode, but many anime have none in any provider, and extracting the English track and queuing a Lingarr translation by hand did not scale. Bazarr emits no event when a search ends without a result (its notifications and webhook fire only on success), Lingarr cannot read subtitles embedded in an MKV, and Lingarr's own automation only runs on a schedule with a delay measured in hours.
+
+### Decision
+
+- A small worker, `autosubtitle` (`workloads/autosubtitle/`), written in Python with FastAPI in a single file. Sonarr's webhook (import complete and upgrade) and a daily CronJob wake it through KubeElasti, and it sits at zero replicas with `cooldownPeriod: 1800`. The trigger query is a constant zero because Sonarr's calls never pass through Envoy, so there is no traffic metric to read.
+- It works from Bazarr's list of episodes missing Spanish, waits for Bazarr's own search job of each series (polling `GET /api/system/jobs`, the only completion signal Bazarr offers) and asks Bazarr to run the search only if none appears within 180 seconds. For the episodes still missing Spanish it calls Bazarr's translate action on the English dialogue track (the embedded track whose title is not signs or songs); Bazarr extracts it and translates through Lingarr, so the worker mounts no media and calls Lingarr itself never. Bazarr's `translator_type` was switched from `google_translate` to `lingarr` for this.
+- A Redis ledger (`autosubtitle:requested:{episodeId}`, set only if absent, expiring after 3 hours, cleared whenever Bazarr holds no translation job) stops an episode from being requested twice, because a queued Bazarr translation job does not name its episode. At most 6 translation jobs are pending or running at once and earlier episodes go first. If Redis is down the worker still waits for the searches but requests nothing.
+- The code reaches the pod through a kustomize `configMapGenerator`, on an image of our own that holds only the dependencies (`python:3.12-slim` plus `fastapi`, `uvicorn`, `redis` and `httpx`, pinned), built by a GitHub Actions workflow and published to `ghcr.io/cristsr/autosubtitle-base` with a `major.minor.patch` tag. No maintained image bundles that set, and `tiangolo/uvicorn-gunicorn-fastapi` is deprecated.
+
+### Consequences
+
+- The tag is bumped by hand in the workflow, the Deployment and the CronJob whenever `requirements.txt` or the `Dockerfile` change, because Renovate skips `ghcr.io/cristsr/**`. Editing `worker.py` needs no image build.
+- The package must be made public once in GitHub, and Sonarr's webhook is created by hand after the service exists: Sonarr tests a webhook when it saves it, and refuses it while the URL does not resolve. Both steps are in `docs/autosubtitle.md`.
+- Bazarr leaves the extracted `.en.ass` beside the video and adds a one-line banner cue to the Spanish `.srt`; the translation is line by line, about 15 minutes for a 25-minute episode, and the gender mix-ups (él/ella) of the translations are not addressed.
+- The first image this repo builds, and the first use of kustomize, are introduced here.

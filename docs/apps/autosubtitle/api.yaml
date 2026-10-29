@@ -1,0 +1,68 @@
+openapi: 3.1.0
+info:
+  title: spec-0015 API
+  version: "1.0.0"
+  description: spec-0015, Auto-translate subtitles when an episode is imported. The HTTP surface of the autosubtitle worker, which Sonarr and a daily CronJob call to start a run.
+tags:
+  - name: autosubtitle
+    description: Endpoints exposed by the autosubtitle worker in the media namespace
+
+paths:
+  /run:
+    post:
+      tags: [autosubtitle]
+      operationId: runSubtitleCycle
+      summary: Start a run that gives Spanish subtitles to the episodes that still lack them
+      description: Called by Sonarr when it finishes importing or upgrading an episode, and once a day by a CronJob with no body. The worker answers at once and works in the background; a call that arrives during a run makes exactly one more run follow it.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SonarrWebhookPayload'
+      responses:
+        '202':
+          description: The call was accepted; the run started now, or it will start as soon as the current run ends
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunAccepted'
+
+  /healthz:
+    get:
+      tags: [autosubtitle]
+      operationId: getWorkerHealth
+      summary: Tell whether the worker is ready to take a call
+      description: The readiness check KubeElasti waits on before it forwards a call it held while the worker was at zero replicas.
+      responses:
+        '200':
+          description: The worker is listening and can take a run request
+
+components:
+  schemas:
+    SonarrWebhookPayload:
+      type: object
+      description: The part of Sonarr's webhook body the worker reads. Any other field is ignored, and a body that is not valid JSON is ignored as a whole.
+      properties:
+        eventType:
+          type: string
+          description: Sonarr's name for the event that fired the webhook, for example the import-complete event
+        episodes:
+          type: array
+          description: The episodes the event is about, so the worker can wait for Bazarr to know them
+          items:
+            $ref: '#/components/schemas/SonarrEpisode'
+    SonarrEpisode:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: integer
+          description: Sonarr's episode id, which is the id Bazarr uses for the same episode
+    RunAccepted:
+      type: object
+      required: [state]
+      properties:
+        state:
+          description: started when no run was active, queued when a run was active and one more will follow it
+          enum: [started, queued]
