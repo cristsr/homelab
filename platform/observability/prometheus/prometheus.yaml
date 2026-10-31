@@ -41,13 +41,15 @@ grafana:
   # our own ConfigMaps in platform/observability/grafana-dashboards.
   defaultDashboardsEnabled: false
   # BestEffort otherwise: it was OOM-killed 40+ times (7-day peaks: Grafana
-  # ~815Mi, each sidecar ~95Mi).
+  # ~815Mi, each sidecar ~95Mi). The limit counts page cache too: at 1Gi the
+  # cgroup hit its ceiling (978Mi peak), evicted its own cache and re-read it
+  # from the install disk, a shared SSD already saturated by etcd's fsyncs.
   resources:
     requests:
       cpu: 50m
       memory: 512Mi
     limits:
-      memory: 1Gi
+      memory: 2Gi
   admin:
     existingSecret: grafana-admin-secret
     userKey: GF_SECURITY_ADMIN_USER
