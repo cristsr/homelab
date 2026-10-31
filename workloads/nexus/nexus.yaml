@@ -32,7 +32,7 @@ spec:
         - name: nexus
           # Pinned by hand to the tag the image workflow of the repo publishes
           # (sha-<short commit>): Renovate skips ghcr.io/cristsr, see docs/nexus.md.
-          image: ghcr.io/cristsr/notion-task-manager:sha-b60a081
+          image: ghcr.io/cristsr/notion-task-manager:sha-1dd5185
           ports:
             - containerPort: 3000
           env:
