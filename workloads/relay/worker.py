@@ -2,7 +2,6 @@
 
 import asyncio
 import contextlib
-import html
 import json
 import logging
 import os
@@ -13,7 +12,7 @@ from datetime import datetime
 import httpx
 import redis.asyncio as aioredis
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from redis.exceptions import RedisError
 
 logging.basicConfig(
@@ -183,18 +182,6 @@ class Sonarr:
             return response.json()
         except ValueError as error:
             raise SonarrUnavailable(f"{method} {path} returned an unexpected body") from error
-
-    async def all_series(self):
-        return await self._json("GET", "/api/v3/series")
-
-    async def series(self, series_id):
-        return await self._json("GET", f"/api/v3/series/{series_id}")
-
-    async def delete_series(self, series_id):
-        await self._json(
-            "DELETE", f"/api/v3/series/{series_id}",
-            params={"deleteFiles": "true", "addImportListExclusion": "false"},
-        )
 
     async def episodes(self, series_id):
         return await self._json("GET", "/api/v3/episode", params={"seriesId": series_id})
@@ -369,24 +356,6 @@ def _sonarr_from_env():
     )
 
 
-async def clear_overseerr(tvdb_id, base_url, api_key, client=None):
-    """Drop the media entry, and with it the requests, so the show can be requested again."""
-    if not (tvdb_id and api_key):
-        return "skipped"
-    client = client or httpx.AsyncClient(timeout=30)
-    headers = {"X-Api-Key": api_key}
-    try:
-        listing = await client.get(f"{base_url}/api/v1/media", headers=headers, params={"take": 1000, "filter": "all"})
-        listing.raise_for_status()
-        ids = [m["id"] for m in listing.json()["results"] if m.get("mediaType") == "tv" and m.get("tvdbId") == tvdb_id]
-        for media_id in ids:
-            (await client.delete(f"{base_url}/api/v1/media/{media_id}", headers=headers)).raise_for_status()
-    except (httpx.HTTPError, KeyError, ValueError) as error:
-        log.warning("OVERSEERR_UNAVAILABLE %s", error)
-        return "failed"
-    return "deleted" if ids else "none"
-
-
 def _redis_from_env():
     return aioredis.Redis(
         host=os.environ.get("REDIS_HOST", "redis.internal.cristianpuenguenan.online"),
@@ -541,43 +510,3 @@ async def post_run(request: Request):
 @app.get("/healthz", operation_id="getWorkerHealth")
 async def get_healthz():
     return {"status": "ok"}
-
-
-_PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width">
-<title>Series</title><style>body{font:16px sans-serif;max-width:40rem;margin:1rem auto;padding:0 1rem}
-li{display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid #8884}
-small{opacity:.6}button{background:#c33;color:#fff;border:0;border-radius:4px;padding:.4rem .8rem}</style>
-<h1>Series</h1><ul>%s</ul><script>
-async function del(b){b.disabled=true;const r=await fetch('/series/'+b.dataset.id+'/delete',{method:'POST'});
-if(r.ok)b.closest('li').remove();else{b.disabled=false;b.textContent='Error'}}
-</script>"""
-
-
-@app.get("/series", response_class=HTMLResponse, operation_id="listSeries")
-async def get_series():
-    series = await _sonarr_from_env().all_series()
-    rows = "".join(
-        f"<li><span>{html.escape(s['title'])} <small>{s.get('year', '')} · "
-        f"{s.get('statistics', {}).get('sizeOnDisk', 0) / 2**30:.1f} GB</small></span>"
-        f"<button data-id={int(s['id'])} onclick=del(this)>Borrar</button></li>"
-        for s in sorted(series, key=lambda s: s["title"].lower())
-    )
-    return _PAGE % rows
-
-
-@app.post("/series/{series_id}/delete", operation_id="deleteSeries")
-async def post_series_delete(series_id: int):
-    sonarr = _sonarr_from_env()
-    try:
-        tvdb_id = (await sonarr.series(series_id)).get("tvdbId")
-        await sonarr.delete_series(series_id)
-    except SonarrUnavailable as error:
-        log.warning("SERIES_DELETE_FAILED %s", error)
-        return JSONResponse({"state": "failed"}, status_code=502)
-    overseerr = await clear_overseerr(
-        tvdb_id,
-        os.environ.get("OVERSEERR_URL", "http://overseerr.media.svc.cluster.local:5055"),
-        os.environ.get("OVERSEERR_API_KEY", ""),
-    )
-    log.info("SERIES_DELETED series=%s overseerr=%s", series_id, overseerr)
-    return {"state": "deleted", "overseerr": overseerr}
