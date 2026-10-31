@@ -1102,3 +1102,26 @@ Bazarr searches Spanish subtitles for each imported episode, but many anime have
 
 - Sonarr's webhook must point to `http://relay.media.svc.cluster.local:8080/subtitles/run`. The old Service disappears with the old Deployment, so until the webhook is updated Sonarr's calls fail without a visible error (steps in `docs/relay.md`).
 - Merging pushes `workloads/relay/` to the image workflow's paths, so the workflow rebuilds `autosubtitle-base:1.0.0` once with the same pinned dependencies.
+
+## ADR-033: Nexus creates the Kaneo template tasks on fixed dates, built in its own repo and run here
+
+### Context
+
+Kaneo repeats a task when it is completed: the next one is created when the current one moves to a final column. The Notion templates created the task on a fixed date even if the previous one was still open, and the owner wants that back (Pagar Cuentas on the 2nd, Pagar Servicios on the 24th). The logic is the `template` module of the `nexus` app in `github.com/cristsr/notion-task-manager`, a NestJS app that already ran the Notion notifications elsewhere. Kaneo is internal-only, so a deployment outside the cluster cannot reach it.
+
+### Decision
+
+- The app repo only builds and publishes the image (`ghcr.io/cristsr/notion-task-manager:sha-<short commit>`, workflow `image.yml`). Everything that says where and how it runs is here: `workloads/nexus/` and the ArgoCD Application `nexus`, in the `kaneo` namespace.
+- The templates are tasks of a Kaneo project, `Plantillas`, and each one carries its own schedule in its repeat rule and due date. Nothing about a template is in either repo, which matters because this repo is public and the templates hold contract numbers.
+- The image tag is pinned by hand in `workloads/nexus/nexus.yaml`: Renovate skips `ghcr.io/cristsr/**`, and a tag per commit is never reused.
+- The Deployment is one replica with the `Recreate` strategy, never scaled to zero: its schedulers must be running when they fire, and two pods at once would run each of them twice.
+- The app needs MongoDB to start, so it uses the `nexus` database of the `mongodb` LXC, through the only user the LXC has (`admin`). Nothing the template module does is stored there.
+- The Notion integrations of the app stay idle: this deployment has no Notion token, so they have nothing to read and, from their code, may log a failed call at start. The Discord login does fail at start with an invalid token, logged and harmless (seen when starting the built app without one). That is the cost of not splitting the app.
+- Two values are secrets, in the SopsSecret `nexus-secrets`: the MongoDB URI and the Kaneo API key. The project ids are plain values.
+
+### Consequences
+
+- The Pod cannot start until the image exists and the two secrets hold real values: run the image workflow, make the package public, load `NEXUS_MONGO_URI` and `NEXUS_KANEO_API_KEY` with `scripts/apply-real-secrets.sh`, and only then merge. Steps in `docs/nexus.md`.
+- Changing the app means publishing a new image and bumping the tag here, by hand.
+- A day is lost if the service is down for all of it: the job only looks at today.
+- The Notion notifications are not migrated. They still run in the old deployment, which keeps reading Notion until it is removed.

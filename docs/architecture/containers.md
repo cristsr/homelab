@@ -36,6 +36,7 @@ graph TB
     subgraph tools["Other workloads"]
       sonarqube("SonarQube")
       kaneo("Kaneo")
+      nexus("Nexus<br/>(recurring tasks)")
       hindsight("Hindsight")
       flow("Flow API")
     end
@@ -83,6 +84,9 @@ graph TB
 
   sonarqube --> postgres
   kaneo --> postgres
+  nexus -- "REST, creates tasks" --> kaneo
+  nexus --> mongodb
+  github -- "image" --> nexus
   hindsight --> postgres
   flow --> postgres
   flow --> mongodb
