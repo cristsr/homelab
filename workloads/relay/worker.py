@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import html
 import json
 import logging
 import os
@@ -12,7 +13,7 @@ from datetime import datetime
 import httpx
 import redis.asyncio as aioredis
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from redis.exceptions import RedisError
 
 logging.basicConfig(
@@ -182,6 +183,15 @@ class Sonarr:
             return response.json()
         except ValueError as error:
             raise SonarrUnavailable(f"{method} {path} returned an unexpected body") from error
+
+    async def all_series(self):
+        return await self._json("GET", "/api/v3/series")
+
+    async def delete_series(self, series_id):
+        await self._json(
+            "DELETE", f"/api/v3/series/{series_id}",
+            params={"deleteFiles": "true", "addImportListExclusion": "false"},
+        )
 
     async def episodes(self, series_id):
         return await self._json("GET", "/api/v3/episode", params={"seriesId": series_id})
@@ -510,3 +520,36 @@ async def post_run(request: Request):
 @app.get("/healthz", operation_id="getWorkerHealth")
 async def get_healthz():
     return {"status": "ok"}
+
+
+_PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width">
+<title>Series</title><style>body{font:16px sans-serif;max-width:40rem;margin:1rem auto;padding:0 1rem}
+li{display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid #8884}
+small{opacity:.6}button{background:#c33;color:#fff;border:0;border-radius:4px;padding:.4rem .8rem}</style>
+<h1>Series</h1><ul>%s</ul><script>
+async function del(b){b.disabled=true;const r=await fetch('/series/'+b.dataset.id+'/delete',{method:'POST'});
+if(r.ok)b.closest('li').remove();else{b.disabled=false;b.textContent='Error'}}
+</script>"""
+
+
+@app.get("/series", response_class=HTMLResponse, operation_id="listSeries")
+async def get_series():
+    series = await _sonarr_from_env().all_series()
+    rows = "".join(
+        f"<li><span>{html.escape(s['title'])} <small>{s.get('year', '')} · "
+        f"{s.get('statistics', {}).get('sizeOnDisk', 0) / 2**30:.1f} GB</small></span>"
+        f"<button data-id={int(s['id'])} onclick=del(this)>Borrar</button></li>"
+        for s in sorted(series, key=lambda s: s["title"].lower())
+    )
+    return _PAGE % rows
+
+
+@app.post("/series/{series_id}/delete", operation_id="deleteSeries")
+async def post_series_delete(series_id: int):
+    try:
+        await _sonarr_from_env().delete_series(series_id)
+    except SonarrUnavailable as error:
+        log.warning("SERIES_DELETE_FAILED %s", error)
+        return JSONResponse({"state": "failed"}, status_code=502)
+    log.info("SERIES_DELETED series=%s", series_id)
+    return {"state": "deleted"}

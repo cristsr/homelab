@@ -676,5 +676,26 @@ class MetadataRefreshEndpointTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.loops, [])
 
 
+class SeriesDeleteTest(unittest.IsolatedAsyncioTestCase):
+    async def test_delete_removes_files_and_escapes_titles(self):
+        calls = []
+
+        def handler(request):
+            calls.append((request.method, request.url.path, dict(request.url.params)))
+            if request.method == "GET":
+                return httpx.Response(200, json=[{"id": 7, "title": "<b>X</b>", "year": 2020}])
+            return httpx.Response(200, json={})
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        sonarr = worker.Sonarr("http://s", "k", client=client)
+        with mock.patch.object(worker, "_sonarr_from_env", return_value=sonarr):
+            page = await worker.get_series()
+            self.assertNotIn("<b>X", page)
+            self.assertIn("&lt;b&gt;X", page)
+            self.assertEqual((await worker.post_series_delete(7))["state"], "deleted")
+        self.assertEqual(calls[-1][:2], ("DELETE", "/api/v3/series/7"))
+        self.assertEqual(calls[-1][2]["deleteFiles"], "true")
+
+
 if __name__ == "__main__":
     unittest.main()
