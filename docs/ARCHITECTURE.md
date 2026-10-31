@@ -188,7 +188,7 @@ Created by `terraform/cluster/namespaces.tf` (`kubernetes_namespace_v1.namespace
 | `tetragon` | Tetragon |
 | `sonarqube` | SonarQube, MCP server |
 | `hindsight` | Hindsight (agent memory API + MCP) |
-| `kaneo` | Kaneo (task management) |
+| `kaneo` | Kaneo (task management), Nexus (recurring task creation) |
 
 ---
 
@@ -387,6 +387,22 @@ Secrets:  kaneo-secrets (SopsSecret): db-username, db-password, auth-secret (AUT
 
 The owner's account is created once, at the first visit (see `docs/OPERATIONS.md` §3). Kaneo starts empty: nothing is migrated from Notion.
 
+### 4.5 Nexus (recurring Kaneo tasks)
+
+**Namespace**: `kaneo` — **Image**: `ghcr.io/cristsr/notion-task-manager:sha-<short commit>` — **Manifests**: `workloads/nexus/` — **Decision**: [ADR-033](DECISIONS.md)
+
+Creates, on fixed dates, the tasks of the templates kept in the Kaneo project `Plantillas` (Kaneo only repeats a task when it is completed). No route, no Service: nothing calls it.
+
+```
+Replicas: 1, strategy Recreate (its schedulers must not run twice); never scaled to zero
+Reads:    Kaneo through http://kaneo.kaneo.svc.cluster.local (API key), templates and the Daily project
+DB:       MongoDB on the external LXC (§5): mongodb.internal.cristianpuenguenan.online/nexus
+Secrets:  nexus-secrets (SopsSecret): mongo-uri, kaneo-api-key
+Image:    built and published by the repo of the app; the tag is bumped by hand here
+```
+
+How it works and how to operate it: `docs/nexus.md`.
+
 ---
 
 ## 5. Databases
@@ -413,6 +429,7 @@ A single multi-database PostgreSQL (`homelab` + `sonarqube`) replaces the two se
 | SonarQube | `jdbc:postgresql://postgres.internal.cristianpuenguenan.online:5432/sonarqube` (`SONAR_JDBC_URL`, credentials via ExternalSecret) |
 | Flow API | PostgreSQL/MongoDB/Redis URLs in 1Password (item `apps/flow`), as plain values |
 | Kaneo | `postgres.internal.cristianpuenguenan.online:5432/kaneo` (`POSTGRES_*`, credentials via `kaneo-secrets`) |
+| Nexus | `mongodb.internal.cristianpuenguenan.online:27017/nexus` (`MONGO_DB_URI`, via `nexus-secrets`) |
 
 Backups and operational tasks on the databases are documented in `docs/OPERATIONS.md` §3.
 
@@ -521,6 +538,7 @@ platform/observability/secrets/grafana-admin.sops.yaml -> Grafana admin
 workloads/flow/secrets.sops.yaml                     -> database-url, mongodb-url, redis-url
 workloads/sonarqube/secrets.sops.yaml                -> DB credentials, monitoring passcode
 workloads/kaneo/secrets.sops.yaml                    -> DB credentials, auth secret
+workloads/nexus/secrets.sops.yaml                    -> MongoDB URI, Kaneo API key
 ansible/data-services.env (dotenv, not a CRD)        -> Postgres/Mongo/Redis credentials, CI only
 ```
 

@@ -104,6 +104,12 @@ set_field workloads/kaneo/secrets.sops.yaml \
 set_field workloads/kaneo/secrets.sops.yaml \
   '["spec"]["secretTemplates"][0]["stringData"]["auth-secret"]' "$(get KANEO_AUTH_SECRET)"
 
+# --- workloads/nexus/secrets.sops.yaml ---
+set_field workloads/nexus/secrets.sops.yaml \
+  '["spec"]["secretTemplates"][0]["stringData"]["mongo-uri"]' "$(get NEXUS_MONGO_URI)"
+set_field workloads/nexus/secrets.sops.yaml \
+  '["spec"]["secretTemplates"][0]["stringData"]["kaneo-api-key"]' "$(get NEXUS_KANEO_API_KEY)"
+
 # --- workloads/media/secrets.sops.yaml (Lingarr) ---
 set_field workloads/media/secrets.sops.yaml \
   '["spec"]["secretTemplates"][1]["stringData"]["SONARR_API_KEY"]' "$(get LINGARR_SONARR_API_KEY)"
