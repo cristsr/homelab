@@ -201,3 +201,20 @@ spec:
     - backendRefs:
         - name: lingarr
           port: 9876
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: relay
+  namespace: media
+spec:
+  parentRefs:
+    - name: main
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - relay.internal.cristianpuenguenan.online
+  rules:
+    - backendRefs:
+        - name: relay
+          port: 8080
