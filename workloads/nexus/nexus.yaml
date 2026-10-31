@@ -1,5 +1,5 @@
 # Creates the tasks of the Kaneo templates on their fixed dates (Kaneo only repeats a
-# task when it is completed). The app is the `nexus` app of github.com/cristsr/notion-task-manager,
+# task when it is completed). The app is the `nexus` app of github.com/cristsr/task-manager,
 # which also carries the Notion integrations of its past life: they stay idle here, since this
 # deployment has no Notion token, and only log a failed call at start. The repo builds and
 # publishes the image; this file is the only place that says where and how it runs.
@@ -30,9 +30,9 @@ spec:
         runAsGroup: 1001
       containers:
         - name: nexus
-          # Pinned by hand to the tag the image workflow of the repo publishes
-          # (sha-<short commit>): Renovate skips ghcr.io/cristsr, see docs/nexus.md.
-          image: ghcr.io/cristsr/notion-task-manager:sha-1dd5185
+          # `develop` is the moving tag the image workflow of the repo publishes; Renovate keeps the
+          # digest current and opens a PR when it changes, see docs/nexus.md.
+          image: ghcr.io/cristsr/task-manager:develop@sha256:9fcaab8ea2a9b153065c2f4b173da4e57558cbce132f8db276c34ca44928a3af
           ports:
             - containerPort: 3000
           env:

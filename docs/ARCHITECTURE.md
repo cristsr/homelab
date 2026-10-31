@@ -389,7 +389,7 @@ The owner's account is created once, at the first visit (see `docs/OPERATIONS.md
 
 ### 4.5 Nexus (recurring Kaneo tasks)
 
-**Namespace**: `kaneo` — **Image**: `ghcr.io/cristsr/notion-task-manager:sha-<short commit>` — **Manifests**: `workloads/nexus/` — **Decision**: [ADR-033](DECISIONS.md)
+**Namespace**: `kaneo` — **Image**: `ghcr.io/cristsr/task-manager:develop` (digest pinned by Renovate) — **Manifests**: `workloads/nexus/` — **Decision**: [ADR-033](DECISIONS.md)
 
 Creates, on fixed dates, the tasks of the templates kept in the Kaneo project `Plantillas` (Kaneo only repeats a task when it is completed). No route, no Service: nothing calls it.
 
