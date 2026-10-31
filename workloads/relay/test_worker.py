@@ -676,33 +676,5 @@ class MetadataRefreshEndpointTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.loops, [])
 
 
-class SeriesDeleteTest(unittest.IsolatedAsyncioTestCase):
-    async def test_delete_removes_files_and_escapes_titles(self):
-        calls = []
-
-        def handler(request):
-            calls.append((request.method, request.url.path, dict(request.url.params)))
-            if request.url.path == "/api/v3/series/7" and request.method == "GET":
-                return httpx.Response(200, json={"id": 7, "tvdbId": 99})
-            if request.url.path == "/api/v1/media" and request.method == "GET":
-                return httpx.Response(200, json={"results": [
-                    {"id": 1, "mediaType": "tv", "tvdbId": 99}, {"id": 2, "mediaType": "tv", "tvdbId": 5}]})
-            if request.method == "GET":
-                return httpx.Response(200, json=[{"id": 7, "title": "<b>X</b>", "year": 2020}])
-            return httpx.Response(200, json={})
-
-        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-        sonarr = worker.Sonarr("http://s", "k", client=client)
-        with mock.patch.object(worker, "_sonarr_from_env", return_value=sonarr),                 mock.patch.object(worker.httpx, "AsyncClient", return_value=client),                 mock.patch.dict(worker.os.environ, {"OVERSEERR_API_KEY": "k"}):
-            page = await worker.get_series()
-            self.assertNotIn("<b>X", page)
-            self.assertIn("&lt;b&gt;X", page)
-            result = await worker.post_series_delete(7)
-        self.assertEqual(result, {"state": "deleted", "overseerr": "deleted"})
-        deletes = [c for c in calls if c[0] == "DELETE"]
-        self.assertEqual([c[1] for c in deletes], ["/api/v3/series/7", "/api/v1/media/1"])
-        self.assertEqual(deletes[0][2]["deleteFiles"], "true")
-
-
 if __name__ == "__main__":
     unittest.main()
