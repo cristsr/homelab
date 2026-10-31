@@ -4,7 +4,7 @@
 
 `nexus` creates, on fixed dates, the tasks of the templates kept in Kaneo. Kaneo only repeats a task when it is completed (the next one is created when the current one moves to a final column); the old Notion templates created it on a fixed date even if the previous one was still open. See [ADR-033](DECISIONS.md#adr-033-nexus-creates-the-kaneo-template-tasks-on-fixed-dates-built-in-its-own-repo-and-run-here).
 
-The code is the `template` module of the `nexus` app in `github.com/cristsr/notion-task-manager`, which only builds and publishes the image. It runs in the `kaneo` namespace (`workloads/nexus/`, ArgoCD Application `nexus`).
+The code is the `template` module of the `nexus` app in `github.com/cristsr/task-manager`, which only builds and publishes the image. It runs in the `kaneo` namespace (`workloads/nexus/`, ArgoCD Application `nexus`).
 
 Every hour, from 08:00 America/Bogota, it reads the tasks of the Kaneo project `Plantillas`. A template that is due today (by its own repeat rule) gets a task created in the project `Daily` with the same title, description and priority, due today. A task with that title and due date that already exists, open or archived, is not created again, so the hourly run is safe and a day in which the service was down at 08:00 is recovered when it comes back.
 
@@ -29,8 +29,8 @@ Created tasks do not inherit labels, assignee or subtasks, only title, descripti
 
 The Pod cannot start before the first three steps, so do them in this order:
 
-1. In the app repo, run the `Image` workflow from the branch (Actions > Image > Run workflow), or merge to `main` or `develop`. It publishes `ghcr.io/cristsr/notion-task-manager:sha-<short commit>`.
-2. Make the package public (GitHub > Packages > notion-task-manager > Package settings). The cluster pulls it without credentials, as it does with `autosubtitle-base`.
+1. In the app repo, run the `Image` workflow from the branch (Actions > Image > Run workflow), or merge to `main` or `develop`. It publishes `ghcr.io/cristsr/task-manager:sha-<short commit>`, and `:develop` when the push is to `develop`.
+2. Make the package public (GitHub > Packages > task-manager > Package settings). The cluster pulls it without credentials, as it does with `autosubtitle-base`.
 3. Put the same tag in `workloads/nexus/nexus.yaml`.
 4. Create a Kaneo API key (Settings > API keys) with permission to read and create tasks, and add to `secrets/homelab.env`:
    - `NEXUS_KANEO_API_KEY`: that key.
@@ -44,7 +44,7 @@ The Pod cannot start before the first three steps, so do them in this order:
 - **Expected at start**: the Discord login fails (`TokenInvalid`) and the app may log failed Notion calls: there is no token for either. Neither stops the app.
 - **If it does not start**: the app needs MongoDB to boot. A crash loop with `MongooseServerSelectionError` means the URI, the password or the route to the `mongodb` LXC.
 - **Run it now**: the job fires at minute 0 of every hour. `kubectl -n kaneo rollout restart deploy/nexus` does not trigger it.
-- **Update the image**: publish a new one from the app repo and change the tag in `workloads/nexus/nexus.yaml`. Renovate skips `ghcr.io/cristsr/**`, so nothing does it for you. The tag is a commit, never reused.
+- **Update the image**: a push to `develop` in the app repo moves the `develop` tag, and Renovate opens a PR with the new digest in `workloads/nexus/nexus.yaml`. Merge it and ArgoCD rolls the Pod. `renovate.json` disables `ghcr.io/cristsr/**` (private images) except this one, which is public.
 - **Add a template**: create a task in `Plantillas` with the due date and the repeat rule. Nothing to deploy.
 
 ## Limits

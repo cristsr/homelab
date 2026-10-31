@@ -24,6 +24,12 @@
       "enabled": false
     },
     {
+      "description": "Public image: Renovate follows its moving develop tag and bumps the digest",
+      "matchPackageNames": ["ghcr.io/cristsr/task-manager"],
+      "enabled": true,
+      "pinDigests": true
+    },
+    {
       "description": "Argo CD OCI charts: the chart name is already part of the repoURL, Renovate appends it twice",
       "matchPackageNames": ["codeberg.org/forgejo-contrib/forgejo/forgejo"],
       "overridePackageName": "codeberg.org/forgejo-contrib/forgejo"

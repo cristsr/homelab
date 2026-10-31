@@ -1107,13 +1107,13 @@ Bazarr searches Spanish subtitles for each imported episode, but many anime have
 
 ### Context
 
-Kaneo repeats a task when it is completed: the next one is created when the current one moves to a final column. The Notion templates created the task on a fixed date even if the previous one was still open, and the owner wants that back (Pagar Cuentas on the 2nd, Pagar Servicios on the 24th). The logic is the `template` module of the `nexus` app in `github.com/cristsr/notion-task-manager`, a NestJS app that already ran the Notion notifications elsewhere. Kaneo is internal-only, so a deployment outside the cluster cannot reach it.
+Kaneo repeats a task when it is completed: the next one is created when the current one moves to a final column. The Notion templates created the task on a fixed date even if the previous one was still open, and the owner wants that back (Pagar Cuentas on the 2nd, Pagar Servicios on the 24th). The logic is the `template` module of the `nexus` app in `github.com/cristsr/task-manager`, a NestJS app that already ran the Notion notifications elsewhere. Kaneo is internal-only, so a deployment outside the cluster cannot reach it.
 
 ### Decision
 
-- The app repo only builds and publishes the image (`ghcr.io/cristsr/notion-task-manager:sha-<short commit>`, workflow `image.yml`). Everything that says where and how it runs is here: `workloads/nexus/` and the ArgoCD Application `nexus`, in the `kaneo` namespace.
+- The app repo only builds and publishes the image (`ghcr.io/cristsr/task-manager`, tags `sha-<short commit>` and the moving `develop`, workflow `image.yml`). Everything that says where and how it runs is here: `workloads/nexus/` and the ArgoCD Application `nexus`, in the `kaneo` namespace.
 - The templates are tasks of a Kaneo project, `Plantillas`, and each one carries its own schedule in its repeat rule and due date. Nothing about a template is in either repo, which matters because this repo is public and the templates hold contract numbers.
-- The image tag is pinned by hand in `workloads/nexus/nexus.yaml`: Renovate skips `ghcr.io/cristsr/**`, and a tag per commit is never reused.
+- The image is `develop` pinned by digest in `workloads/nexus/nexus.yaml`. Renovate follows the moving tag and opens a PR when the digest changes; `sha-*` tags have no order, so it cannot follow them. This image is public, so `renovate.json` enables it under the rule that disables `ghcr.io/cristsr/**`.
 - The Deployment is one replica with the `Recreate` strategy, never scaled to zero: its schedulers must be running when they fire, and two pods at once would run each of them twice.
 - The app needs MongoDB to start, so it uses the `nexus` database of the `mongodb` LXC, through the only user the LXC has (`admin`). Nothing the template module does is stored there.
 - The Notion integrations of the app stay idle: this deployment has no Notion token, so they have nothing to read and, from their code, may log a failed call at start. The Discord login does fail at start with an invalid token, logged and harmless (seen when starting the built app without one). That is the cost of not splitting the app.
