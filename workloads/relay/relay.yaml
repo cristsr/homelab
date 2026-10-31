@@ -53,6 +53,13 @@ spec:
                 secretKeyRef:
                   name: autosubtitle
                   key: BAZARR_API_KEY
+            # Optional: without it, deleting a series leaves its Overseerr request alone.
+            - name: OVERSEERR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: autosubtitle
+                  key: OVERSEERR_API_KEY
+                  optional: true
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
