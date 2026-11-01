@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: decluttarr-config
+  namespace: media
+data:
+  config.yaml: |
+    # Sonarr only reports a torrent stuck at 0 seeds in its queue; it never drops it
+    # or looks for another release. Decluttarr watches the queue, gives a stuck
+    # download a few strikes and then removes it from qBittorrent and blocklists the
+    # release, so the arr searches a different one.
+    general:
+      log_level: INFO
+      # Dry run: it only logs what it would remove. Set to false once the log shows
+      # it picks the right downloads.
+      test_run: true
+      # Minutes between passes.
+      timer: 10
+
+    job_defaults:
+      # Three passes (~30 min) before a download counts as stuck, so a slow start
+      # or a tracker hiccup does not remove a healthy torrent.
+      max_strikes: 3
+
+    jobs:
+      remove_failed_downloads:
+      remove_failed_imports:
+        message_patterns:
+          - "Not a Custom Format upgrade for existing*"
+          - "Not an upgrade for existing*"
+          - "*Found potentially dangerous file with extension*"
+          - "Invalid video file*"
+          - "No files found are eligible for import*"
+          - "One or more episodes expected in this release were not imported or missing from the release"
+      remove_metadata_missing:
+      remove_stalled:
+      remove_slow:
+        # KB/s. Low on purpose: a season pack that has just started is slow for a
+        # while, and only a crawl should count.
+        min_speed: 100
+
+    instances:
+      sonarr:
+        - base_url: http://sonarr.media.svc.cluster.local:8989
+          api_key: !ENV SONARR_API_KEY
+      radarr:
+        - base_url: http://radarr.media.svc.cluster.local:7878
+          api_key: !ENV RADARR_API_KEY
+
+    download_clients:
+      qbittorrent:
+        # qBittorrent only skips authentication for localhost, which is not this pod.
+        - base_url: http://qbittorrent.media.svc.cluster.local:8080
+          api_key: !ENV QBIT_API_KEY
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decluttarr
+  namespace: media
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: decluttarr
+  template:
+    metadata:
+      labels:
+        app: decluttarr
+    spec:
+      containers:
+        - name: decluttarr
+          image: ghcr.io/manimatter/decluttarr:v2.2.0
+          env:
+            # Reuse the keys Lingarr already holds in the same SopsSecret, so only
+            # the qBittorrent key is a new secret.
+            - name: SONARR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lingarr
+                  key: SONARR_API_KEY
+            - name: RADARR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lingarr
+                  key: RADARR_API_KEY
+            - name: QBIT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: decluttarr
+                  key: QBIT_API_KEY
+          volumeMounts:
+            - name: config
+              mountPath: /app/config/config.yaml
+              subPath: config.yaml
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: decluttarr-config

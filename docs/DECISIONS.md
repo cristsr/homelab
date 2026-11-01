@@ -1125,3 +1125,23 @@ Kaneo repeats a task when it is completed: the next one is created when the curr
 - Changing the app means publishing a new image and bumping the tag here, by hand.
 - A day is lost if the service is down for all of it: the job only looks at today.
 - The Notion notifications are not migrated. They still run in the old deployment, which keeps reading Notion until it is removed.
+
+## ADR-034: Decluttarr drops stuck downloads from the Sonarr and Radarr queues
+
+### Context
+
+A torrent that stops at 0 seeds stays `stalledDL` in qBittorrent and in the Sonarr queue forever: Sonarr only blocklists a download the client reports as failed, and never replaces a stalled or crawling one. A dead `s04e01` of Legend of the Galactic Heroes had to be removed by hand, and Sonarr also reported Tokyo Toshokan as unavailable, so several releases of the library came from sources with few seeds.
+
+### Decision
+
+- Run Decluttarr (`ghcr.io/manimatter/decluttarr`, `workloads/media/decluttarr.yaml`) as one Deployment in `media`. It checks the queues of Sonarr and Radarr every 10 minutes and, after three strikes, removes a stalled, crawling (under 100 KB/s), metadata-less or failed download from qBittorrent and blocklists the release, so the arr searches another.
+- Decluttarr over Cleanuparr: its whole configuration is one `config.yaml` in a ConfigMap, with the API keys read through `!ENV`. Cleanuparr is configured from its web UI, which leaves the settings outside git.
+- Only the failure jobs are on. The search jobs (`search_missing`, `search_unmet_cutoff`) would add load to indexers that are already failing, and `remove_orphans`, `remove_unmonitored` and `remove_bad_files` delete data on rules that need tuning first.
+- It starts with `test_run: true`: it logs what it would remove and removes nothing. Flip it to `false` after the log shows it picks the right downloads.
+- Sonarr and Radarr keys reuse the `lingarr` secret. The qBittorrent key is new, because qBittorrent skips authentication only for localhost.
+
+### Consequences
+
+- The Pod cannot start until the Secret `decluttarr` holds `QBIT_API_KEY`: generate it in qBittorrent (Tools, Options, WebUI, API keys; needs 5.2.0 or later), add it to `workloads/media/secrets.sops.yaml` as a new `decluttarr` template with `sops set`, and only then merge.
+- Lidarr is not covered: its key is in no secret yet.
+- A season pack that starts slowly is judged by the same 100 KB/s rule as a single episode.
