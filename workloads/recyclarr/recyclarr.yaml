@@ -23,6 +23,9 @@ data:
           - trash_id: d1d67249d3890e49bc12e275d989a7e9 # HD Bluray + WEB
             reset_unmatched_scores:
               enabled: true
+              # Made by hand in Radarr (+100: a tiebreak that never outranks a better release group).
+              except:
+                - Subs Español
         custom_format_groups:
           add:
             - trash_id: f8bf8eab4617f12dfdbd16303d8da245 # [Optional] Golden Rule HD
