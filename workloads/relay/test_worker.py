@@ -118,7 +118,8 @@ class FakeBazarr:
     async def search_series(self, series_id):
         self.search_calls.append(series_id)
         status = "running" if series_id in self.stuck_series else "completed"
-        name = f"Downloading missing subtitles for {self.titles_by_series[series_id]}"
+        verb = "Downloading" if status == "running" else "Downloaded"
+        name = f"{verb} missing subtitles for {self.titles_by_series[series_id]}"
         self.job_list.append(job(100 + len(self.job_list), name, status, self.clock.wall()))
         if self.on_search:
             self.on_search(series_id)
