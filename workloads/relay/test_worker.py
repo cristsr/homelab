@@ -348,12 +348,12 @@ class RequestTranslationsTest(unittest.IsolatedAsyncioTestCase):
         items = self.nana + self.paradise
         bazarr = self.bazarr_for(items)
         requested = await worker.request_translations(bazarr, FakeRedis(), candidates(*items), 0)
-        self.assertEqual(requested, [101, 201, 102, 202, 103, 203])
+        self.assertEqual(requested, [101, 201, 102, 202, 103, 203, 104, 204])
 
     async def test_jobs_in_flight_take_slots(self):
         items = self.nana + self.paradise
         bazarr = self.bazarr_for(items)
-        requested = await worker.request_translations(bazarr, FakeRedis(), candidates(*items), 4)
+        requested = await worker.request_translations(bazarr, FakeRedis(), candidates(*items), worker.SLOTS - 2)
         self.assertEqual(len(requested), 2)
 
     async def test_a_claimed_episode_is_not_requested_again(self):

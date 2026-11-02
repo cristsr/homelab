@@ -27,7 +27,7 @@ LEDGER_PREFIX = "autosubtitle:requested:"
 # covers a queue that never drains.
 LEDGER_TTL = 10800
 # Translation jobs allowed in Bazarr's queue at once, pending or running.
-SLOTS = 6
+SLOTS = 10
 WINDOW = 180
 POLL = 10
 SEARCH_TIMEOUT = 600

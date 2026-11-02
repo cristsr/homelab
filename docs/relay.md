@@ -12,7 +12,7 @@ A trial of Bazarr's own translate action through Lingarr, run on one real episod
 - **Result:** 746 lines translated. The file has 747 subtitle blocks, because Bazarr adds a first one reading `# Subtitles translated with Lingarr #` from 00:00:00 to 00:00:03 (its `translator_info` setting is on).
 - **Residue:** 0 lines containing `<font` or `{\`.
 - **Files left by Bazarr:** the extracted source `Mushi-Shi - S00E01 - The Shadow That Devours the Sun Bluray-1080p.en.ass` (82301 bytes) and the translation `….es.srt` (52214 bytes), both beside the video. Bazarr extracts the track in its original ASS format and keeps it.
-- **Speed:** about 0.8 lines per second inside one job, since Lingarr translates the lines one by one. Bazarr runs up to 4 jobs at once (`concurrent_jobs: 4`).
+- **Speed:** about 0.8 lines per second inside one job, since Lingarr translates the lines one by one. Bazarr then ran up to 4 jobs at once (`concurrent_jobs: 4`); it is now 10, like Lingarr's `MAX_CONCURRENT_JOBS` and the relay's `SLOTS`, which must all move together.
 - **Jobs list:** the finished job appeared as "Translated from EN to ES using Lingarr", and its progress message holds the path of the source subtitle, relative to `/data`. Bazarr lists pending, running, failed and completed jobs, the last two keeping only the 10 most recent, and `GET /api/system/jobs` accepts a `status` filter. The name a job carries while pending or running was not observed in this trial.
 
 To undo the trial, set the translator back and delete the two files:
@@ -25,7 +25,7 @@ kubectl -n media exec deploy/bazarr -- sh -c 'k=$(sed -n "s/^ *apikey: *//p" /co
 
 `relay` is a small FastAPI app in the `media` namespace that glues the arr stack to what it lacks. Its first job gives Spanish subtitles to the episodes Sonarr imports. It sits at zero replicas and KubeElasti wakes it on the first call: Sonarr's webhook on import complete and on upgrade, or a CronJob that calls it every day at 06:00.
 
-A run reads the episodes Bazarr lists as missing Spanish, waits for Bazarr's own search of each series (or asks Bazarr to run it), and as soon as a series' search ends, only for its episodes that still lack Spanish, asks Bazarr to extract the English dialogue track and translate it through Lingarr. When the MKV has no usable embedded track (Texhnolyze), it translates the English `.en.srt` beside the video instead. Each episode it requests is recorded in Redis under `autosubtitle:requested:{episodeId}` for three hours, so it is never requested twice, and at most six translation jobs are pending or running in Bazarr at once.
+A run reads the episodes Bazarr lists as missing Spanish, waits for Bazarr's own search of each series (or asks Bazarr to run it), and as soon as a series' search ends, only for its episodes that still lack Spanish, asks Bazarr to extract the English dialogue track and translate it through Lingarr. When the MKV has no usable embedded track (Texhnolyze), it translates the English `.en.srt` beside the video instead. Each episode it requests is recorded in Redis under `autosubtitle:requested:{episodeId}` for three hours, so it is never requested twice, and at most ten translation jobs are pending or running in Bazarr at once.
 
 The app never touches the media files and never calls Lingarr itself; Bazarr does both. Its code is `workloads/relay/worker.py` and its tests are `workloads/relay/test_worker.py`.
 

@@ -55,7 +55,7 @@ spec:
             # ~4.5 min per episode. The API accepts parallel requests; quality
             # is unchanged, only the throughput goes up.
             - name: MAX_CONCURRENT_JOBS
-              value: "4"
+              value: "10"
             # DeepSeek is the only translator: no fallback, so a bad key fails
             # loudly instead of silently switching service.
             - name: SERVICE_TYPE
@@ -94,7 +94,7 @@ spec:
               memory: 128Mi
             limits:
               cpu: 500m
-              memory: 512Mi
+              memory: 768Mi
       volumes:
         - name: config
           persistentVolumeClaim:
