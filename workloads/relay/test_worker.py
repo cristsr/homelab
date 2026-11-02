@@ -455,6 +455,14 @@ class RunCycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["requested"], [719])
         self.assertEqual(bazarr.translate_calls, [(719, 7191)])
 
+    async def test_a_series_is_translated_before_the_next_series_is_searched(self):
+        bazarr = FakeBazarr(self.clock, [self.paradise, self.nana])
+        seen = []
+        bazarr.on_search = lambda series_id: seen.append((series_id, list(bazarr.translate_calls)))
+        await self.run_cycle(bazarr, FakeRedis())
+        self.assertEqual(seen[0], (15, []))
+        self.assertEqual(seen[1], (9, [(719, 7191)]))
+
     async def test_an_episode_that_has_spanish_is_never_searched(self):
         bazarr = FakeBazarr(self.clock, [])
         result = await self.run_cycle(bazarr, FakeRedis())

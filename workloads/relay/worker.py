@@ -302,7 +302,8 @@ async def await_search(bazarr, series_id, series_title, named, now, sleep, wall=
     return await wait_for_finish(cutoff)
 
 
-async def await_searches(bazarr, episodes, named_ids, now, sleep, wall=time.time, since=None):
+async def await_searches(bazarr, episodes, named_ids, now, sleep, wall=time.time, since=None, on_resolved=None):
+    """Waits for each series' search in turn; `on_resolved(series_id, found)` runs as soon as one ends."""
     series = {}
     for episode in episodes:
         entry = series.setdefault(episode["sonarrSeriesId"], {"title": episode["seriesTitle"], "named": False})
@@ -312,6 +313,8 @@ async def await_searches(bazarr, episodes, named_ids, now, sleep, wall=time.time
         resolved[series_id] = await await_search(
             bazarr, series_id, entry["title"], entry["named"], now, sleep, wall=wall, since=since,
         )
+        if on_resolved:
+            await on_resolved(series_id, resolved[series_id])
     return resolved
 
 
@@ -386,34 +389,27 @@ async def run_cycle(named_ids, *, bazarr=None, redis=None, now=time.monotonic, s
                     wall=time.time, since=None):
     result = {"requested": [], "skipped": []}
     bazarr = bazarr or _bazarr_from_env()
+    owns_redis = redis is None
+    redis = redis or _redis_from_env()
+
+    async def translate_series(series_id, found):
+        # Translations are requested as each series' search ends, so a series does
+        # not wait for the searches of the ones after it.
+        try:
+            wanted = [e for e in await bazarr.wanted() if e["sonarrSeriesId"] == series_id]
+            if not found:
+                result["skipped"] += [f"search_unresolved episode={e['sonarrEpisodeId']}" for e in wanted]
+                return
+            in_flight = translation_jobs_in_flight(await bazarr.jobs())
+            result["requested"] += await request_translations(bazarr, redis, wanted, in_flight)
+        except RedisUnavailable as error:
+            log.warning("REDIS_UNAVAILABLE %s", error)
+
     try:
         wanted = await bazarr.wanted()
         wanted = await wait_until_known(bazarr, wanted, named_ids, now, sleep)
-        resolved = await await_searches(bazarr, wanted, named_ids, now, sleep, wall=wall, since=since)
-        wanted = await bazarr.wanted()
-        jobs = await bazarr.jobs()
-    except BazarrUnavailable as error:
-        log.warning("BAZARR_UNAVAILABLE %s", error)
-        return result
-
-    candidates = []
-    for episode in wanted:
-        series_id = episode["sonarrSeriesId"]
-        if series_id not in resolved:
-            continue
-        if resolved[series_id]:
-            candidates.append(episode)
-        else:
-            result["skipped"].append(f"search_unresolved episode={episode['sonarrEpisodeId']}")
-
-    owns_redis = redis is None
-    redis = redis or _redis_from_env()
-    try:
-        result["requested"] = await request_translations(
-            bazarr, redis, candidates, translation_jobs_in_flight(jobs),
-        )
-    except RedisUnavailable as error:
-        log.warning("REDIS_UNAVAILABLE %s", error)
+        await await_searches(bazarr, wanted, named_ids, now, sleep, wall=wall, since=since,
+                             on_resolved=translate_series)
     except BazarrUnavailable as error:
         log.warning("BAZARR_UNAVAILABLE %s", error)
     finally:
