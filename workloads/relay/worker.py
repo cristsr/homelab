@@ -38,7 +38,8 @@ SINCE_MARGIN = 120
 SONARR_TBA = "TBA"
 REFRESH_INTERVAL = 300
 REFRESH_ATTEMPTS = 5
-SEARCH_JOB_PREFIX ="Downloading missing subtitles for"
+# Bazarr renames the job once it finishes, so a completed search never matches the running name.
+SEARCH_JOB_PREFIXES = ("Downloading missing subtitles for", "Downloaded missing subtitles for")
 TRANSLATION_JOB_PREFIXES = ("Extracting and translating", "Translating from")
 
 
@@ -254,7 +255,7 @@ def _epoch(text):
 async def await_search(bazarr, series_id, series_title, named, now, sleep, wall=time.time,
                        since=None, window=WINDOW, poll=POLL, timeout=SEARCH_TIMEOUT):
     def mine(item):
-        return item["job_name"].startswith(SEARCH_JOB_PREFIX) and series_title in item["job_name"]
+        return item["job_name"].startswith(SEARCH_JOB_PREFIXES) and series_title in item["job_name"]
 
     async def snapshot(cutoff):
         jobs = [j for j in await bazarr.jobs() if mine(j)]
