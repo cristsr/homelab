@@ -74,6 +74,25 @@ spec:
             # subtitle size applies to every translation.
             - name: STRIP_SUBTITLE_FORMATTING
               value: "true"
+            # Subtitles carry no speaker, so the model guessed "he"/"she" line
+            # by line and swapped them (NANA). The prompt makes it infer each
+            # character's gender from the surrounding lines and keep it; the
+            # wider context window gives it the lines that reveal the gender.
+            - name: AI_PROMPT
+              value: >-
+                Translate from {sourceLanguage} to {targetLanguage}, preserving the tone and meaning
+                without censoring the content. Adjust punctuation as needed to make the translation
+                sound natural. Subtitles do not say who speaks or who is spoken about, so use the
+                surrounding lines (names, pronouns, titles, who answers whom) to decide whether each
+                character is male or female, and keep that gender for the whole episode: never swap
+                "he" and "she", "him" and "her", nor masculine and feminine adjectives, participles
+                or articles. When the gender of the person addressed is not clear, prefer a wording
+                that does not require it. Provide only the translated text as output, with no
+                additional comments.
+            - name: AI_CONTEXT_BEFORE
+              value: "6"
+            - name: AI_CONTEXT_AFTER
+              value: "6"
           ports:
             - containerPort: 8080
           volumeMounts:

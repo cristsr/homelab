@@ -106,6 +106,15 @@ async def embedded_tracks(bazarr, episode_id):
     return [{"id": e["id"], "code2": e["code2"], "title": title} for e, title in zip(entries, titles)]
 
 
+async def external_english(bazarr, episode_id):
+    """Path of an English subtitle file beside the video, for episodes whose MKV carries no usable track."""
+    episode = await bazarr.episode(episode_id)
+    for s in (episode or {}).get("subtitles", []):
+        if s["code2"] == "en" and s.get("path") and not s.get("forced"):
+            return s["path"]
+    return None
+
+
 class Bazarr:
     def __init__(self, base_url, api_key, client=None):
         self._base = base_url.rstrip("/")
@@ -149,7 +158,8 @@ class Bazarr:
         if response.status_code >= 400:
             raise BazarrUnavailable(f"search of series {series_id} answered {response.status_code}")
 
-    async def translate(self, episode_id, subtitles_id):
+    async def translate(self, episode_id, subtitles_id=None, path=None):
+        source = {"path": path} if path else {"subtitles_id": subtitles_id}
         response = await self._send(
             "PATCH",
             "/api/subtitles",
@@ -158,7 +168,7 @@ class Bazarr:
                 "language": "es",
                 "type": "episode",
                 "id": episode_id,
-                "subtitles_id": subtitles_id,
+                **source,
                 "forced": "False",
                 "hi": "False",
             },
@@ -328,11 +338,15 @@ async def request_translations(bazarr, redis, candidates, in_flight):
         if not await ledger_claim(redis, episode_id):
             continue
         track = pick_track(await embedded_tracks(bazarr, episode_id))
-        if track is None:
-            log.warning("NO_TRANSLATABLE_TRACK episode=%s", episode_id)
-            await ledger_release(redis, episode_id)
-            continue
-        status = await bazarr.translate(episode_id, track["id"])
+        if track is not None:
+            status = await bazarr.translate(episode_id, subtitles_id=track["id"])
+        else:
+            path = await external_english(bazarr, episode_id)
+            if path is None:
+                log.warning("NO_TRANSLATABLE_TRACK episode=%s", episode_id)
+                await ledger_release(redis, episode_id)
+                continue
+            status = await bazarr.translate(episode_id, path=path)
         if status == 204:
             requested.append(episode_id)
             continue

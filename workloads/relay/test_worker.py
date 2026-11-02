@@ -124,8 +124,8 @@ class FakeBazarr:
         if self.on_search:
             self.on_search(series_id)
 
-    async def translate(self, episode_id, subtitles_id):
-        self.translate_calls.append((episode_id, subtitles_id))
+    async def translate(self, episode_id, subtitles_id=None, path=None):
+        self.translate_calls.append((episode_id, path or subtitles_id))
         return self.statuses.get(episode_id, 204)
 
 
@@ -393,6 +393,21 @@ class RequestTranslationsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(requested, [])
         self.assertEqual(bazarr.translate_calls, [])
         self.assertNotIn("autosubtitle:requested:101", redis_client.store)
+
+    async def test_an_episode_without_embedded_tracks_translates_its_external_english_file(self):
+        bazarr = self.bazarr_for(self.nana)
+        bazarr.titles = []
+        external = {"path": "/data/101.en.srt", "embedded_track_id": None, "id": 9, "code2": "en"}
+        original = bazarr.episode
+
+        async def episode(episode_id):
+            return {"path": "/data/101.mkv", "subtitles": [external]}
+
+        bazarr.episode = episode
+        requested = await worker.request_translations(bazarr, FakeRedis(), candidates(*self.nana[:1]), 0)
+        self.assertEqual(requested, [101])
+        self.assertEqual(bazarr.translate_calls, [(101, "/data/101.en.srt")])
+        bazarr.episode = original
 
     async def test_a_rejected_translation_is_released_and_the_next_one_tried(self):
         items = self.nana[:1] + self.paradise[:1]
