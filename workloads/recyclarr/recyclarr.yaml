@@ -37,8 +37,13 @@ data:
     # Sonarr uses hand-declared profiles (not TRaSH's WEB-only ones): the anime
     # library comes mostly from Bluray/HDTV, which WEB-1080p would reject. Recyclarr
     # owns the qualities and upgrade rules; TRaSH only supplies the [Unwanted] scores.
-    # "Subs Español" is a CF made by hand in Sonarr (not in the guide), scored +100 in
-    # both profiles; until_score 100 stops upgrades once a release carries it.
+    # Every anime series is type anime on the TRaSH anime profile below; the HD-* ones
+    # are left for western series. "Subs Español" is a CF made by hand in Sonarr and
+    # Radarr (not in the guide): its regex matches the release title only, so it needs
+    # an explicit Spanish mark or Multi-Subs together with a service that ships Spanish
+    # (CR, NF, AMZN, DSNP, HIDI). Scored +100 on the HD-* profiles (until_score 100
+    # stops upgrades once a release carries it) but only +50 on the anime one, so it
+    # stays a tiebreak inside a group tier (tiers are 100 apart) and never beats quality.
     sonarr:
       anime:
         base_url: http://sonarr.media.svc:8989
