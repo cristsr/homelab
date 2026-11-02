@@ -37,8 +37,8 @@ data:
     # Sonarr uses hand-declared profiles (not TRaSH's WEB-only ones): the anime
     # library comes mostly from Bluray/HDTV, which WEB-1080p would reject. Recyclarr
     # owns the qualities and upgrade rules; TRaSH only supplies the [Unwanted] scores.
-    # "Subs Español" is a CF made by hand in Sonarr (not in the guide), scored +1000 in
-    # both profiles; until_score 1000 stops upgrades once a release carries it.
+    # "Subs Español" is a CF made by hand in Sonarr (not in the guide), scored +100 in
+    # both profiles; until_score 100 stops upgrades once a release carries it.
     sonarr:
       anime:
         base_url: http://sonarr.media.svc:8989
@@ -82,7 +82,7 @@ data:
             upgrade:
               allowed: true
               until_quality: Bluray-1080p
-              until_score: 1000
+              until_score: 100
             qualities:
               - name: Bluray-1080p
               - name: WEB 1080p
@@ -94,7 +94,7 @@ data:
             upgrade:
               allowed: true
               until_quality: Bluray-720p
-              until_score: 1000
+              until_score: 100
             qualities:
               - name: Bluray-720p
               - name: WEB 720p
