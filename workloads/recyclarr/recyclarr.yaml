@@ -39,6 +39,9 @@ data:
     # owns the qualities and upgrade rules; TRaSH only supplies the [Unwanted] scores.
     # "Subs Español" is a CF made by hand in Sonarr (not in the guide), scored +100 in
     # both profiles; until_score 100 stops upgrades once a release carries it.
+    # Its regex leaves out NF (Netflix Japan multi-subs often lack Spanish). "CR Español"
+    # is another hand-made CF (same match as the guide's CR), +54 on [Anime] Remux-1080p
+    # so CR totals 60 against NF's 4: Recyclarr can't override the guide's CR score (6).
     sonarr:
       anime:
         base_url: http://sonarr.media.svc:8989
