@@ -18,7 +18,7 @@ spec:
         # and Prowlarr keeps its FlareSolverr proxy. FlareSolverr 3.3.21 (Chromium
         # 120) timed out on Cloudflare's challenge for 1337x.
         - name: flaresolverr
-          image: ghcr.io/thephaseless/byparr:3.0.4
+          image: ghcr.io/thephaseless/byparr:3.1.1
           ports:
             - containerPort: 8191
           env:
