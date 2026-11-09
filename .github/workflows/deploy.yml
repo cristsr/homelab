@@ -163,6 +163,14 @@ jobs:
         run: |
           ansible-playbook hypervisor-power.yaml --limit proxmox             -e proxmox_ssh_user=root             -e proxmox_ssh_private_key_file="$HOME/.ssh/ci_ed25519"
 
+      # Idempotent. Powers the host off daily at 02:00 (cron).
+      - name: Schedule the nightly host shutdown
+        working-directory: ansible
+        run: |
+          ansible-playbook hypervisor-shutdown.yaml --limit proxmox \
+            -e proxmox_ssh_user=root \
+            -e proxmox_ssh_private_key_file="$HOME/.ssh/ci_ed25519"
+
       # Idempotent. Only prepares the host; the reboot that hands the GPU to vfio-pci is manual (ADR-030).
       - name: Reserve the GPU for passthrough
         working-directory: ansible
