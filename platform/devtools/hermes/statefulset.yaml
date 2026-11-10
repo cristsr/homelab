@@ -32,7 +32,7 @@ spec:
       serviceAccountName: hermes
       containers:
         - name: hermes
-          image: nousresearch/hermes-agent:latest@sha256:adb7890916de63245523492be8f68f9d2095fecbec4e2a6dab7960381f0fc002
+          image: nousresearch/hermes-agent:latest@sha256:276d44685c65c0cb2a25f190b63c65c8906f9dc76486fb1c05ae71b5826bda08
           # The image defaults to the interactive chat, which exits at once
           # without a TTY; the Gateway API is the foreground server mode.
           args: ["gateway", "run"]
