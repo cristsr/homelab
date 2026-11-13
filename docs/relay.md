@@ -23,7 +23,7 @@ kubectl -n media exec deploy/bazarr -- sh -c 'k=$(sed -n "s/^ *apikey: *//p" /co
 
 ## What it does
 
-`relay` is a small FastAPI app in the `media` namespace that glues the arr stack to what it lacks. Its first job gives Spanish subtitles to the episodes Sonarr imports. It sits at zero replicas and KubeElasti wakes it on the first call: Sonarr's webhook on import complete and on upgrade, or a CronJob that calls it every day at 06:00.
+`relay` is a small FastAPI app in the `media` namespace that glues the arr stack to what it lacks. Its first job gives Spanish subtitles to the episodes Sonarr imports. It runs at one replica and is called by Sonarr's webhook on import complete and on upgrade, or by a CronJob every day at 06:00.
 
 A run reads the episodes Bazarr lists as missing Spanish, waits for Bazarr's own search of each series (or asks Bazarr to run it), and as soon as a series' search ends, only for its episodes that still lack Spanish, asks Bazarr to extract the English dialogue track and translate it through Lingarr. When the MKV has no usable embedded track (Texhnolyze), it translates the English `.en.srt` beside the video instead. Each episode it requests is recorded in Redis under `autosubtitle:requested:{episodeId}` for three hours, so it is never requested twice, and at most ten translation jobs are pending or running in Bazarr at once.
 
@@ -38,7 +38,7 @@ The app never touches the media files and never calls Lingarr itself; Bazarr doe
 5. ArgoCD syncs the `relay` Application (wave 10, after `media`, whose `SopsSecret` creates the secret it reads).
 6. Switch Bazarr to Lingarr, if it is not already.
 7. Create the Sonarr webhook.
-8. Check it: import an episode, or call the app by hand, and watch `kubectl -n media get pods -l app=relay` go from none to one pod and back to none after the 30-minute cooldown.
+8. Check it: import an episode, or call the app by hand, and watch the log of `kubectl -n media logs deploy/relay` show the run.
 
 ## Switch Bazarr to Lingarr
 
@@ -91,7 +91,7 @@ A second connection, on grab only, lets `relay` refresh a series whose episode S
 }
 ```
 
-`relay` reads Sonarr's key from the `lingarr` secret. The loop waits 5 minutes between refreshes and gives up after 5, staying under KubeElasti's 30-minute cooldown; a title that TheTVDB names later is picked up by Sonarr's own refresh or by a manual "Refresh & Scan".
+`relay` reads Sonarr's key from the `lingarr` secret. The loop waits 5 minutes between refreshes and gives up after 5; a title that TheTVDB names later is picked up by Sonarr's own refresh or by a manual "Refresh & Scan".
 
 ## Rebuild the image
 

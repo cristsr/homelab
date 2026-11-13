@@ -1145,3 +1145,19 @@ A torrent that stops at 0 seeds stays `stalledDL` in qBittorrent and in the Sona
 - The Pod cannot start until the Secret `decluttarr` holds `QBIT_API_KEY`: generate it in qBittorrent (Tools, Options, WebUI, API keys; needs 5.2.0 or later), add it to `workloads/media/secrets.sops.yaml` as a new `decluttarr` template with `sops set`, and only then merge.
 - Lidarr is not covered: its key is in no secret yet.
 - A season pack that starts slowly is judged by the same 100 KB/s rule as a single episode.
+
+## ADR-035: `relay` stops scaling to zero
+
+### Context
+
+`relay` was an `ElastiService` with `cooldownPeriod: 1800` and a constant-zero trigger, because Sonarr's calls never pass through Envoy. In practice the pod was gone before a run finished its work: runs outlast the cooldown (searches plus translation batches), and a held call could time out while the pod started.
+
+### Decision
+
+- The `ElastiService` is removed and the Deployment stays at one replica (10m CPU and 64Mi requested). The CronJob timeout drops from 300 to 30 seconds, since no call is held any more.
+- ArgoCD ignores `/spec/replicas` on every Deployment, so pruning the `ElastiService` does not bring the pod back by itself: it is scaled to 1 once by hand after the sync.
+
+### Consequences
+
+- The worker no longer depends on the KubeElasti resolver, and its 5-minute metadata refresh loop is no longer bound by a cooldown.
+- ADR-031 and ADR-032 describe the old scale-to-zero behaviour.

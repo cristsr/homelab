@@ -76,9 +76,9 @@ spec:
               value: "true"
             # The translation prompt and context window (ai_prompt,
             # ai_context_before/after) are not set here: Lingarr 1.4.1 ignores
-            # env vars for them and keeps them in /app/config/local.db. They
-            # were changed through POST /api/setting {key, value} so that
-            # gender is inferred from context and kept (NANA swapped he/she).
+            # env vars for them and keeps them in /app/config/local.db. The
+            # custom gender prompt had no visible effect, so ai_prompt is back
+            # to Lingarr's default (POST /api/setting {key, value}).
           ports:
             - containerPort: 8080
           volumeMounts:

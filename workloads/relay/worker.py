@@ -33,8 +33,7 @@ POLL = 10
 SEARCH_TIMEOUT = 600
 # Bazarr can finish its own search a moment before Sonarr's call reaches us.
 SINCE_MARGIN = 120
-# Sonarr's title for an episode TheTVDB has not named yet. The wait stays under
-# KubeElasti's 30-minute cooldown so the pod is not scaled down mid-loop.
+# Sonarr's title for an episode TheTVDB has not named yet.
 SONARR_TBA = "TBA"
 REFRESH_INTERVAL = 300
 REFRESH_ATTEMPTS = 5
