@@ -95,8 +95,8 @@ spec:
     - port: 8080
       targetPort: 8080
 ---
-# Drains the episodes left over by the cap on translation jobs and the ones Bazarr
-# already lists as missing Spanish, without waiting for a new import.
+# Asks for the episodes Bazarr already lists as missing Spanish, without waiting
+# for a new import.
 apiVersion: batch/v1
 kind: CronJob
 metadata:

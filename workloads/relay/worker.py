@@ -28,6 +28,9 @@ LEDGER_PREFIX = "autosubtitle:requested:"
 LEDGER_TTL = 10800
 # Translation jobs allowed in Bazarr's queue at once, pending or running.
 SLOTS = 10
+# Upper bound for a run that keeps asking as Bazarr's queue frees slots; it only
+# matters when Bazarr or Lingarr stall.
+DRAIN_TIMEOUT = 21600
 WINDOW = 180
 POLL = 10
 SEARCH_TIMEOUT = 600
@@ -329,7 +332,9 @@ def priority(episode):
     return number, season, episode["seriesTitle"].lower()
 
 
-async def request_translations(bazarr, redis, candidates, in_flight):
+async def request_translations(bazarr, redis, candidates, in_flight, attempted=None):
+    """Asks for as many translations as free slots allow; `attempted` collects every episode it reached, asked or not."""
+    attempted = set() if attempted is None else attempted
     if in_flight == 0:
         await ledger_clear(redis)
     requested = []
@@ -337,6 +342,7 @@ async def request_translations(bazarr, redis, candidates, in_flight):
         if SLOTS - in_flight - len(requested) <= 0:
             break
         episode_id = episode["sonarrEpisodeId"]
+        attempted.add(episode_id)
         if not await ledger_claim(redis, episode_id):
             continue
         track = pick_track(await embedded_tracks(bazarr, episode_id))
@@ -357,6 +363,23 @@ async def request_translations(bazarr, redis, candidates, in_flight):
         code = "NO_TRANSLATABLE_TRACK" if status == 415 else "TRANSLATE_REJECTED"
         log.warning("%s episode=%s status=%s", code, episode_id, status)
     return requested
+
+
+async def drain(bazarr, redis, series_ids, attempted, result, now, sleep, timeout=DRAIN_TIMEOUT, poll=POLL):
+    """Keeps asking for the translations the slot cap left over, each time Bazarr's queue frees a slot."""
+    deadline = now() + timeout
+    while now() < deadline:
+        left = [
+            e for e in await bazarr.wanted()
+            if e["sonarrSeriesId"] in series_ids and e["sonarrEpisodeId"] not in attempted
+        ]
+        if not left:
+            return
+        in_flight = translation_jobs_in_flight(await bazarr.jobs())
+        if in_flight < SLOTS:
+            result["requested"] += await request_translations(bazarr, redis, left, in_flight, attempted)
+        await sleep(poll)
+    log.warning("DRAIN_TIMEOUT")
 
 
 def _bazarr_from_env():
@@ -390,6 +413,7 @@ async def run_cycle(named_ids, *, bazarr=None, redis=None, now=time.monotonic, s
     bazarr = bazarr or _bazarr_from_env()
     owns_redis = redis is None
     redis = redis or _redis_from_env()
+    attempted, ready = set(), set()
 
     async def translate_series(series_id, found):
         # Translations are requested as each series' search ends, so a series does
@@ -399,8 +423,9 @@ async def run_cycle(named_ids, *, bazarr=None, redis=None, now=time.monotonic, s
             if not found:
                 result["skipped"] += [f"search_unresolved episode={e['sonarrEpisodeId']}" for e in wanted]
                 return
+            ready.add(series_id)
             in_flight = translation_jobs_in_flight(await bazarr.jobs())
-            result["requested"] += await request_translations(bazarr, redis, wanted, in_flight)
+            result["requested"] += await request_translations(bazarr, redis, wanted, in_flight, attempted)
         except RedisUnavailable as error:
             log.warning("REDIS_UNAVAILABLE %s", error)
 
@@ -409,8 +434,11 @@ async def run_cycle(named_ids, *, bazarr=None, redis=None, now=time.monotonic, s
         wanted = await wait_until_known(bazarr, wanted, named_ids, now, sleep)
         await await_searches(bazarr, wanted, named_ids, now, sleep, wall=wall, since=since,
                              on_resolved=translate_series)
+        await drain(bazarr, redis, ready, attempted, result, now, sleep)
     except BazarrUnavailable as error:
         log.warning("BAZARR_UNAVAILABLE %s", error)
+    except RedisUnavailable as error:
+        log.warning("REDIS_UNAVAILABLE %s", error)
     finally:
         if owns_redis:
             with contextlib.suppress(RedisError, OSError):

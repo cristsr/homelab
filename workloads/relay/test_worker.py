@@ -493,6 +493,64 @@ class RunCycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("search_unresolved", " ".join(result["skipped"]))
 
 
+class QueueBazarr(FakeBazarr):
+    """Keeps translations as pending jobs and finishes one per poll unless it is stuck."""
+
+    def __init__(self, *args, stuck=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.stuck = stuck
+        self.peak = 0
+
+    async def translate(self, episode_id, subtitles_id=None, path=None):
+        status = await super().translate(episode_id, subtitles_id, path)
+        self.job_list.append(job(500 + len(self.job_list), "Translating from EN to ES using Lingarr", "pending"))
+        self.peak = max(self.peak, worker.translation_jobs_in_flight(self.job_list))
+        return status
+
+    async def jobs(self):
+        snapshot = [dict(j) for j in self.job_list]
+        if not self.stuck:
+            for j in self.job_list:
+                if j["job_name"].startswith("Translating") and j["status"] == "pending":
+                    j["status"] = "completed"
+                    break
+        return snapshot
+
+
+class DrainTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.clock = Clock()
+        self.episodes = [wanted_episode(300 + n, 3, "Honey and Clover", f"1x{n}") for n in range(1, 13)]
+
+    async def run_cycle(self, bazarr):
+        return await worker.run_cycle(
+            set(), bazarr=bazarr, redis=FakeRedis(),
+            now=self.clock.now, sleep=self.clock.sleep, wall=self.clock.wall,
+        )
+
+    async def test_episodes_over_the_slot_cap_are_requested_as_slots_free_up(self):
+        bazarr = QueueBazarr(self.clock, self.episodes)
+        result = await self.run_cycle(bazarr)
+        self.assertEqual(len(result["requested"]), 12)
+        self.assertEqual(len(bazarr.translate_calls), 12)
+        self.assertLessEqual(bazarr.peak, worker.SLOTS)
+
+    async def test_a_rejected_episode_is_not_asked_again_and_does_not_hold_the_run(self):
+        bazarr = QueueBazarr(self.clock, self.episodes[:2])
+        bazarr.statuses = {301: 502}
+        with self.assertLogs("relay", level="WARNING"):
+            result = await self.run_cycle(bazarr)
+        self.assertEqual(result["requested"], [302])
+        self.assertEqual(len(bazarr.translate_calls), 2)
+
+    async def test_a_queue_that_never_drains_ends_the_run_at_the_timeout(self):
+        bazarr = QueueBazarr(self.clock, self.episodes, stuck=True)
+        with self.assertLogs("relay", level="WARNING") as logs:
+            result = await self.run_cycle(bazarr)
+        self.assertEqual(len(result["requested"]), worker.SLOTS)
+        self.assertTrue(any("DRAIN_TIMEOUT" in line for line in logs.output))
+
+
 class HttpSurfaceTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         worker._state.update(running=False, pending=False, named=set(), since=None)
