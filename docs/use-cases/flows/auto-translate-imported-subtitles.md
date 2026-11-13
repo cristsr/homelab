@@ -63,7 +63,7 @@ sequenceDiagram
 - **AC-5:** translation is considered only after the search for the episode's series has completed and the episode still lacks Spanish.
 - **AC-6:** the translated track is the English text track whose title has neither "signs" nor "songs", preferring a title with "dialog", "dialogue" or "full" and otherwise the first in track order.
 - **AC-8:** an episode with a ledger entry, or already holding Spanish, is not requested again; the ledger entries are cleared whenever Bazarr holds no translation job, so a failed episode is requested again by the next run.
-- **AC-9:** episodes are ordered by episode number, then season, then series title; a run submits only while fewer than 6 translation jobs are pending or running in Bazarr.
+- **AC-9:** episodes are ordered by episode number, then season, then series title; a run submits only while fewer than 10 translation jobs are pending or running in Bazarr, and keeps submitting as slots free up until none is left (six hours at most).
 - **AC-12:** the daily CronJob makes the same call at 06:00, so the backlog drains without a new import.
 
 ## Errors

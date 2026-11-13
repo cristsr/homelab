@@ -1161,3 +1161,7 @@ A torrent that stops at 0 seeds stays `stalledDL` in qBittorrent and in the Sona
 
 - The worker no longer depends on the KubeElasti resolver, and its 5-minute metadata refresh loop is no longer bound by a cooldown.
 - ADR-031 and ADR-032 describe the old scale-to-zero behaviour.
+
+### Follow-up: a run drains its backlog
+
+- With the pod always up, `run_cycle` no longer ends after one pass under the 10-job cap: `drain` polls Bazarr and requests the next episodes whenever a slot frees, until none is left or `DRAIN_TIMEOUT` (6 h) passes. Every episode a run reaches goes into an in-run `attempted` set, so a rejected one is not asked again and the loop always ends.
