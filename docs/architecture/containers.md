@@ -16,7 +16,6 @@ graph TB
       argocd("ArgoCD")
       envoy("Envoy Gateway")
       cloudflared("cloudflared")
-      elasti("KubeElasti resolver")
       sops("SOPS secrets operator")
       prometheus("Prometheus and Grafana")
     end
@@ -74,9 +73,8 @@ graph TB
   bazarr -- "translation" --> lingarr
   lingarr -- "translates with" --> deepseek
 
-  sonarr -- "webhook POST /run" --> elasti
-  relay_daily -- "POST /subtitles/run" --> elasti
-  elasti -- "wakes and forwards" --> relay
+  sonarr -- "webhook POST /subtitles/run" --> relay
+  relay_daily -- "POST /subtitles/run" --> relay
   relay -- "REST" --> bazarr
   relay -- "TCP, ledger" --> redis
   sonarr -- "webhook on grab" --> relay

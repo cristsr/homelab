@@ -8,7 +8,7 @@ One document per use case, with its sequence diagram inline, under `flows/`.
 
 ## Components
 
-The `media` namespace gains `relay`, a worker scaled to zero by KubeElasti that Sonarr's webhook and a daily CronJob wake. Its contract is `docs/apps/relay/api.yaml` and its rollout is in `docs/relay.md`.
+The `media` namespace gains `relay`, a worker that Sonarr's webhook and a daily CronJob call. Its contract is `docs/apps/relay/api.yaml` and its rollout is in `docs/relay.md`.
 
 ```mermaid
 flowchart LR

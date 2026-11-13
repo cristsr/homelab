@@ -12,21 +12,19 @@ status: active
 
 # Auto-translate subtitles of imported episodes
 
-Sonarr calls the worker when it finishes importing or upgrading an episode, and a daily CronJob makes the same call with no body. KubeElasti holds the call, starts the worker from zero replicas and forwards it; the worker answers `202` and works in the background.
+Sonarr calls the worker when it finishes importing or upgrading an episode, and a daily CronJob makes the same call with no body. The worker answers `202` and works in the background.
 
 The run reads the episodes Bazarr lists as missing Spanish, waits for Bazarr's own search of each series to finish (or asks for it), and only then asks Bazarr to translate the English dialogue track of the episodes that still lack Spanish. Bazarr extracts the track and translates it through Lingarr; the worker never touches the media files or calls Lingarr itself. A Redis ledger records which episodes were requested, so no episode is requested twice.
 
 ```mermaid
 sequenceDiagram
   participant Sonarr
-  participant ElastiResolver
   participant Autosubtitle
   participant Bazarr
   participant Redis
   participant Lingarr
 
-  Sonarr->>ElastiResolver: POST /run (import complete payload)
-  ElastiResolver->>Autosubtitle: scale 0 to 1, forward when ready
+  Sonarr->>Autosubtitle: POST /run (import complete payload)
   Autosubtitle-->>Sonarr: 202 started or queued
 
   Autosubtitle->>Bazarr: GET /api/episodes/wanted
@@ -81,4 +79,4 @@ sequenceDiagram
 
 ## Response
 
-`POST /run` answers `202` with a small JSON body saying whether a run started or was queued behind the current one. `GET /healthz` answers `200` and is the readiness check KubeElasti waits on before forwarding a held call.
+`POST /run` answers `202` with a small JSON body saying whether a run started or was queued behind the current one. `GET /healthz` answers `200` and is the readiness check.

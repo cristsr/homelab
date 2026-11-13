@@ -60,7 +60,7 @@ paths:
       tags: [subtitles]
       operationId: getWorkerHealth
       summary: Tell whether the worker is ready to take a call
-      description: The readiness check KubeElasti waits on before it forwards a call it held while the worker was at zero replicas.
+      description: The readiness check of the worker.
       responses:
         '200':
           description: The worker is listening and can take a run request
