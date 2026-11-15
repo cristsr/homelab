@@ -48,7 +48,7 @@ variable "vm_name" {
 variable "memory_mib" {
   description = "VM memory in MiB"
   type        = number
-  default     = 20480
+  default     = 24576
 }
 
 variable "vcpu" {
