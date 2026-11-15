@@ -117,30 +117,6 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: lidarr-config
-  namespace: media
-spec:
-  accessModes: ["ReadWriteOnce"]
-  storageClassName: openebs-zfs-retain
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: chaptarr-config
-  namespace: media
-spec:
-  accessModes: ["ReadWriteOnce"]
-  storageClassName: openebs-zfs-retain
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
   name: shelfarr-config
   namespace: media
 spec:
