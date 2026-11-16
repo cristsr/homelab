@@ -1,0 +1,34 @@
+name: Songsterr downloader image
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "workloads/songsterr-downloader/Dockerfile"
+      - ".github/workflows/songsterr-downloader-image.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Bump this tag together with the image tag in
+      # workloads/songsterr-downloader/songsterr-downloader.yaml whenever the
+      # Dockerfile (e.g. UPSTREAM_REF) changes: the tag is never reused.
+      - uses: docker/build-push-action@v7
+        with:
+          context: workloads/songsterr-downloader
+          push: true
+          tags: ghcr.io/cristsr/songsterr-downloader:1.0.0
