@@ -1,6 +1,6 @@
 # Upstream ships for Vercel (adapter-vercel) and publishes no image, so build it
 # here with adapter-node. UPSTREAM_REF is pinned: bump it deliberately.
-FROM node:24-slim AS build
+FROM node:26-slim AS build
 ARG UPSTREAM_REPO=https://github.com/Metaphysics0/songsterr-downloader.git
 ARG UPSTREAM_REF=a32438a9ddf3e86b7b09ec30d46e9fcb82c2e226
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
@@ -12,7 +12,7 @@ RUN bun install --frozen-lockfile && bun add -d @sveltejs/adapter-node@5 \
     && node ./node_modules/vite/bin/vite.js build \
     && rm -rf node_modules && bun install --production --ignore-scripts
 
-FROM node:24-slim
+FROM node:26-slim
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
 WORKDIR /app
 COPY --from=build /src/build ./build
