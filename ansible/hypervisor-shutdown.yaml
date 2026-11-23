@@ -1,4 +1,4 @@
-# Powers the Proxmox host off every day at 02:00 (host timezone; check with
+# Powers the Proxmox host off every day at 23:00 (host timezone; check with
 # `timedatectl`). Proxmox has no scheduler for the host itself, so this is a
 # plain cron job. `poweroff` makes pve-guests stop the VMs/LXCs in their
 # configured order first. Run by the Deploy workflow (idempotent), or by hand.
@@ -7,11 +7,11 @@
   hosts: proxmox
 
   tasks:
-    - name: Power the host off at 02:00
+    - name: Power the host off at 23:00
       ansible.builtin.cron:
         name: nightly poweroff
         cron_file: nightly-poweroff
         user: root
         minute: "0"
-        hour: "2"
+        hour: "23"
         job: /usr/sbin/poweroff
